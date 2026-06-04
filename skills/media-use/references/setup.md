@@ -1,0 +1,39 @@
+# setup
+
+Lazy-init the media workspace and read provider status. Runs automatically on the first media op when no workspace exists — never block the user on an explicit setup step.
+
+## What setup does
+
+- create the workspace asset structure (see `workspace.md`)
+- detect provider / auth / local-tool status (via the CLI / env — see `provider-routing.md`)
+- write a small readable config the agent can consult
+
+## Global vs project
+
+- **Global** (once per machine): provider / auth / local-tool status. Source of truth lives with the CLI, not this skill — the skill only reads it.
+- **Project** (per project): the asset workspace + a small `.media-use/config.json`.
+
+## Lazy init
+
+If a media op is requested and no `assets/manifest.jsonl` is in scope, create one:
+
+- standalone (no HyperFrames project in cwd) → `./.media-use-workspace/assets/...`
+- inside a HyperFrames project → `<project>/assets/...`
+
+Runnable: `node scripts/init-workspace.mjs --workspace <dir>` (idempotent — creates the structure + empty manifest + initial index). Report what was created in one line, then proceed with the op. Example:
+
+```
+No media-use workspace found. Created ./assets/manifest.jsonl and ./assets/index.md.
+```
+
+## Config (illustrative)
+
+`<project>/.media-use/config.json`
+
+```json
+{
+  "default_provider": "free-first",
+  "auto_register_outputs": true,
+  "composition_ref_policy": "project_local_asset_id"
+}
+```

@@ -117,8 +117,8 @@ Exception: pure white `text-shadow` / `drop-shadow` halos at emphasis moments (c
 
 This project-level mesh default **overrides the §H background discipline** of these presets ("canvas is the hero", "accent <= 5%", "primary is not a background fill", etc.), shifting their print restraint toward a brand-forward marketing video direction:
 
-**Use mesh default (D class, 8 presets):**
-`editorial` · `capsule` · `soft-editorial` · `daisy-days` · `block-frame` · `playful` · `neo-grid-bold` · `emerald-editorial`
+**Use mesh default (D class, 7 presets):**
+`editorial` · `capsule` · `soft-editorial` · `daisy-days` · `block-frame` · `playful` · `emerald-editorial`
 
 > When matching any of the above presets, plan agent **must** include the mesh wording in every scene prose (see "Plan Reference Example" below); do not fall back to pure canvas because preset §H says "canvas is the hero."
 
@@ -160,7 +160,7 @@ When that condition applies, a dark scene is more than inversion:
 
 ## Plan Reference Examples
 
-**Standard scene (mesh default background, applies to all 8 D-class presets: editorial / capsule / soft-editorial / daisy-days / block-frame / playful / neo-grid-bold / emerald-editorial):**
+**Standard scene (mesh default background, applies to all 7 D-class presets: editorial / capsule / soft-editorial / daisy-days / block-frame / playful / emerald-editorial):**
 
 > "Background: brand-color mesh default (heavy veil, brand-primary + secondary + accent as three subtle atmospheric blobs, still reading as a restrained base from distance). Palette 60-30-10: 60% canvas (still reads as canvas over mesh veil) + 30% hairline + chapter-label rule layering (no surface token) + 10% accent on hero word and CTA underline. `--ink` pure black remains as print-like ink."
 

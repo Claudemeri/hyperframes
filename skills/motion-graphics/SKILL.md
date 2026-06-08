@@ -13,7 +13,7 @@ description: >
   headline or tweet into a motion graphic", "a motion poster", "a transparent lower-third /
   callout overlay". NOT for: a longer, multi-scene, or narrated piece, a brand reel, or any
   custom composition past ~10-15s (-> /general-video, the length-agnostic fallback); a
-  narrated video OF a website / a site tour (-> /website-to-hyperframes); a narrated topic
+  narrated video OF a website / a site tour (-> /website-to-video); a narrated topic
   explainer (-> /faceless-explainer); a product launch / promo (-> /product-launch-video);
   a GitHub PR video (-> /pr-to-video); adding captions to existing footage
   (-> /embedded-captions).

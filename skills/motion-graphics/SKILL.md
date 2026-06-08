@@ -1,22 +1,16 @@
 ---
 name: motion-graphics
 description: >
-  Make a SHORT (typically under 10s; up to ~30s) design-led MOTION GRAPHIC where the
-  motion IS the message — no narration arc, no voice-over, no live-action subject. Nine
-  output genres: kinetic typography, a stat / number count-up, a chart / data-viz, a logo
-  sting / brand lockup, a lower-third / callout / social overlay, or a search-driven
-  webpage / news / tweet / asset-fusion shot. Rendered to MP4 or a transparent overlay
-  (alpha WebM / MOV). Sources real assets when useful — a captured page (hyperframes
-  capture), an image, a headline or tweet — designs the shot around them, and composes via
-  /hyperframes-animation rules / blueprints + registry blocks. Use for "an 8s logo sting",
-  "animate this stat", "a kinetic-type intro", "a quick stat / chart hit", "turn this
-  headline or tweet into a motion graphic", "a motion poster", "a transparent lower-third /
-  callout overlay". NOT for: a longer, multi-scene, or narrated piece, a brand reel, or any
-  custom composition past ~10-15s (-> /general-video, the length-agnostic fallback); a
-  narrated video OF a website / a site tour (-> /website-to-hyperframes); a narrated topic
-  explainer (-> /faceless-explainer); a product launch / promo (-> /product-launch-video);
-  a GitHub PR video (-> /pr-to-video); adding captions to existing footage
-  (-> /embedded-captions).
+  Use when the user wants a short, design-led motion graphic where motion is the
+  message: kinetic typography, stat or number count-up, chart/data-viz hit,
+  logo sting, brand lockup, lower-third, callout, social overlay, animated
+  headline/tweet/news item, motion poster, or quick captured-page highlight.
+  Usually under 10s and up to ~30s, with no narration arc, voice-over, or
+  live-action subject. Can render to MP4 or transparent overlay. Not for longer,
+  multi-scene, narrated, or brand-reel pieces (use general-video), narrated
+  website videos (website-to-hyperframes), topic explainers
+  (faceless-explainer), product promos (product-launch-video), PR videos
+  (pr-to-video), or captions on existing footage (embedded-captions).
 metadata:
   tags: orchestrator, motion-graphics, kinetic-type, data-viz, logo-reveal, lower-thirds, news, tweet, webpage, asset-fusion, short-form, overlay, no-narration
 ---

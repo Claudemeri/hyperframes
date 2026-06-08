@@ -1,6 +1,16 @@
 ---
 name: product-launch-video
-description: product-launch video workflow - a product / marketing URL (crawled with headless Chrome for brand tokens + assets) OR a pre-written script / text brief (if it names a product site, the agent offers to crawl it for brand tokens + assets; otherwise no-capture mode with a style preset supplying the palette + design system; the script can be used verbatim as the voice-over or restructured) -> narrator_scripts.json + audio (voice + BGM) + section_plan.md -> a product launch / SaaS / promo video (up to ~3 min; sweet spot ~30-90s) rendered to MP4. Use for marketing, launching, or promoting a specific product / company / app / website. Triggers - "launch video for X", "promo for our site", "explain my SaaS in a minute", "feature reveal for X.com", "I have a script, turn it into a 60s promo". NOT for - a topic / concept explainer with no product and no URL (-> faceless-explainer); a GitHub PR / code change (-> pr-to-video); a general (non-launch) website to turn into a video (-> website-to-hyperframes); adding captions to an existing video (-> embedded-captions).
+description: >
+  Use when the user wants a product launch, SaaS promo, feature reveal,
+  app/company/site marketing video, or a script/brief turned into a
+  product-focused video. Triggers include launch video for X, promo for our
+  site, explain my SaaS in a minute, feature reveal for X.com, and turn this
+  script into a 60s promo. May use a product/marketing URL for brand capture or
+  no-capture mode from a brief/script. Not for topic explainers with no product
+  or URL (faceless-explainer), GitHub PR/code-change videos (pr-to-video),
+  general non-launch website videos (website-to-hyperframes), captions on
+  existing video (embedded-captions), or short design-led motion graphics
+  (motion-graphics).
 metadata:
   tags: orchestrator, pipeline, product-launch
 ---

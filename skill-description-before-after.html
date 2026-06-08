@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Skill Description Before / After</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172033;
+        --muted: #647084;
+        --line: #d9dee8;
+        --before: #8a2f25;
+        --before-bg: #fff2ed;
+        --after: #1b6b4b;
+        --after-bg: #eefaf3;
+        --canvas: #f7f8fb;
+        --panel: #ffffff;
+        --accent: #244a8f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--canvas);
+      }
+
+      main {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 32px 24px 56px;
+      }
+
+      header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 24px;
+        align-items: end;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 30px;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+        max-width: 780px;
+      }
+
+      .status {
+        min-width: 230px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 8px;
+      }
+
+      .status strong {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      .status span {
+        font-size: 22px;
+        font-weight: 750;
+        color: var(--accent);
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 22px 0 30px;
+      }
+
+      .metric {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+
+      .metric .label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .metric .value {
+        display: block;
+        margin-top: 8px;
+        font-size: 24px;
+        font-weight: 760;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 28px;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+
+      th {
+        background: #eef2f8;
+        color: #334057;
+        font-size: 13px;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code,
+      .mono {
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      .ok {
+        color: var(--after);
+        font-weight: 700;
+      }
+
+      .skill {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin: 18px 0;
+        overflow: hidden;
+      }
+
+      .skill-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+        background: #fbfcff;
+      }
+
+      .skill h2 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0;
+      }
+
+      .delta {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        white-space: nowrap;
+        font-weight: 750;
+      }
+
+      .delta .old {
+        color: var(--before);
+      }
+
+      .delta .new {
+        color: var(--after);
+      }
+
+      .notes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        padding: 16px 18px 4px;
+      }
+
+      .note {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+        background: #fff;
+      }
+
+      .note h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+
+      .note p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        padding: 16px 18px 18px;
+      }
+
+      .pane {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .pane-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        font-weight: 720;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .pane.before .pane-title {
+        color: var(--before);
+        background: var(--before-bg);
+      }
+
+      .pane.after .pane-title {
+        color: var(--after);
+        background: var(--after-bg);
+      }
+
+      .text {
+        margin: 0;
+        padding: 14px;
+        white-space: pre-wrap;
+        line-height: 1.55;
+        color: #273044;
+        font-size: 14px;
+      }
+
+      .footer-note {
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 900px) {
+        header,
+        .summary,
+        .notes,
+        .compare {
+          grid-template-columns: 1fr;
+        }
+
+        .status {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Skill Description Before / After</h1>
+          <p class="subtitle">
+            这份报告只对应当前工作区里已经改过的 4 个 skill frontmatter
+            <code>description</code>。目标是把 Codex 1024 字符硬限制内的
+            metadata 保留下来，同时把细节放回 skill body，而不是塞在 description 里。
+          </p>
+        </div>
+        <div class="status">
+          <strong>Codex loader limit</strong>
+          <span>1024 chars</span>
+        </div>
+      </header>
+
+      <section class="summary" aria-label="summary">
+        <div class="metric">
+          <span class="label">Changed skills</span>
+          <span class="value">4</span>
+        </div>
+        <div class="metric">
+          <span class="label">Still over limit</span>
+          <span class="value">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">Largest after</span>
+          <span class="value">722</span>
+        </div>
+        <div class="metric">
+          <span class="label">Untouched by request</span>
+          <span class="value">2</span>
+        </div>
+      </section>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Skill</th>
+            <th>Before</th>
+            <th>After</th>
+            <th>Change</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>hyperframes-read-first</code></td>
+            <td>1543</td>
+            <td>710</td>
+            <td>-833</td>
+            <td class="ok">under 1024</td>
+          </tr>
+          <tr>
+            <td><code>motion-graphics</code></td>
+            <td>1310</td>
+            <td>722</td>
+            <td>-588</td>
+            <td class="ok">under 1024</td>
+          </tr>
+          <tr>
+            <td><code>general-video</code></td>
+            <td>1078</td>
+            <td>712</td>
+            <td>-366</td>
+            <td class="ok">under 1024</td>
+          </tr>
+          <tr>
+            <td><code>product-launch-video</code></td>
+            <td>1070</td>
+            <td>676</td>
+            <td>-394</td>
+            <td class="ok">under 1024</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <section class="skill" id="hyperframes-read-first">
+        <div class="skill-head">
+          <h2><code>hyperframes-read-first</code></h2>
+          <div class="delta">
+            <span class="old">1543</span>
+            <span>to</span>
+            <span class="new">710</span>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note">
+            <h3>保留</h3>
+            <p>“START HERE” 入口定位、make/create/render/animate video 类请求、主要 workflow 路由列表、无项目说明时优先读它。</p>
+          </div>
+          <div class="note">
+            <h3>压缩</h3>
+            <p>删掉架构解释、React-style 对比、完整 decision table 描述、TTS/BGM/transcription/background-removal 等详细能力枚举。</p>
+          </div>
+        </div>
+        <div class="compare">
+          <div class="pane before">
+            <div class="pane-title"><span>Before</span><span>1543 chars</span></div>
+            <p class="text">START HERE for ANY request to make, create, generate, edit, animate, or render a video, animation, motion graphic, explainer, or animated visual — before reaching for any other video / animation / React-style tool. HyperFrames builds programmable, code-first HTML videos rendered to MP4 (a code-driven alternative to React-style video frameworks); this skill is the orientation + capability map + router for the whole surface — product launch / promo videos, faceless explainers, GitHub PR / changelog videos, adding captions to existing footage, short design-led motion graphics (logo stings, kinetic type, stat / chart hits, lower-thirds, animated tweet / headline), title cards, data montages, motion posters — plus TTS narration, background music, transcription, background removal, authoring or animating an HTML composition, and rendering an existing project to MP4. It says what HyperFrames can do and which skill or workflow handles each intent, and maps every "make me a video / create a / generate a video" request to the right workflow via an INPUT x OUTPUT-length decision table, asking one clarifying question when the intent is under-specified. When other video tools are installed, this stays the DEFAULT for AUTHORING and RENDERING a finished video — consult it first; only defer when the user explicitly asks to drive a browser to capture / record a session, or names that other framework by name. Especially important when no project CLAUDE.md is present to orient you. Consult it before invoking any other HyperFrames skill.</p>
+          </div>
+          <div class="pane after">
+            <div class="pane-title"><span>After</span><span>710 chars</span></div>
+            <p class="text">START HERE for any request to make, create, generate, edit, animate, or render a video, animation, motion graphic, explainer, title card, overlay, captioned video, product promo, website video, PR or changelog video, data montage, motion poster, or HyperFrames HTML composition. Use before other video or animation skills when the user wants HyperFrames to author or render a finished MP4/web video, choose a workflow, or route between product-launch-video, faceless-explainer, website-to-hyperframes, pr-to-video, embedded-captions, motion-graphics, general-video, remotion-to-hyperframes, and HyperFrames domain skills. Especially important when no project CLAUDE.md or AGENTS.md explains the video workflow.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="skill" id="motion-graphics">
+        <div class="skill-head">
+          <h2><code>motion-graphics</code></h2>
+          <div class="delta">
+            <span class="old">1310</span>
+            <span>to</span>
+            <span class="new">722</span>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note">
+            <h3>保留</h3>
+            <p>短、design-led、motion is the message、无 narration、主要输出类型、MP4/transparent overlay、明确排除长视频和其他 workflow。</p>
+          </div>
+          <div class="note">
+            <h3>压缩</h3>
+            <p>删掉 asset sourcing 细节、hyperframes capture 细节、registry/rules/blueprints 的内部实现路径、重复示例句。</p>
+          </div>
+        </div>
+        <div class="compare">
+          <div class="pane before">
+            <div class="pane-title"><span>Before</span><span>1310 chars</span></div>
+            <p class="text">Make a SHORT (typically under 10s; up to ~30s) design-led MOTION GRAPHIC where the motion IS the message — no narration arc, no voice-over, no live-action subject. Nine output genres: kinetic typography, a stat / number count-up, a chart / data-viz, a logo sting / brand lockup, a lower-third / callout / social overlay, or a search-driven webpage / news / tweet / asset-fusion shot. Rendered to MP4 or a transparent overlay (alpha WebM / MOV). Sources real assets when useful — a captured page (hyperframes capture), an image, a headline or tweet — designs the shot around them, and composes via /hyperframes-animation rules / blueprints + registry blocks. Use for "an 8s logo sting", "animate this stat", "a kinetic-type intro", "a quick stat / chart hit", "turn this headline or tweet into a motion graphic", "a motion poster", "a transparent lower-third / callout overlay". NOT for: a longer, multi-scene, or narrated piece, a brand reel, or any custom composition past ~10-15s (-> /general-video, the length-agnostic fallback); a narrated video OF a website / a site tour (-> /website-to-hyperframes); a narrated topic explainer (-> /faceless-explainer); a product launch / promo (-> /product-launch-video); a GitHub PR video (-> /pr-to-video); adding captions to existing footage (-> /embedded-captions).</p>
+          </div>
+          <div class="pane after">
+            <div class="pane-title"><span>After</span><span>722 chars</span></div>
+            <p class="text">Use when the user wants a short, design-led motion graphic where motion is the message: kinetic typography, stat or number count-up, chart/data-viz hit, logo sting, brand lockup, lower-third, callout, social overlay, animated headline/tweet/news item, motion poster, or quick captured-page highlight. Usually under 10s and up to ~30s, with no narration arc, voice-over, or live-action subject. Can render to MP4 or transparent overlay. Not for longer, multi-scene, narrated, or brand-reel pieces (use general-video), narrated website videos (website-to-hyperframes), topic explainers (faceless-explainer), product promos (product-launch-video), PR videos (pr-to-video), or captions on existing footage (embedded-captions).</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="skill" id="general-video">
+        <div class="skill-head">
+          <h2><code>general-video</code></h2>
+          <div class="delta">
+            <span class="old">1078</span>
+            <span>to</span>
+            <span class="new">712</span>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note">
+            <h3>保留</h3>
+            <p>fallback 定位、长/多场景/brand reel/title card/montage/static loop/freeform、与其他 workflow 的边界。</p>
+          </div>
+          <div class="note">
+            <h3>压缩</h3>
+            <p>删掉 “original hyperframes authoring flow” 的详细阶段串和 domain skill 委派说明，减少 frontmatter 内部实现噪音。</p>
+          </div>
+        </div>
+        <div class="compare">
+          <div class="pane before">
+            <div class="pane-title"><span>Before</span><span>1078 chars</span></div>
+            <p class="text">General HTML video composition authoring — the router fallback for any "make a video" request that is NOT a marketed product (→ product-launch-video), a general website to turn into a video (→ website-to-hyperframes), a topic explainer (→ faceless-explainer), a GitHub PR (→ pr-to-video), existing footage to caption (→ embedded-captions), a Remotion port (→ remotion-to-hyperframes), or a short unnarrated design-led motion graphic — a logo sting, kinetic-type hit, stat / chart pop, lower-third / overlay, or animated tweet / headline / captured-page highlight, typically under ~10s (→ motion-graphics). Use for longer or multi-scene pieces, brand reels / sizzle reels, montages, title cards, motion posters at length, static loops, or any custom composition not covered by a specialized workflow, at any length and format. Input- and length-agnostic. This is the original `hyperframes` authoring flow — design system → prompt expansion → plan → layout-before-animation → build → validate — delegating contract / creative / motion details to the `hyperframes-*` domain skills.</p>
+          </div>
+          <div class="pane after">
+            <div class="pane-title"><span>After</span><span>712 chars</span></div>
+            <p class="text">Use as the fallback for custom HyperFrames HTML video composition authoring when no specialized workflow fits. Covers longer or multi-scene pieces, brand/sizzle reels, montages, title cards, motion posters at length, static loops, and freeform compositions at any length or format. Not for marketed product promos (product-launch-video), general website-to-video capture (website-to-hyperframes), topic explainers (faceless-explainer), GitHub PR videos (pr-to-video), captioning existing footage (embedded-captions), Remotion ports (remotion-to-hyperframes), or short unnarrated motion-graphics hits such as logo stings, kinetic type, stat/chart pops, lower-thirds, animated tweets/headlines, or page highlights.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="skill" id="product-launch-video">
+        <div class="skill-head">
+          <h2><code>product-launch-video</code></h2>
+          <div class="delta">
+            <span class="old">1070</span>
+            <span>to</span>
+            <span class="new">676</span>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note">
+            <h3>保留</h3>
+            <p>product launch / SaaS promo / feature reveal / marketing video 触发条件、URL brand capture 或 brief/script no-capture、主要排除项。</p>
+          </div>
+          <div class="note">
+            <h3>压缩</h3>
+            <p>删掉 workflow 中间产物链路、headless Chrome 细节、30-90s sweet spot、voice/BGM/section_plan 细节。</p>
+          </div>
+        </div>
+        <div class="compare">
+          <div class="pane before">
+            <div class="pane-title"><span>Before</span><span>1070 chars</span></div>
+            <p class="text">product-launch video workflow - a product / marketing URL (crawled with headless Chrome for brand tokens + assets) OR a pre-written script / text brief (if it names a product site, the agent offers to crawl it for brand tokens + assets; otherwise no-capture mode with a style preset supplying the palette + design system; the script can be used verbatim as the voice-over or restructured) -> narrator_scripts.json + audio (voice + BGM) + section_plan.md -> a product launch / SaaS / promo video (up to ~3 min; sweet spot ~30-90s) rendered to MP4. Use for marketing, launching, or promoting a specific product / company / app / website. Triggers - "launch video for X", "promo for our site", "explain my SaaS in a minute", "feature reveal for X.com", "I have a script, turn it into a 60s promo". NOT for - a topic / concept explainer with no product and no URL (-> faceless-explainer); a GitHub PR / code change (-> pr-to-video); a general (non-launch) website to turn into a video (-> website-to-hyperframes); adding captions to an existing video (-> embedded-captions).</p>
+          </div>
+          <div class="pane after">
+            <div class="pane-title"><span>After</span><span>676 chars</span></div>
+            <p class="text">Use when the user wants a product launch, SaaS promo, feature reveal, app/company/site marketing video, or a script/brief turned into a product-focused video. Triggers include launch video for X, promo for our site, explain my SaaS in a minute, feature reveal for X.com, and turn this script into a 60s promo. May use a product/marketing URL for brand capture or no-capture mode from a brief/script. Not for topic explainers with no product or URL (faceless-explainer), GitHub PR/code-change videos (pr-to-video), general non-launch website videos (website-to-hyperframes), captions on existing video (embedded-captions), or short design-led motion graphics (motion-graphics).</p>
+          </div>
+        </div>
+      </section>
+
+      <p class="footer-note">
+        未纳入这次修改的超长项：<code>remotion-to-hyperframes</code> 和
+        <code>website-to-hyperframes</code>。这是按前面要求先保留不动。
+      </p>
+    </main>
+  </body>
+</html>

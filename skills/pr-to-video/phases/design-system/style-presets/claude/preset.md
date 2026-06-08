@@ -101,7 +101,7 @@ Claude declares **structural** tokens here (warm tile surface, navy product-chro
    low alpha on navy. */
 --cl-hairline: color-mix(in srgb, var(--ink) 12%, transparent);
 --cl-hairline-soft: color-mix(in srgb, var(--ink) 6%, transparent);
---cl-hairline-dark: color-mix(in srgb, var(--on-dark) 14%, transparent);
+--cl-hairline-dark: color-mix(in srgb, var(--cl-on-dark) 14%, transparent);
 --cl-border-hairline: 1px solid var(--cl-hairline);
 
 /* Hairline elevation — one soft warm shadow, used rarely. NEVER a heavy drop. */

@@ -30,7 +30,7 @@ Timed child elements are clips. **`class="clip"` is required on visible timed el
 | `data-volume`      | No                                              | Static audio volume, `0` to `1`, default `1`. For fades, animate `volume` on the timeline instead (see `variables-and-media.md`). |
 | `data-has-audio`   | No (`<video>` only)                             | `"true"` to declare the video carries an audio track when auto-detection would miss it.                                           |
 
-**Visibility window is inclusive of both ends.** A clip shows while `start ≤ t ≤ start + duration` — it still renders at exactly `t = start + duration`, so the final frame holds the animation's resolved end state (the runtime does not hide it one frame early). A reveal/entrance that lands on `data-duration` is therefore visible on the last frame; you do not need to finish it *before* `data-duration` just to guarantee the end state renders. (Climax-dwell guidance in `/hyperframes-animation` is about pacing, not this boundary.)
+**Visibility window is inclusive of both ends.** A clip shows while `start ≤ t ≤ start + duration` — it still renders at exactly `t = start + duration`, so the final frame holds the animation's resolved end state (the runtime does not hide it one frame early). A reveal/entrance that lands on `data-duration` is therefore visible on the last frame; you do not need to finish it _before_ `data-duration` just to guarantee the end state renders. (Climax-dwell guidance in `/hyperframes-animation` is about pacing, not this boundary.)
 
 ## Sub-Composition Host Attributes
 
@@ -49,7 +49,10 @@ See `sub-compositions.md` for the full wiring pattern.
 
 - `id="root"` — template convention used by scaffolds and the transition catalog so CSS can target the composition root with `#root` instead of `[data-composition-id="main"]`. Not required by the runtime, but consistent with the rest of the ecosystem.
 - `class="clip"` — required runtime visibility marker on visible timed elements (`<div>`, `<img>`, …). See Clip Attributes above.
-- `data-layout-allow-overflow` — tells `hyperframes inspect` that overflow on this element (or its descendants) is intentional.
+- `data-layout-allow-overflow` — tells `hyperframes inspect` that overflow on this element (or its descendants) is intentional. Notes:
+  - `inspect` measures `getBoundingClientRect` at sampled timestamps, not rendered pixels — `overflow: hidden` clips the visual but does **not** suppress an `inspect` overflow finding. This attribute is the escape hatch; CSS overflow is not.
+  - Can be set on the composition **root** as well as on any child. When the cited offender is `div.<comp>-root inside div.<comp>-root` (the root reports its own children's union as overflowing), the fix goes on the root, not on individual text descendants — shrinking font sizes will not converge.
+  - In a multi-scene `group_wN.html` (continue runs), every scene-local element stays in the DOM during the other scenes' time windows; the layout-box union almost always overflows the canvas during morph seams. Mark the root and every scene-local primary/supporting element with this attribute **at construction**, not after `inspect` flags it.
 - `data-layout-ignore` — exclude this element from layout audits entirely.
 
 ## Legacy / Removed Attributes

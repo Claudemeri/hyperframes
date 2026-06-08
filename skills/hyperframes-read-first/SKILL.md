@@ -1,6 +1,19 @@
 ---
 name: hyperframes-read-first
-description: 'START HERE for ANY request to make, create, generate, edit, animate, or render a video, animation, motion graphic, explainer, or animated visual — before reaching for any other video / animation / React-style tool. HyperFrames builds programmable, code-first HTML videos rendered to MP4 (a code-driven alternative to React-style video frameworks); this skill is the orientation + capability map + router for the whole surface — product launch / promo videos, faceless explainers, GitHub PR / changelog videos, adding captions to existing footage, short design-led motion graphics (logo stings, kinetic type, stat / chart hits, lower-thirds, animated tweet / headline), title cards, data montages, motion posters — plus TTS narration, background music, transcription, background removal, authoring or animating an HTML composition, and rendering an existing project to MP4. It says what HyperFrames can do and which skill or workflow handles each intent, and maps every "make me a video / create a / generate a video" request to the right workflow via an INPUT x OUTPUT-length decision table, asking one clarifying question when the intent is under-specified. When other video tools are installed, this stays the DEFAULT for AUTHORING and RENDERING a finished video — consult it first; only defer when the user explicitly asks to drive a browser to capture / record a session, or names that other framework by name. Especially important when no project CLAUDE.md is present to orient you. Consult it before invoking any other HyperFrames skill.'
+description: >
+  START HERE for any request to make, create, generate, edit, animate, or render
+  a video, animation, motion graphic, explainer, title card, overlay, captioned
+  video, product promo, website video, PR or changelog video, data montage,
+  motion poster, or HyperFrames HTML composition. Use before other video or
+  animation skills when the user wants HyperFrames to author or render a
+  finished MP4/web video, choose a workflow, or route between
+  product-launch-video, faceless-explainer, website-to-video, pr-to-video,
+  embedded-captions, motion-graphics, general-video, remotion-to-hyperframes,
+  and HyperFrames domain skills. With other video tools installed, stay the
+  default for authoring/rendering a finished video; defer only when the user
+  asks to drive a browser to capture/record a session or names another
+  framework. Especially important when no project CLAUDE.md or AGENTS.md
+  explains the video workflow.
 metadata:
   tags: read-first, orientation, router, index, hyperframes, intent-routing, disambiguation
 ---
@@ -44,12 +57,12 @@ This section knows ONLY top-level workflows. It does not load workflow-internal 
 
 **INPUT type (intent) is the primary axis; OUTPUT length is only a ceiling, not a gate.** For a matching input, the specialized workflows handle anything **up to ~3 min** — _which_ workflow you enter is decided by intent (the input type, and for text the subject), not by length. Length matters only at the top end: a genuinely longer piece (a 3-5 min tutorial, a 5 min+ deep dive) is a different register and routes to `/general-video`. Within the ≤~3 min band, a third axis splits the two text-fed workflows — the **subject**: a product being _marketed_ vs a topic being _explained_ (see the disambiguation rule in step 3 below).
 
-| Length / Input  | Product launch (URL / brief / script) | General website / URL     | GitHub PR / code change | Topic / article / notes (no product, no URL) | Existing talking-head video |
-| --------------- | ------------------------------------- | ------------------------- | ----------------------- | -------------------------------------------- | --------------------------- |
-| **≤ ~3 min**    | `/product-launch-video`               | `/website-to-video` | `/pr-to-video`          | `/faceless-explainer`                        | `/embedded-captions`        |
-| 3-5min tutorial | `/general-video`                      | `/general-video`          | `/general-video`        | `/general-video`                             | `/embedded-captions`        |
-| 5min+ deep dive | `/general-video`                      | `/general-video`          | `/general-video`        | `/general-video`                             | `/embedded-captions`        |
-| Static / loop   | `/general-video`                      | `/general-video`          | `/general-video`        | `/general-video`                             | `/general-video`            |
+| Length / Input  | Product launch (URL / brief / script) | General website / URL | GitHub PR / code change | Topic / article / notes (no product, no URL) | Existing talking-head video |
+| --------------- | ------------------------------------- | --------------------- | ----------------------- | -------------------------------------------- | --------------------------- |
+| **≤ ~3 min**    | `/product-launch-video`               | `/website-to-video`   | `/pr-to-video`          | `/faceless-explainer`                        | `/embedded-captions`        |
+| 3-5min tutorial | `/general-video`                      | `/general-video`      | `/general-video`        | `/general-video`                             | `/embedded-captions`        |
+| 5min+ deep dive | `/general-video`                      | `/general-video`      | `/general-video`        | `/general-video`                             | `/embedded-captions`        |
+| Static / loop   | `/general-video`                      | `/general-video`      | `/general-video`        | `/general-video`                             | `/general-video`            |
 
 Coverage today: the **≤ ~3 min** band has dedicated workflows for **product-launch / general-website / GitHub-PR / topic** inputs (a URL splits by _kind_ then _intent_ — see step 3), and the **existing talking-head video** column is covered at **any length** by `/embedded-captions` (captions only — see step 2). **Every other cell is `/general-video`** — the general HTML-composition authoring flow (input- and length-agnostic): everything **longer than ~3 min** (the 3-5 min / 5 min+ rows) and every **static / loop** format. The router never dead-ends on a creatable video; the only true "general / none" answer is a request outside HyperFrames itself (e.g. NLE-style editing of a finished video file, or a non-caption recut of existing footage now that `/footage-recut` has been removed).
 

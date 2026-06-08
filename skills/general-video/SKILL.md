@@ -1,6 +1,16 @@
 ---
 name: general-video
-description: General HTML video composition authoring — the router fallback for any "make a video" request that is NOT a marketed product (→ product-launch-video), a general website to turn into a video (→ website-to-video), a topic explainer (→ faceless-explainer), a GitHub PR (→ pr-to-video), existing footage to caption (→ embedded-captions), a Remotion port (→ remotion-to-hyperframes), or a short unnarrated design-led motion graphic — a logo sting, kinetic-type hit, stat / chart pop, lower-third / overlay, or animated tweet / headline / captured-page highlight, typically under ~10s (→ motion-graphics). Use for longer or multi-scene pieces, brand reels / sizzle reels, montages, title cards, motion posters at length, static loops, or any custom composition not covered by a specialized workflow, at any length and format. Input- and length-agnostic. This is the original `hyperframes` authoring flow — design system → prompt expansion → plan → layout-before-animation → build → validate — delegating contract / creative / motion details to the `hyperframes-*` domain skills.
+description: >
+  Use as the fallback for custom HyperFrames HTML video composition authoring
+  when no specialized workflow fits. Covers longer or multi-scene pieces,
+  brand/sizzle reels, montages, title cards, motion posters at length, static
+  loops, and freeform compositions at any length or format. Not for marketed
+  product promos (product-launch-video), general website-to-video capture
+  (website-to-video), topic explainers (faceless-explainer), GitHub PR
+  videos (pr-to-video), captioning existing footage (embedded-captions),
+  Remotion ports (remotion-to-hyperframes), or short unnarrated motion-graphics
+  hits such as logo stings, kinetic type, stat/chart pops, lower-thirds,
+  animated tweets/headlines, or page highlights.
 metadata:
   tags: orchestrator, general-video, fallback, freeform, composition-authoring
 ---

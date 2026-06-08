@@ -376,6 +376,24 @@ for (const sceneId of sceneIds) {
     });
   }
 
+  // Rule 6a: every <video> must carry the `muted` attribute.
+  // Source-video audio (a captured demo clip's own soundtrack) would otherwise
+  // mix into the final render alongside the narrator voice + BGM, producing a
+  // garbled audio bed. There is no project-level mute pass — the only place to
+  // enforce this is the scene HTML. Sound, if ever needed, belongs in a separate
+  // <audio> mounted by assemble-index at the top level (track 20+).
+  for (const vm of html.matchAll(/<video\b([^>]*)>/gi)) {
+    const attrs = vm[1];
+    if (!/\bmuted\b/i.test(attrs)) {
+      const tag = vm[0].length > 120 ? vm[0].slice(0, 117) + "..." : vm[0];
+      errors.push({
+        sceneId,
+        rule: "video-not-muted",
+        detail: `${tag} is missing the muted attribute — source-video audio would mix into the render. Add muted (alongside loop playsinline) to every <video>.`,
+      });
+    }
+  }
+
   // Rule 6b: comments must not contain literal HTML opening tags
   // `npx hyperframes lint` scans <template> / <style> / <script> with regexes, so
   // literal tags in comments can be mistaken for real tags and create false structure errors.

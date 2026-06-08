@@ -49,7 +49,7 @@ Types are drawn from the fixed enum `hook | pain_point | product_intro | feature
 - The text is several parallel items / a ranking with no single mechanism (→ use **listicle**)
 - The payoff depends on a character, stakes, or a turn of events (→ use **story-explainer**)
 - The topic is actually three concepts wearing one title — split, or pick the load-bearing one; concept-explainer disclosing two ideas per scene collapses into noise
-- There is no mechanism to expose, only a definition — then it's a 15-second card, not a full ~1-2 min film
+- There is no mechanism to expose, only a definition — then it's a 15-second card, not a full ~1-3 min film
 
 ## Hook Strategy Bias
 

@@ -45,7 +45,7 @@ Notes:
 - The points are sequential and order-dependent (each depends on the previous) → use **how-to-process**.
 - There is one core idea to unpack in depth, not many parallel ones → use **concept-explainer**.
 - The material is inherently a single human/narrative throughline → use **story-explainer**.
-- N would be 2 or 8+: two items isn't a list (it's a comparison — fold into concept-explainer); eight+ items overwhelm a short explainer — cut to the best 4-6 (up to ~6-7 only if you're filling the full ~2 min), or split the topic.
+- N would be 2 or 8+: two items isn't a list (it's a comparison — fold into concept-explainer); eight+ items overwhelm a short explainer — cut to the best 4-6 (up to ~6-7 only if you're filling the full ~3 min), or split the topic.
 - The items aren't genuinely parallel (forcing dissimilar ideas into identical templates feels mechanical).
 
 ## Hook Strategy Bias

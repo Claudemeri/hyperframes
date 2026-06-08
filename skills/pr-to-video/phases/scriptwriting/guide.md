@@ -217,7 +217,7 @@ The single largest quality bug in PR videos is **scripts that talk too long**. T
 | **Soft target — default**         | **≤ 19**           | **≤ 9 s**    | Every scene aims for this; visual phase plans tight, idle phase stays short, the cut feels alive.                                                                                         |
 | **Exception budget — ≤ 2 scenes** | ≤ 26               | ≤ 12 s       | The main `feature_showcase` (the one change you really need to explain) or a complex causal-chain `product_intro`. Earn the extra seconds; don't spend them on hook / branding / credits. |
 | **Hard cap — fatal**              | > 26               | > 12 s       | The validator rejects. Trim or split the scene.                                                                                                                                           |
-| **Whole-film target**             | ≤ ~265             | up to ~2 min | Sweet spot is still ~30-90 s (≤ ~155 words); ~2 min is the ceiling. The body carries the load, the close is 5-8 s.                                                                        |
+| **Whole-film target**             | ≤ ~400             | up to ~3 min | Sweet spot is still ~30-90 s (≤ ~155 words); ~3 min is the ceiling. The body carries the load, the close is 5-8 s.                                                                        |
 
 **How to estimate while writing:**
 

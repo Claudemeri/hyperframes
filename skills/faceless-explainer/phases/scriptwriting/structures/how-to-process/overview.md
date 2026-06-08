@@ -30,7 +30,7 @@ A **steady ascent**, not a V-curve. The viewer never dips into anxiety; they mov
 | N+1   | benefit_highlight | Result / recap — the finished artifact, all steps visible at once    | 10-15%   | Payoff: the promise from scene 1 is now fulfilled and inspectable     |
 | N+2   | branding / cta    | Takeaway — the one principle to remember, or "now go try it"         | 8-12%    | Crystallize the method into a portable rule; invite the viewer to act |
 
-Keep step scenes **uniform in length and framing** — visual consistency _is_ the signposting. A step that suddenly changes stage or runs 2× longer reads as "this one is hard," which contradicts the structure's promise. Always **number the steps on-screen** (Step 1 / Step 2 / 1·2·3): the count is the spine. Target 3-5 steps for a ~60-90s video (up to ~6-7 when you're using the full ~2 min); beyond that, merge adjacent steps or split into a `listicle`.
+Keep step scenes **uniform in length and framing** — visual consistency _is_ the signposting. A step that suddenly changes stage or runs 2× longer reads as "this one is hard," which contradicts the structure's promise. Always **number the steps on-screen** (Step 1 / Step 2 / 1·2·3): the count is the spine. Target 3-5 steps for a ~60-90s video (up to ~6-7 when you're using the full ~3 min); beyond that, merge adjacent steps or split into a `listicle`.
 
 ## When to Use
 

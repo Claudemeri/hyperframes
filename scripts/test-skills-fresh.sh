@@ -233,7 +233,7 @@ fi
 say "Verifying skill installation..."
 
 ROUTER="hyperframes-read-first"
-WORKFLOWS=(product-launch-video faceless-explainer footage-recut pr-to-video general-video remotion-to-hyperframes)
+WORKFLOWS=(product-launch-video faceless-explainer footage-recut pr-to-video general-video remotion-to-hyperframes motion-graphics)
 DOMAIN=(hyperframes-core hyperframes-creative hyperframes-animation hyperframes-cli hyperframes-media hyperframes-registry)
 
 MISSING=()

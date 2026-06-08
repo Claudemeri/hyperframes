@@ -220,7 +220,7 @@ for (const sceneId of sceneIds) {
       errors.push({
         sceneId,
         rule: "css-wrapper-ancestor",
-        detail: `<style> uses ${wrapperAncestor} as an ancestor selector (${wrapperHits.length} hit(s)) — producer rendering strips that wrapper, so every selector misses. Use ${fixHint}; put root-level tokens / background / font styles on #root { ... }`,
+        detail: `<style> uses ${wrapperAncestor} as an ancestor selector (${wrapperHits.length} hit(s)) — producer rendering strips that wrapper, so every selector misses. Use ${fixHint}; put root-level background / font styles (and any token overrides) on #root { ... } — base tokens are global in index.html's <head>.`,
       });
     }
 

@@ -7,8 +7,6 @@
 
 You are a faceless-explainer Step 6 scene worker, running in parallel fan-out with sibling workers. You cannot see sibling outputs; final assembly happens in Step 7.
 
-**Read first (every dispatch):** `_meta/agent-pipeline-rules.md` at the skills root — five non-negotiable rules for CLI-driven editing (offender vs `Fix:` line, 3-strike retry cap, inspect measurement model, structural overflow at construction). Rule 5 applies to every `group_wN.html` you author: set `data-layout-allow-overflow="true"` on the composition root AND every scene-local primary/supporting element up front — do not wait for inspect to flag it.
-
 **Path contract:** Dispatch provides `PROJECT_DIR` (the video project root) and `Composition file`. Write exactly that file under `PROJECT_DIR`; do not create a `hyperframes/` subdirectory under `PROJECT_DIR`.
 
 ## Pre-Write Cheat Sheet (scan before typing; saves 15-20% rework)
@@ -16,6 +14,7 @@ You are a faceless-explainer Step 6 scene worker, running in parallel fan-out wi
 1. **Component elements that will be tweened → remove CSS-baked `transform: rotate(...)`; move the tilt into GSAP `rotation`.** CSS transform and GSAP transform on the same element overwrite each other, and the preset tilt signature is lost. See constraint #5b.
 2. **Use `gsap.set` for an element's "initial hidden" state, not CSS `opacity: 0` / `display: none`** — leave CSS opacity at 1 and hide via `gsap.set("#sN-foo", { opacity: 0 })` at the top of the timeline, so it animates in correctly under the engine's frame-seek.
 3. **Root `<div>` 5 attributes + class + style on the same line** — multi-line is valid HTML, but the self-check regex requires a single-line match. See skeleton.
+4. **`group_wN.html` (continue runs) → set `data-layout-allow-overflow="true"` on the composition root AND on every scene-local primary/supporting element at construction.** Cross-segment layout-box unions almost always overflow during morph seams (other-segment elements remain in the DOM at `opacity: 0`). `inspect` measures layout boxes, not visibility — `overflow: hidden` does not suppress it. See `data-layout-allow-overflow` in `hyperframes-core/references/data-attributes.md`.
 
 After writing, run the self-check grep block (at the end). If any FAIL/MISSING/bug-shape hits, fix before reporting. Step 7 finalize uses the same harness; catching it locally saves an 8-13 minute round-trip.
 
@@ -30,7 +29,7 @@ After writing, run the self-check grep block (at the end). If any FAIL/MISSING/b
    - **Runtime:** GSAP is the default and is loaded by the harness; a `rule_path` body names another runtime only if it explicitly says so. Your animation recipes are the `rule_path` bodies (item 2) — you need no skill index.
 2. **Every** `.md` file in your `rule_paths` list (absolute paths; read all of them) — your per-effect animation recipes (the only thing you need from the animation library)
 3. **`design_chunks` field (replaces the old full read of `design.html`):**
-   - `tokens_file` — **prefer the `tokens.css` body in the dispatch packet's `## Tokens/easings/voice` section** (already available after Step 0 Read packet; saves an extra Read). Only Read this absolute path if that section is missing; ~1 KB. Rewrite the full `:root { ... }` block to `#root { ... }` and paste it into the scene `<style>`.
+   - `tokens_file` — the token vocabulary (`--brand-*`, `--cl-*`, `--font-*`, spacing/radius). These are declared **once globally** in `index.html`'s `<head>` by `assemble-index.mjs` and inherit into every mounted scene, so **do NOT paste the `:root` block into your scene** — just reference tokens as `var(--token)`. Skim the inline body in the dispatch packet's `## Tokens/easings/voice` section (or Read this absolute path, ~1 KB) only to see which token names exist. If a scene genuinely needs a different value (e.g. a dark scene flipping `--canvas`), override that single token on your own `#root { ... }` — the local declaration wins by cascade.
    - `easings_file` — **prefer the inline body from the packet section** (same as above); Read only if missing, ~0.5 KB. Paste the full `const EASE = { ... }; const DUR = { ... }` block at the top of the scene `<script>`. `creative_brief` only references canonical role keys (`EASE.entry/emphasis/exit/drift`, `DUR.snap/med/slow`). **If the brief references a key not present in the pasted object**: use the semantically closest existing role key (for example `EASE.emphasis`→`EASE.entry`, `DUR.slow`→`DUR.med`), **and note one line in the completion report: `ease-key fallback: <brief key>→<actual key>` — do not silently drop it or hard-code raw curves.**
    - `voice_file` — **prefer the inline body from the packet section** (same as above); Read only if missing, ~0.5 KB. Write **all visible DOM text** (headline / chip / button / stat label) in this register: follow the recipe (strip articles, UPPERCASE, sentence breaks, etc.) when rewriting English phrases from the `creative_brief`. **Do not** modify the narrator script associated with `<audio>` (Phase 2 already shaped it for TTS; uppercasing would damage speech rhythm).
    - `hints_file` — absolute path \| null. If non-null, read it; ~1-3 KB. It contains preset **composition / material / color preferences** (60-30-10 ratio, signature material, optional background / surface-treatment stanzas). Use it as a **style reference**: §3 60-30-10 and constraint #11 `#root` background choices should reference it. This is taste guidance, **not** a hard render contract.
@@ -215,20 +214,15 @@ Example below uses single-scene `scene_1` (for other single scenes, replace `sce
     style="position:relative; width:1920px; height:1080px; overflow:hidden;"
   >
     <style>
-      /* Styles for the root element itself (CSS variables / background / font) — write #root.
-         Do not write a self data-composition-id selector or .scene_1-root. */
+      /* Root element styles — write #root (not a self data-composition-id selector or .scene_1-root).
+         Brand tokens (--brand-*, --cl-*, --font-display/body/mono, spacing/radius) are declared
+         ONCE globally in index.html's <head> and inherit here — do NOT redeclare the :root block.
+         Reference them with var(--*). Override a single token locally only if this scene needs a
+         different value (the local declaration wins by cascade). */
       #root {
-        /* Paste the entire :root { ... } block from chunks/tokens.css here unchanged,
-           rewritten to #root { ... } — it contains color tokens,
-           font role tokens (--font-display / --font-body / --font-mono),
-           spacing, grid, etc. */
-        --canvas: #f6f3ec;
-        --font-display: "ABC Solar Display", system-ui, sans-serif;
-        --font-body: "TT Norms Pro", -apple-system, system-ui, sans-serif;
-        --font-mono: "JetBrains Mono", ui-monospace, monospace;
         background: var(--canvas);
         font-family: var(--font-body); /* default font; headings use var(--font-display) */
-        /* --r-md, ... */
+        /* e.g. a dark scene: --canvas: var(--cl-navy); */
       }
       #root *,
       #root *::before,

@@ -472,6 +472,22 @@ for (const s of scenes) {
   };
 }
 
+// ---------- Step 4b: extract the :root token block from tokens.css ----------
+// tokens.css is a single global :root {…} block (brand colors, font roles,
+// spacing/radius). Emit it into group_spec.brand_tokens_css so assemble-index.mjs
+// can declare it ONCE in index.html's <head>. CSS custom properties inherit
+// through the light DOM into every mounted sub-composition, so scenes reference
+// var(--*) WITHOUT re-declaring the block locally (see agents/hyperframes-scene.md).
+let brandTokensCss = "";
+if (chunksIndex) {
+  const tokensAbs = join(designSystemDir, chunksIndex.tokens_file || "chunks/tokens.css");
+  if (existsSync(tokensAbs)) {
+    const tokensRaw = readFileSync(tokensAbs, "utf8");
+    const m = tokensRaw.match(/:root\s*\{[\s\S]*\}/);
+    brandTokensCss = (m ? m[0] : tokensRaw).trim();
+  }
+}
+
 // ---------- Step 5: cross-check narrator + audio merge ----------
 if (!existsSync(narratorScriptsPath))
   die(`narrator_scripts.json not found at ${narratorScriptsPath}`);
@@ -946,6 +962,7 @@ const spec = {
   total_duration_s: Number(total_duration_s.toFixed(3)),
   bgm_path,
   font_face_css: fontFaceCss,
+  brand_tokens_css: brandTokensCss,
   groups,
   transitions,
   sfx,

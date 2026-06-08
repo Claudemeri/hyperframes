@@ -1110,6 +1110,15 @@ ${tokensCss.trim()}
     }
   }
 
+  // Brand tokens are now declared once globally in index.html's <head> (by
+  // assemble-index.mjs) and inherit into captions.html when it mounts as a
+  // sub-composition, so the inlined per-file <style data-brand-tokens> block is
+  // redundant — strip it. The brand-strict self-lint above already validated all
+  // colors against it; FONT_FAMILY for canvas text-measure is a separate JS
+  // string set above, unaffected. (Standalone Studio preview re-injects
+  // index.html's <head>, so tokens still resolve there too.)
+  html = html.replace(/[ \t]*<style data-brand-tokens>[\s\S]*?<\/style>\s*\n?/g, "");
+
   // ---------- write ----------
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, html);

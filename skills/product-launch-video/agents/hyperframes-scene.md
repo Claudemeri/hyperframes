@@ -7,8 +7,6 @@
 
 You are a product-launch-video Step 6 worker, running in parallel fan-out with sibling workers. You cannot see sibling outputs; final assembly happens in Step 7.
 
-**Read first (every dispatch):** `_meta/agent-pipeline-rules.md` at the skills root — five non-negotiable rules for CLI-driven editing (offender vs `Fix:` line, 3-strike retry cap, inspect measurement model, structural overflow at construction). Rule 5 applies to every `group_wN.html` you author: set `data-layout-allow-overflow="true"` on the composition root AND every scene-local primary/supporting element up front — do not wait for inspect to flag it.
-
 **Path contract:** Dispatch provides `PROJECT_DIR` (the video project root). Write to `PROJECT_DIR/compositions/<scene-id>.html`; do not create a `hyperframes/` subdirectory under `PROJECT_DIR`.
 
 ## Pre-Write Cheat Sheet
@@ -30,7 +28,7 @@ After writing, run the self-check grep block (at the end). If any FAIL/MISSING/b
 4. **Every** `.md` file in your `rule_paths` list (absolute paths; read all of them)
 5. When `blueprint` is not `composed` → read `<id>.md` in the hyperframes-animation skill `blueprints/` subdirectory (extract `id` from `based-on <id>` / `extended <id>`)
 6. **`design_chunks` field (replaces the old full read of `design.html`):**
-   - `tokens_file` — prefer the inline body from the packet's `## Tokens/easings/voice` section; Read this absolute path only if that section is missing. Rewrite `:root { ... }` → `#root { ... }` per the Skeleton.
+   - `tokens_file` — the token vocabulary. These tokens are declared **once globally** in `index.html`'s `<head>` by `assemble-index.mjs` and inherit into every mounted scene, so **do NOT redeclare the `:root` block in your scene** — just reference tokens as `var(--*)`. Skim the inline body in the packet's `## Tokens/easings/voice` section (or Read this path only if missing) to see which token names exist. Override a single token on your own `#root { ... }` only when the scene needs a different value (local declaration wins by cascade).
    - `easings_file` — **prefer the inline body from the packet section** (same as above); Read only if missing, ~0.5 KB. Paste the full `const EASE = { ... }; const DUR = { ... }` block at the top of the scene `<script>`. `creative_brief` only references canonical role keys (`EASE.entry/emphasis/exit/drift`, `DUR.snap/med/slow`). **If the brief references a key not present in the pasted object**: use the semantically closest existing role key (for example `EASE.emphasis`→`EASE.entry`, `DUR.slow`→`DUR.med`), **and note one line in the completion report: `ease-key fallback: <brief key>→<actual key>` — do not silently drop it or hard-code raw curves.**
    - `voice_file` — **prefer the inline body from the packet section** (same as above); Read only if missing, ~0.5 KB. Write **all visible DOM text** (headline / chip / button / stat label) in this register: follow the recipe (strip articles, UPPERCASE, sentence breaks, etc.) when rewriting English phrases from the `creative_brief`. **Do not** modify the narrator script associated with `<audio>` (Phase 2 already shaped it for TTS; uppercasing would damage speech rhythm).
    - `hints_file` — absolute path \| null. If non-null, read it; ~1-3 KB. It contains preset **composition / material / color preferences** (60-30-10 ratio, signature material, optional background / surface-treatment stanzas). Use it as a **style reference**: §3 60-30-10 and constraint #11 `#root` background choices should reference it. This is taste guidance, **not** a hard render contract.
@@ -65,7 +63,7 @@ It reads `capture/extracted/tokens.json` (enriched sections + local image map) +
 0. **Standalone → fragment conversion** (self-check/gates all validate the fragment contract; missing this step trips the root contract / data-composition-id / timeline-registration FATALs):
    - Strip `<!doctype>` / `<html>` / `<head>` / `<body>` wrappers and the CDN gsap `<script>` (GSAP is injected once in `index.html` by Step 7), and wrap `#root` in `<template id="scene_<N>-template">`.
    - root div: add `class="scene_<N>-root"`, change `data-composition-id="main"` → `scene_<N>`, **delete only `data-start="0"`** (`data-width="1920"` / `data-height="1080"` must stay — they are part of the root 5 attributes; deleting them along with `data-start` triggers a root-contract FATAL), and set `data-duration` to the dispatch `estimatedDuration_s` (exactly, constraint #12).
-   - `<style>`: `:root { }` → `#root { }`; fold bare `html,body { }` and bare `* { }` into `#root` / `#root *` (constraint #1).
+   - `<style>`: the brand tokens are now declared **once globally** in `index.html`'s `<head>`, so **delete the `--*` custom-property declarations** from the standalone `:root { }` block instead of carrying them over; move any remaining `:root` rules (background / font-family — they reference `var(--*)`) onto `#root { }`, and fold bare `html,body { }` and bare `* { }` into `#root` / `#root *` (constraint #1).
    - `window.__timelines["main"]` → `window.__timelines["scene_<N>"]` (constraint #8; this host-id / registration-key rename is **not** covered by step 1's "sync timeline selectors"; do it separately).
 1. Prefix all classes/ids with `s<N>-`, and sync timeline selectors.
 2. Fill `data-glow-start/end` for each `.kw` from ASR (words left blank simply do not glow; render will not fail).
@@ -270,20 +268,15 @@ Example below uses `scene_1` (for other scenes, replace `scene_1` / `s1-` with t
     style="position:relative; width:1920px; height:1080px; overflow:hidden;"
   >
     <style>
-      /* Styles for the root element itself (CSS variables / background / font) — write #root.
-         Do not write a self data-composition-id selector or .scene_1-root. */
+      /* Root element styles — write #root (not a self data-composition-id selector or .scene_1-root).
+         Brand tokens (--brand-*, --cl-*, --font-display/body/mono, spacing/radius) are declared
+         ONCE globally in index.html's <head> and inherit here — do NOT redeclare the :root block.
+         Reference them with var(--*). Override a single token locally only if this scene needs a
+         different value (the local declaration wins by cascade). */
       #root {
-        /* Paste the entire :root { ... } block from chunks/tokens.css here unchanged,
-           rewritten to #root { ... } — it contains color tokens,
-           font role tokens (--font-display / --font-body / --font-mono),
-           spacing, grid, etc. */
-        --canvas: #f6f3ec;
-        --font-display: "ABC Solar Display", system-ui, sans-serif;
-        --font-body: "TT Norms Pro", -apple-system, system-ui, sans-serif;
-        --font-mono: "JetBrains Mono", ui-monospace, monospace;
         background: var(--canvas);
         font-family: var(--font-body); /* default font; headings use var(--font-display) */
-        /* --r-md, ... */
+        /* e.g. a dark scene: --canvas: var(--cl-navy); */
       }
       #root *,
       #root *::before,

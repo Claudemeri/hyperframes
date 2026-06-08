@@ -324,8 +324,9 @@ sfx.forEach((cue, i) => {
   sfxEmitted++;
 });
 
-// ---------- <head> style: proven base + optional @font-face block ----------
+// ---------- <head> style: proven base + global brand tokens + optional @font-face ----------
 const fontFaceCss = (groupSpec.font_face_css || "").trim();
+const brandTokensCss = (groupSpec.brand_tokens_css || "").trim();
 const headStyle = [
   "      * {",
   "        margin: 0;",
@@ -352,6 +353,14 @@ const headStyle = [
   "        inset: 0;",
   "      }",
 ];
+if (brandTokensCss) {
+  // Global brand tokens — declared ONCE here. CSS custom properties inherit
+  // through the light DOM into every mounted sub-composition, so scenes use
+  // var(--*) without re-declaring this block locally. A scene may still override
+  // a token on its own #root (cascade) when it needs to (e.g. a dark scene).
+  headStyle.push("", "      /* Brand design tokens (from design-system/chunks/tokens.css) */");
+  for (const line of brandTokensCss.split("\n")) headStyle.push(`      ${line}`);
+}
 if (fontFaceCss) {
   headStyle.push("", "      /* Brand fonts (extracted by prep.mjs from design.html) */");
   for (const line of fontFaceCss.split("\n")) headStyle.push(`      ${line}`);

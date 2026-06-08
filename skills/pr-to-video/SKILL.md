@@ -33,7 +33,7 @@ macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node f
 | Key / requirement                             | Used for                                    | Default / fallback                                             |
 | --------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
 | `gh auth status` OK                           | Reading the PR (public or private)          | **required** — fail fast with the auth hint                    |
-| `HEYGEN_API_KEY`                              | TTS (cloud, word-level timestamps)          | voice `1bd001e7e50f421d891986aad5158bc8`                       |
+| `HEYGEN_API_KEY`                              | TTS (cloud, word-level timestamps)          | voice: auto (first English starfish voice; override `--voice`) |
 | `ELEVENLABS_API_KEY`                          | TTS (cloud; needs `pip install elevenlabs`) | voice `21m00Tcm4TlvDq8ikWAM` (Rachel)                          |
 | neither set                                   | TTS                                         | local Kokoro, voice `am_michael` (non-English: pass `--voice`) |
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` (aliases) | Lyria BGM                                   | unset -> local MusicGen (first run downloads ~300 MB)          |

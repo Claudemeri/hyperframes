@@ -23,6 +23,29 @@ npx hyperframes tts "Hello" --provider elevenlabs --voice 21m00Tcm4TlvDq8ikWAM
 npx hyperframes tts "Hi there" --words narration.words.json
 ```
 
+## Self-contained HeyGen (no CLI) — `scripts/heygen-tts.mjs`
+
+The published `hyperframes tts` CLI synthesizes locally with Kokoro only. When you
+want HeyGen specifically — best quality **plus** word timestamps in one call — use
+the skill's bundled script, which calls the HeyGen v3 REST API directly and needs
+no CLI provider plumbing:
+
+```bash
+export HEYGEN_API_KEY=...   # or a .env in the project (auto-loaded, walks up ≤5 dirs)
+
+# Synthesize + capture word timestamps in one call (skips a Whisper pass)
+node skills/hyperframes-media/scripts/heygen-tts.mjs \
+  "Welcome to HyperFrames." -o narration.wav --words narration.words.json
+
+node skills/hyperframes-media/scripts/heygen-tts.mjs ./script.txt -o narration.wav
+node skills/hyperframes-media/scripts/heygen-tts.mjs --list   # public starfish voices
+```
+
+- **Voice:** `--voice <id>` must be a **starfish** voice_id (`--list`, or `GET /v3/voices?engine=starfish`). v2-catalog ids are rejected with HTTP 400. Omit `--voice` and the script auto-picks the first English public starfish voice.
+- **Output:** `.wav` → transcoded to 44.1k mono via ffmpeg; `.mp3` → raw bytes (no ffmpeg needed).
+- **Words:** `--words <path>` writes the flat `[{id,text,start,end}]` shape below, drop-in for the captions pipeline. HeyGen's `<start>`/`<end>` boundary sentinels are filtered out and ids are re-contiguous.
+- **Non-English:** `--lang <code>` (anything but `en`) is sent as the request `language`.
+
 ## When to use which provider
 
 | Goal                                                      | Use                                                 |

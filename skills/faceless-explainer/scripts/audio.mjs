@@ -220,17 +220,31 @@ if (provider === "heygen" && !process.env.HEYGEN_API_KEY)
 if (provider === "elevenlabs" && !process.env.ELEVENLABS_API_KEY)
   die("provider=elevenlabs but $ELEVENLABS_API_KEY is not set");
 
-const voiceId =
+let voiceId =
   userVoice ||
-  (provider === "heygen"
-    ? "1bd001e7e50f421d891986aad5158bc8" // HeyGen default (mirrors CLI heygen.ts DEFAULT_VOICE)
-    : provider === "elevenlabs"
-      ? "21m00Tcm4TlvDq8ikWAM" // Rachel (ElevenLabs default)
-      : lang === "en"
+  (provider === "elevenlabs"
+    ? "21m00Tcm4TlvDq8ikWAM" // Rachel (ElevenLabs default)
+    : provider === "kokoro"
+      ? lang === "en"
         ? "am_michael"
         : die(
             "Kokoro non-English path requires explicit --voice (see /hyperframes-media references/tts.md)",
-          ));
+          )
+      : null); // heygen default resolved below — needs a starfish voice_id
+
+// HeyGen's /v3/voices/speech only accepts STARFISH voice_ids; a v2-catalog id
+// (the old hardcoded default 1bd001e7…) is rejected with HTTP 400. With no
+// --voice, auto-pick the first English public starfish voice.
+if (provider === "heygen" && !voiceId) {
+  const vres = await fetch("https://api.heygen.com/v3/voices?engine=starfish&type=public&limit=50", {
+    headers: { "X-Api-Key": process.env.HEYGEN_API_KEY },
+  });
+  if (!vres.ok) die(`heygen voice list failed (HTTP ${vres.status})`);
+  const list = (await vres.json()).data ?? [];
+  const pick = list.find((v) => v.language === "English") ?? list[0];
+  if (!pick) die("no public starfish voices available — pass --voice");
+  voiceId = pick.voice_id;
+}
 
 // ---------- Step 4: write narration → /tmp/scene_<N>.txt ----------
 for (const s of scenes) {
@@ -403,6 +417,8 @@ async function synthesizeHeygen(s) {
     if (Array.isArray(wts)) {
       const words = wts
         .filter((w) => w && typeof w.word === "string" && isFinite(w.start) && isFinite(w.end))
+        // Drop HeyGen's <start>/<end> boundary sentinels (no spoken text).
+        .filter((w) => !/^<.*>$/.test(w.word.trim()))
         .map((w) => ({ text: w.word, start: w.start, end: w.end }));
       if (words.length) writeFileSync(wordsAbs, JSON.stringify(words, null, 2));
     }

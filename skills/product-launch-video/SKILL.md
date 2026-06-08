@@ -40,7 +40,7 @@ Optional API keys (if unset, the workflow uses local fallbacks). Injection is de
 
 | Key                                      | Used for                                       | Default voice / fallback                                                                      |
 | ---------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `HEYGEN_API_KEY`                         | TTS (cloud, with word-level timestamps)        | voice `1bd001e7e50f421d891986aad5158bc8`                                                      |
+| `HEYGEN_API_KEY`                         | TTS (cloud, with word-level timestamps)        | voice: auto (first English starfish voice; override `--voice`)                                |
 | `ELEVENLABS_API_KEY`                     | TTS (cloud; requires `pip install elevenlabs`) | voice `21m00Tcm4TlvDq8ikWAM` (Rachel)                                                         |
 | Neither set                              | TTS                                            | local Kokoro, voice `am_michael` (for non-English, pass `--voice`)                            |
 | `GEMINI_API_KEY` (one key for both uses) | Capture vision caption + Lyria BGM             | unset -> captions use DOM context only; BGM uses local MusicGen (first run downloads ~300 MB) |

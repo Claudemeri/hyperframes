@@ -17,6 +17,8 @@ CLI commands that create assets (`tts`, `bgm`, `transcribe`, `remove-background`
 | 2     | ElevenLabs                    | `$ELEVENLABS_API_KEY` set | No — chain `transcribe` after                                    |
 | 3     | Kokoro-82M (local, 54 voices) | always (no key required)  | No — chain `transcribe` after                                    |
 
+> If the installed `hyperframes tts` is the local-only build (its `--help` says "Kokoro-82M" and has no `--provider`/`--words` flags), it silently falls back to Kokoro even with `$HEYGEN_API_KEY` set. To force HeyGen regardless of CLI version, use the self-contained `scripts/heygen-tts.mjs` (see `references/tts.md`).
+
 **BGM** — `npx hyperframes bgm --duration N`:
 
 | Order | Provider                                    | Detected when                                       |
@@ -28,17 +30,18 @@ Override either with `--provider <name>`.
 
 ## Routing
 
-| Task                                                              | Read                                         |
-| ----------------------------------------------------------------- | -------------------------------------------- |
-| `npx hyperframes tts` — provider chain, voice IDs, words.json     | `references/tts.md`                          |
-| `npx hyperframes bgm` — Lyria vs MusicGen, mood prompts, tuning   | `references/bgm.md`                          |
-| `npx hyperframes transcribe` — Whisper, model rules, output shape | `references/transcribe.md`                   |
-| `npx hyperframes remove-background` — transparent cutouts         | `references/remove-background.md`            |
-| TTS → transcription → captions (no recorded voiceover)            | `references/tts-to-captions.md`              |
-| Caption authoring — style detection, layout, word grouping, exit  | `references/captions/authoring.md`           |
-| Transcript handling — input formats, quality gates, cleanup, APIs | `references/captions/transcript-handling.md` |
-| Caption motion — karaoke, marker effects, audio-reactive          | `references/captions/motion.md`              |
-| Model caches, system dependencies, troubleshooting                | `references/requirements.md`                 |
+| Task                                                              | Read                                               |
+| ----------------------------------------------------------------- | -------------------------------------------------- |
+| `npx hyperframes tts` — provider chain, voice IDs, words.json     | `references/tts.md`                                |
+| HeyGen without the CLI — self-contained REST script (wav + words) | `scripts/heygen-tts.mjs` (see `references/tts.md`) |
+| `npx hyperframes bgm` — Lyria vs MusicGen, mood prompts, tuning   | `references/bgm.md`                                |
+| `npx hyperframes transcribe` — Whisper, model rules, output shape | `references/transcribe.md`                         |
+| `npx hyperframes remove-background` — transparent cutouts         | `references/remove-background.md`                  |
+| TTS → transcription → captions (no recorded voiceover)            | `references/tts-to-captions.md`                    |
+| Caption authoring — style detection, layout, word grouping, exit  | `references/captions/authoring.md`                 |
+| Transcript handling — input formats, quality gates, cleanup, APIs | `references/captions/transcript-handling.md`       |
+| Caption motion — karaoke, marker effects, audio-reactive          | `references/captions/motion.md`                    |
+| Model caches, system dependencies, troubleshooting                | `references/requirements.md`                       |
 
 ## Non-negotiable rules
 

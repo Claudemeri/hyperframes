@@ -9,16 +9,19 @@ The video narrative is independent from the input text's layout. An article / br
 
 The planning standard: **write the emotional beat alongside the structural type**, **name the specific rhetorical / clarity technique** (do not merely write "explain the idea"), and **specify a transition for every seam**. What carries the viewer's eye from scene N to scene N+1 is part of the story itself, not something to defer to the visual phase.
 
-## Use `site_dna` to Set the Register (optional, read once at the start)
+## Pick the Style Preset (you choose it; it sets the whole look)
 
-`design-system/inference.json` `site_dna` is the deterministic Phase 1 register summary. If present, read **only the `site_dna` section** once at the start and tune narration to the same channel as the final visuals (**do not read `design.html` / `chunks/`** — those are parallel design-system outputs, and reading them would break Phase 1b∥2 parallelism). If `inference.json` is missing, proceed without it; do not run any build step. The shipped style is **pin-and-paper** (warm, field-notebook, considered, literary), so absent any other signal, default narration to a warm, plain, considered voice — no hype, no corporate gloss.
+This workflow does **not** hardcode a preset. Read the input, **pick one of the 5 shipped presets**, emit it as the top-level `stylePreset` in `narrator_scripts.json`, and match the narration register to it. The deterministic design-system step runs right after you return and builds the entire visual system from your choice — so `stylePreset` is the single lever that sets the film's look. There is **no `inference.json` to read** at this phase (design-system has not run yet); your choice _is_ the register signal. Default to `pin-and-paper` when nothing clearly fits.
 
-| `site_dna` field                               | How to use it                                                                                                                                              |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `voice_tone` (warm / neutral / formal / ...)   | Set script tone: `warm` allows disarming specificity and the occasional aside; `neutral` uses sharp-but-plain teaching language; `formal` stays restrained |
-| `voice_heading_style` / `voice_heading_length` | Hook copy rhythm: `tight` -> short triplets / single-line claims; `loose` -> longer setup lines, anaphora                                                  |
+| `stylePreset`   | Look                                                                                                      | Pick it when the topic is…                                          | Register                         |
+| --------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------- |
+| `pin-and-paper` | Yellow field-notebook paper, hard ink offset shadows, hairline ink — warm, handmade, considered (default) | reflective, educational, notes-like, humane — safe for almost any   | warm, plain, considered; no hype |
+| `block-frame`   | 4px solid ink borders, hard black offset shadows, saturated pastel cycle — bold, poster-like, punchy      | confident, energetic, declarative; bold claims, "loud" explainers   | crisp, confident, declarative    |
+| `capsule`       | Universal pill geometry, soft low shadows, Didone serif + grotesk — rounded, modern-editorial, friendly   | approachable, lifestyle, product-adjacent, polished                 | friendly, polished               |
+| `scatterbrain`  | Cork / paper with post-its, hand-placed tilt, soft paper-lift — playful, messy-desk, brainstorm           | casual, fun, ideation, list-y, "my scattered notes"                 | light, conversational            |
+| `claude`        | Warm cream editorial surface, hairline elevation, **ships a code-window** — literary, technical-but-human | technical / dev-ish / thoughtful longform; anything that shows code | warm, plain, considered          |
 
-`site_dna` is a **soft input**: it tunes the voice. The structure and scene segmentation are driven by the input text + the structure decision below.
+The preset tunes the **voice**, not the structure: scene segmentation is driven by the input text + the structure decision below.
 
 ## Explainer Structures
 
@@ -243,6 +246,7 @@ Therefore:
 - Does the hook use a named strategy from the taxonomy?
 - Is there only one outer structure (no splicing top-level frameworks)? Explicitly named inner-rhythm compounds are allowed.
 - Is the type-enum used per the repurposing table (so the file stays schema-valid, with at least one `feature_showcase`/`product_intro`)?
+- Is a top-level `stylePreset` set to one of the 5 shipped presets (`pin-and-paper` | `block-frame` | `capsule` | `scatterbrain` | `claude`)?
 
 ## `narrator_scripts.json`: Canonical Schema
 
@@ -252,6 +256,7 @@ Downstream agents expect these **exact** field names. Wrong names (e.g. `scene_i
 {
   "project": "Project name",
   "narrativeArchetype": "Explainer structure (concept-explainer | how-to-process | listicle | story-explainer), or compound \"<outer> with <inner>\"",
+  "stylePreset": "One of: pin-and-paper | block-frame | capsule | scatterbrain | claude — drives the entire visual system (default pin-and-paper)",
   "emotionalArc": "Comprehension journey description (e.g. 'Puzzlement at why time speeds up shifting to clarity and a small delight as memory density explains it.')",
   "scenes": [
     {

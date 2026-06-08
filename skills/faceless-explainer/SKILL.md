@@ -15,8 +15,8 @@ All artifacts go to `PROJECT_DIR = videos/<project-name>/` (created in Step 0); 
 | ------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------- |
 | init                     | Bash                                                                                                       | `hyperframes.json`                                          | Step 0                                    |
 | scaffold                 | Bash (no agent)                                                                                            | `capture/extracted/tokens.json` + `visible-text.txt`        | Step 1                                    |
-| design-system            | Bash (no agent, deterministic `pin-and-paper`)                                                             | `design-system/design.html` + `chunks/`                     | Step 1b                                   |
-| scriptwriting            | subagent (`general-purpose`)                                                                               | `narrator_scripts.json`                                     | `agents/scriptwriting.md`                 |
+| scriptwriting            | subagent (`general-purpose`)                                                                               | `narrator_scripts.json` (incl. chosen `stylePreset`)        | Step 2 / `agents/scriptwriting.md`        |
+| design-system            | Bash (no agent, deterministic — style = `narrator_scripts.stylePreset`)                                    | `design-system/design.html` + `chunks/`                     | Step 2b                                   |
 | audio                    | `audio.mjs` in Bash                                                                                        | `audio_meta.json`                                           | `phases/audio/guide.md`                   |
 | visual-design            | subagent (`general-purpose`)                                                                               | `section_plan.md`                                           | `agents/visual-design.md`                 |
 | prep                     | `prep.mjs` in Bash                                                                                         | `group_spec.json`                                           | `scripts/prep.mjs`                        |
@@ -82,15 +82,33 @@ Validation:
 
 If any is missing, report and stop.
 
-### Step 1b - Design system (Bash, NO agent, deterministic)
+### Step 2 - Scriptwriting (subagent — also picks the style preset)
 
-Three deterministic commands produce a fully-styled `design.html` + chunks against the synthetic input:
+Dispatch one subagent. prompt = full contents of `agents/scriptwriting.md` + the `## Dispatch context` below, passed through verbatim:
+
+```
+SKILL_DIR: <absolute path>
+PROJECT_DIR: <video project root>
+Schema validator: <SKILL_DIR>/scripts/validate.mjs narrator
+Input text: ./capture/extracted/visible-text.txt   # The source article / notes / brief — the agent reads this first
+Style preset: pick one from the menu in the guide and emit it as the top-level `stylePreset` (default `pin-and-paper` when unsure); match the narration register to the chosen preset
+Script style: Keep each scene's script concise — 1-2 sentences, no more than 20 words
+```
+
+The agent picks an explainer **structure** for `narrativeArchetype` (`concept-explainer` / `how-to-process` / `listicle` / `story-explainer`, or `"<outer> with <inner>"`), picks a top-level **`stylePreset`** from the 5 shipped presets (consumed by Step 2b), and emits `narrator_scripts.json` (it runs the validator before returning). `continuity` drives worker grouping: `continue` = same worker as the previous scene (a run of **up to 3** scenes, cap=3); `break` = new worker; scene 1 is always `break`. `intent` / `sharedMotif` are soft hints. `assetCandidates` is `[]` on essentially every scene (faceless).
+
+### Step 2b - Design system (Bash, NO agent, deterministic — style chosen by Step 2)
+
+Read the agent's `stylePreset` from `narrator_scripts.json` (default `pin-and-paper` if absent), then run three deterministic commands to produce a fully-styled `design.html` + chunks against the synthetic input:
 
 ```bash
-(cd "$PROJECT_DIR" && node <SKILL_DIR>/phases/design-system/scripts/build-design.mjs ./design-system --no-emit --style pin-and-paper)
-(cd "$PROJECT_DIR" && node <SKILL_DIR>/phases/design-system/scripts/build-design.mjs ./design-system --style pin-and-paper)
+STYLE=$(cd "$PROJECT_DIR" && node -e 'try{const p=require("./narrator_scripts.json").stylePreset;process.stdout.write((p&&String(p).trim())||"pin-and-paper")}catch{process.stdout.write("pin-and-paper")}')
+(cd "$PROJECT_DIR" && node <SKILL_DIR>/phases/design-system/scripts/build-design.mjs ./design-system --no-emit --style "$STYLE")
+(cd "$PROJECT_DIR" && node <SKILL_DIR>/phases/design-system/scripts/build-design.mjs ./design-system --style "$STYLE")
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/phases/design-system/scripts/emit-chunks.mjs ./design-system)
 ```
+
+`stylePreset` must be one of the 5 shipped presets (`block-frame` / `capsule` / `claude` / `pin-and-paper` / `scatterbrain`); an unknown name makes `build-design.mjs` exit 1 — fall back to `pin-and-paper` and rerun. This step depends only on `narrator_scripts.json`, so it may run in parallel with Step 3 audio; both must finish before Step 4 visual-design.
 
 Validation:
 
@@ -101,21 +119,6 @@ Validation:
 ```
 
 If any is missing, read the build-design / emit-chunks stderr, fix the invocation, and rerun (deterministic, finishes in seconds).
-
-### Step 2 - Scriptwriting
-
-Dispatch one subagent. prompt = full contents of `agents/scriptwriting.md` + the `## Dispatch context` below, passed through verbatim:
-
-```
-SKILL_DIR: <absolute path>
-PROJECT_DIR: <video project root>
-Schema validator: <SKILL_DIR>/scripts/validate.mjs narrator
-Input text: ./capture/extracted/visible-text.txt   # The source article / notes / brief — the agent reads this first
-Design DNA: ./design-system/inference.json         # Read site_dna once to set the narrative register (soft register hint only)
-Script style: Keep each scene's script concise — 1-2 sentences, no more than 20 words
-```
-
-The agent picks an explainer **structure** for `narrativeArchetype` (`concept-explainer` / `how-to-process` / `listicle` / `story-explainer`, or `"<outer> with <inner>"`) and emits `narrator_scripts.json` (it runs the validator before returning). `continuity` drives worker grouping: `continue` = same worker as the previous scene (a run of **up to 3** scenes, cap=3); `break` = new worker; scene 1 is always `break`. `intent` / `sharedMotif` are soft hints. `assetCandidates` is `[]` on essentially every scene (faceless).
 
 ### Step 3 - Audio
 
@@ -306,8 +309,8 @@ Read `$PROJECT_DIR/context.log` and resume from:
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | log missing or empty                                                                             | Full pipeline                                                                                                                                                                                           |
 | `capture/extracted/tokens.json` **or** `visible-text.txt` missing                                | Step 1 (scaffold)                                                                                                                                                                                       |
-| scaffold done, `design-system/inference.json` **or** `chunks/index.json` missing                 | Step 1b (three deterministic commands)                                                                                                                                                                  |
-| `chunks/index.json` exists, `narrator_scripts.json` missing                                      | Step 2 (scriptwriting). If the user supplied a final `narrator_scripts.json`, place it in `$PROJECT_DIR/` to skip this state                                                                            |
+| scaffold done, `narrator_scripts.json` missing                                                   | Step 2 (scriptwriting). If the user supplied a final `narrator_scripts.json`, place it in `$PROJECT_DIR/` to skip this state (add a top-level `stylePreset`, or Step 2b defaults to `pin-and-paper`)    |
+| `narrator_scripts.json` exists, `design-system/chunks/index.json` missing                        | Step 2b (design-system; `--style` = `narrator_scripts.stylePreset`, default `pin-and-paper`)                                                                                                            |
 | `narrator_scripts.json` exists, `audio_meta.json` missing                                        | Step 3 (audio)                                                                                                                                                                                          |
 | `audio_meta.json` exists, `section_plan.md` missing                                              | Step 4 (visual-design)                                                                                                                                                                                  |
 | `section_plan.md` exists, `group_spec.json` missing                                              | Step 5 (prep)                                                                                                                                                                                           |

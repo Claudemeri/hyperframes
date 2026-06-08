@@ -1,18 +1,18 @@
 # Subagent Prompt: scriptwriting (Phase 2)
 
-**INPUT:** `<PROJECT_DIR>/capture/extracted/visible-text.txt` (the user's arbitrary input text — article / notes / topic / brief; this is the narrative source of truth) · `<PROJECT_DIR>/design-system/inference.json` (`site_dna`, optional soft register hint)
-**OUTPUT:** `<PROJECT_DIR>/narrator_scripts.json`
+**INPUT:** `<PROJECT_DIR>/capture/extracted/visible-text.txt` (the user's arbitrary input text — article / notes / topic / brief; this is the narrative source of truth). There is **no** `design-system/` to read at this phase — it is built _after_ you return, from the `stylePreset` you pick.
+**OUTPUT:** `<PROJECT_DIR>/narrator_scripts.json` (includes the top-level `stylePreset` you pick)
 **TOOLS:** Read · Bash
 **DONE:** Validator exit 0, report structure / scene count / total duration, append to `<PROJECT_DIR>/context.log`
 
-You are the **faceless-explainer** Phase 2 subagent. Read `<SKILL_DIR>/phases/scriptwriting/guide.md`, follow its process to choose an explainer structure, segment the input text into scenes, design each scene's narrative intent + transition, and write `narrator_scripts.json`. Explainer-structure detail pages are under `<SKILL_DIR>/phases/scriptwriting/structures/<name>/`.
+You are the **faceless-explainer** Phase 2 subagent. Read `<SKILL_DIR>/phases/scriptwriting/guide.md`, follow its process to **pick a style preset** (the guide's preset menu), choose an explainer structure, segment the input text into scenes, design each scene's narrative intent + transition, and write `narrator_scripts.json`. Explainer-structure detail pages are under `<SKILL_DIR>/phases/scriptwriting/structures/<name>/`.
 
 **Path contract:** Run Bash through a `(cd "$PROJECT_DIR" && ...)` subshell.
 
 **Input constraints:**
 
 - `capture/extracted/visible-text.txt` is the **only narrative source**: the user's raw input text. There is **no** `context_pack.md`, **no** capture/assets, **no** asset inventory, **no** screenshots — this is a faceless explainer; downstream visuals are invented typography / abstract graphics / diagrams / data-viz, not captured assets. Read the whole text once, then restructure it into a narrative arc (do not follow the text's paragraph order; see the guide).
-- `site_dna` in `design-system/inference.json` is an **optional soft hint** for register only (the shipped style is `pin-and-paper`: warm, field-notebook, considered). Read only the `site_dna` section if present; **do not read** `design.html` / `chunks/` (those are parallel outputs from the design-system phase, and reading them would break Phase 1b∥2 parallelism). If `inference.json` is missing, proceed without it — register defaults to the pin-and-paper voice. Do not run any build step yourself; Step 1 already produced it (or it is absent, which is fine).
+- **You pick the `stylePreset`** — one of the 5 shipped presets (`block-frame` / `capsule` / `claude` / `pin-and-paper` / `scatterbrain`; see the guide's preset menu) — from the input's subject + tone, emit it as a top-level field, and match the narration register to it. Default to `pin-and-paper` when nothing clearly fits. There is **no** `design-system/` (no `inference.json`, no `design.html` / `chunks/`) to read at this phase — it is built _after_ you return, from your `stylePreset`. Do **not** run any build step yourself.
 - **`assetCandidates` is `[]` for every scene by default.** FE is faceless: there are no real assets to name. Only emit a `{path, description}` entry when the user **explicitly provided a real image placed in `public/`** — then use `"public/<basename>"`. Do not invent asset paths.
 - Do not generate derived files.
 - Scenes must not contain `voicePath` / `voiceDuration` / `captions[]` fields (`<em>/<brand>/<emph>/<cta>` in `script` are stripped for TTS).
@@ -30,6 +30,7 @@ Iterate until it exits 0. See the `narrator_scripts.json — canonical schema` c
 ## Report After Completion
 
 - Selected explainer structure (one of: concept-explainer / how-to-process / listicle / story-explainer, or a `"<outer> with <inner>"` compound)
+- Chosen `stylePreset` (one of the 5 shipped presets) + one-line rationale
 - Scene count + total estimated duration
 - One summary line for each scene (`sceneNumber` + `sceneName` + 8-word gist)
 
@@ -40,6 +41,7 @@ Append to `<PROJECT_DIR>/context.log` (generate the timestamp with the machine i
 
 ## scriptwriting [done $(date -u +%Y-%m-%dT%H:%M:%SZ)]
 Structure: <name>
+Style: <stylePreset>
 Scenes: <count>, total ~<duration>s
 EOF
 )

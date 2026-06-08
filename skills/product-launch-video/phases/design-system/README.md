@@ -42,7 +42,6 @@ Below are all existing styles currently under `style-presets/`. Before creating 
 | `soft-editorial`        | Soft Editorial    | soft radius · no shadow · 1px warm ink dashed line · translucent white + pastel cards · small-format quarterly voice |
 | `capsule`               | Capsule           | universal capsule shapes · soft low-opacity offset · Didone serif + Grotesk · floating capsule wallpaper             |
 | `liquid-glass`          | Liquid Glass      | inner highlight · translucent hairline edge · rise-and-settle motion · high-contrast aurora base                     |
-| `neo-grid-bold`         | Neo-Grid Bold     | 12×8 CSS grid · 1.5px ink hairline · no shadow · single electric signal color                                        |
 
 > This table is a **style-positioning index**, not a status checklist. Update it only when presets are truly added / removed (do not add mutable counts such as "component count / compliant"; those are not guide content).
 

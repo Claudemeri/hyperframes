@@ -109,14 +109,14 @@ The complete directory shape is in "Design notes / Directory shape" at the end. 
 
 **Voice-over question** (only when the user supplied actual script prose) — ask one short line and wait:
 
-> 你的 script 是直接**逐字**当 voice-over，还是我帮你**重构**成更上镜的分镜台词？
+> Should I use your script **verbatim** as the voice-over, or **restructure** it into more screen-ready scene narration?
 >
-> - 逐字 (verbatim) — 保留原文，我只切分镜 + 配画面；时长跟着脚本走。
-> - 重构 (restructure) — 当作 brief，改写成每场 1-2 句、更紧凑的旁白。
+> - Verbatim — keep the original wording; I only split scenes and pair visuals. Duration follows the script.
+> - Restructure — treat it as a brief and rewrite tighter narration, 1-2 sentences per scene.
 
 Set `VO_MODE = verbatim | restructure` (default `restructure` if the user is indifferent). It is threaded to story-design in Step 2.
 
-**Resolve a capture target from the script** — by default look for a site and crawl it (real brand colors / fonts / assets beat a preset fallback). **Skip to `CAPTURE=no` only when the user opted out** ("别搜 / 不要联网 / 纯文字 / text-only / no capture / don't search"). Otherwise, in order:
+**Resolve a capture target from the script** — by default look for a site and crawl it (real brand colors / fonts / assets beat a preset fallback). **Skip to `CAPTURE=no` only when the user opted out** ("do not search / no web / text-only / no capture / don't search"). Otherwise, in order:
 
 1. **An explicit `http(s)://…` URL in the script** → `TARGET_URL` = it; `CAPTURE=yes`. Announce it; no need to ask.
 2. **A clear brand / product name but no URL** → run `WebSearch` to resolve the official site, then **confirm the single resolved URL with the user in one line** before crawling (search can land on the wrong domain). On confirm → `TARGET_URL` + `CAPTURE=yes`; if the user declines or nothing credible turns up → `CAPTURE=no`.

@@ -1,36 +1,36 @@
 #!/usr/bin/env node
-// check-compositions.mjs — Step 7 finalize 预飞 harness
+// check-compositions.mjs — Step 7 finalize preflight harness
 //
-// 跑在 Step 6 worker 全部返回后、Step 7 finalize 开始拼 index.html 之前。
-// 拦历史 worker bug（finalize 平均花 13 分钟 edit-and-retry 排查）+ blueprint
-// 软引用检查：
+// Runs after all Step 6 workers return and before Step 7 finalize starts assembling index.html.
+// Catches historical worker bugs (finalize used to spend 13 minutes on average
+// in edit-and-retry debugging) plus blueprint soft-reference issues:
 //
-//   1. Wrapper-ancestor selector —— CSS / JS selector 写成 `.<scene-id>-root .foo`
-//      / `.<scene-id>-root #foo`。preview / snapshot OK（bundler 保留 wrapper），
-//      但 `hyperframes render` 走的 producer 管线会**剥掉** wrapper，selector
-//      全部失配 → scene 渲成黑屏或裸 DOM。正确写法：裸的 `.s<N>-foo` / `#s<N>-foo`，
-//      runtime scoper 自动加 host scope。
-//   2. Self data-composition-id selector —— CSS 写成
-//      `[data-composition-id="<scene-id>"] { ... }` 会触发新版 CLI
-//      `composition_self_attribute_selector` warning。root 样式应写 `#root`。
-//   3. Scene-root id selector —— `#<scene-id>-root` 不是 runtime contract。
-//      root 只能用 `#root`；scene 内部元素用 `#s<N>-foo`。
-//   4. Root contract 缺 —— 没 `id="root"`、没 `class="<scene-id>-root"`、没
-//      `data-composition-id`、没 `data-duration`、没 `window.__timelines[...]`。
-//   5. Asset 引用了 <project-root>/public/ 里不存在的文件 —— worker 编造或拼写错
-//      了 basename。
-//   6. blueprint 引用了 hyperframes-animation/blueprints/ 下不存在
-//      的 id —— anomaly，不 fatal（blueprint 是 soft 引用，worker 应该已经按
-//      composed 回退）。
+//   1. Wrapper-ancestor selector: CSS / JS selector written as `.<scene-id>-root .foo`
+//      / `.<scene-id>-root #foo`. Preview / snapshot works because the bundler keeps
+//      the wrapper, but `hyperframes render` uses the producer pipeline, which strips
+//      that wrapper, so every selector misses and the scene renders black or as raw DOM.
+//      Correct form: plain `.s<N>-foo` / `#s<N>-foo`; the runtime scoper adds host scope.
+//   2. Self data-composition-id selector: CSS written as
+//      `[data-composition-id="<scene-id>"] { ... }` triggers the newer CLI
+//      `composition_self_attribute_selector` warning. Root styles should use `#root`.
+//   3. Scene-root id selector: `#<scene-id>-root` is not a runtime contract.
+//      Root may only use `#root`; scene-internal elements use `#s<N>-foo`.
+//   4. Missing root contract: no `id="root"`, no `class="<scene-id>-root"`, no
+//      `data-composition-id`, no `data-duration`, or no `window.__timelines[...]`.
+//   5. Asset references a file absent from <project-root>/public/: the worker invented
+//      or misspelled the basename.
+//   6. blueprint references an id absent from hyperframes-animation/blueprints/: this
+//      is an anomaly, not fatal, because blueprint is a soft reference and the worker
+//      should already have fallen back to composed.
 //
 // Usage:
 //   node check-compositions.mjs --hyperframes . --group-spec ./group_spec.json \
 //                               [--blueprints-dir <abs>]
 //
-// 退出码：
-//   0 = 所有 composition 过检（blueprint anomaly 不影响）。stdout 给汇总。
-//   1 = ≥1 fatal 违规。stderr 列 per-scene per-rule 失败项；编排器应该重派受
-//       影响的 worker，不在 finalize 里 patch。
+// Exit codes:
+//   0 = all compositions pass (blueprint anomalies do not matter). stdout prints the summary.
+//   1 = one or more fatal violations. stderr lists per-scene, per-rule failures; the
+//       orchestrator should re-dispatch affected workers instead of patching in finalize.
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -47,9 +47,10 @@ const hyperframesDir = resolve(flag("hyperframes", "."));
 const groupSpecPath = resolve(flag("group-spec", "./group_spec.json"));
 const compositionsDir = join(hyperframesDir, "compositions");
 
-// blueprints 目录可显式指定；否则按 skill 默认布局推断（product-launch-video/
-// scripts/ 旁边的 ../../hyperframes-animation/blueprints/）。推断失败也无所谓，
-// blueprint 校验是 soft，路径不存在直接跳过该检查。
+// The blueprints directory may be specified explicitly; otherwise infer it from the
+// default skill layout (../../hyperframes-animation/blueprints/ next to
+// product-launch-video/scripts/). Inference failure is fine: blueprint validation is
+// soft, so a missing path simply skips this check.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultBlueprintsDir = resolve(scriptDir, "..", "..", "hyperframes-animation", "blueprints");
 const blueprintsDir = flag("blueprints-dir")
@@ -128,20 +129,20 @@ const anomalies = []; // non-fatal: { sceneId, rule, detail }
 for (const sceneId of sceneIds) {
   const filePath = join(compositionsDir, `${sceneId}.html`);
 
-  // Rule 0: 文件存在且非空
+  // Rule 0: file exists and is non-empty
   if (!existsSync(filePath) || statSync(filePath).size === 0) {
     errors.push({
       sceneId,
       rule: "file",
       detail: `compositions/${sceneId}.html missing or empty`,
     });
-    continue; // 这个 scene 后面规则跳过
+    continue; // Skip remaining rules for this scene.
   }
 
   const html = readFileSync(filePath, "utf8");
 
-  // Rule 1: root div 契约
-  // 必须有且仅有一个 root div，同时带 id="root" 和 class="<scene-id>-root"
+  // Rule 1: root div contract
+  // There must be exactly one root div with both id="root" and class="<scene-id>-root".
   const rootDivRe = new RegExp(
     `<div\\b[^>]*\\bid=["']root["'][^>]*\\bclass=["'][^"']*\\b${sceneId}-root\\b[^"']*["']`,
     "i",
@@ -154,11 +155,11 @@ for (const sceneId of sceneIds) {
     errors.push({
       sceneId,
       rule: "root-contract",
-      detail: `no <div id="root" class="${sceneId}-root" ...> found — 必须同 div 上同时有这两个属性`,
+      detail: `no <div id="root" class="${sceneId}-root" ...> found — both attributes must be on the same div`,
     });
   }
 
-  // Rule 1b: root 上的 data-composition-id 和 data-duration
+  // Rule 1b: data-composition-id and data-duration on root
   const hostIdRe = new RegExp(`data-composition-id=["']${sceneId}["']`);
   if (!hostIdRe.test(html)) {
     errors.push({
@@ -175,42 +176,43 @@ for (const sceneId of sceneIds) {
     });
   }
 
-  // Rule 1c: window.__timelines["<scene-id>"] 注册
+  // Rule 1c: window.__timelines["<scene-id>"] registration
   const tlKeyRe = new RegExp(`window\\.__timelines\\s*\\[\\s*["']${sceneId}["']\\s*\\]\\s*=`);
   if (!tlKeyRe.test(html)) {
     errors.push({
       sceneId,
       rule: "timeline-registration",
-      detail: `no window.__timelines["${sceneId}"] = ... line found (scene id 必须原文)`,
+      detail: `no window.__timelines["${sceneId}"] = ... line found (scene id must match verbatim)`,
     });
   }
 
-  // 推荐的命名空间前缀：scene_1 → s1-、scene_2 → s2-、...
-  // 用于 fix 提示 + 命名空间健康度检查。
+  // Recommended namespace prefix: scene_1 -> s1-, scene_2 -> s2-, ...
+  // Used for fix hints and namespace health checks.
   const m = sceneId.match(/(\d+)/);
   const sN = m ? `s${m[1]}-` : `s-`;
-  const wrapperAncestor = `.${sceneId}-root`; // bug 形态字面值
-  const fixHint = `裸 .${sN}foo / #${sN}foo（不挂任何祖先）`;
+  const wrapperAncestor = `.${sceneId}-root`; // literal bug shape
+  const fixHint = `plain .${sN}foo / #${sN}foo (no ancestor selector)`;
 
-  // Rule 2: CSS —— <style> 里不能有 wrapper-ancestor selector
+  // Rule 2: CSS — <style> must not contain wrapper-ancestor selectors
   //
-  // `.<scene-id>-root .foo` / `.<scene-id>-root #foo` 形态：preview / snapshot 走
-  // bundler 路径会保留 wrapper element，所以 selector OK；但 `hyperframes render`
-  // 走 producer 路径，会**剥掉** wrapper，selector 全部失配 → scene 渲成黑屏。
-  // 历史 bug：product-launch-video 早期 worker prompt 教 agent 这么写。
+  // Shape: `.<scene-id>-root .foo` / `.<scene-id>-root #foo`. Preview / snapshot
+  // keeps the wrapper through the bundler path, so the selector works there; but
+  // `hyperframes render` takes the producer path, strips the wrapper, and every
+  // selector misses, yielding a black scene. Historical bug: early product-launch-video
+  // worker prompts taught agents to write selectors this way.
   //
-  // root 样式写 `#root { ... }`。compiler 会把 authored root id 改写成
-  // instance-safe selector；不要写 `[data-composition-id="<scene-id>"]`，
-  // 否则 `npx hyperframes lint` 会报 composition_self_attribute_selector。
+  // Root styles go in `#root { ... }`. The compiler rewrites the authored root id
+  // into an instance-safe selector; do not write `[data-composition-id="<scene-id>"]`,
+  // or `npx hyperframes lint` reports composition_self_attribute_selector.
   //
-  // 同时禁 id selector `#<scene-id>-root`：这不是 runtime contract；内部元素
-  // 用 `#s<N>-foo`。
+  // Also ban id selector `#<scene-id>-root`: it is not a runtime contract; internal
+  // elements use `#s<N>-foo`.
   const styleBlocks = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)];
   for (const sb of styleBlocks) {
     const css = sb[1];
     const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
-    // 2a: wrapper-ancestor selector（`.<scene-id>-root` 后跟空白/`>`/`+`/`~`/`,`/`.`/`#`）
+    // 2a: wrapper-ancestor selector (`.<scene-id>-root` followed by whitespace/`>`/`+`/`~`/`,`/`.`/`#`)
     const escapedSceneId = escapeRegExp(sceneId);
     const wrapperRe = new RegExp(`\\.${escapedSceneId}-root(?=[\\s>+~,.#:\\[])`, "g");
     const wrapperHits = [...stripped.matchAll(wrapperRe)];
@@ -218,11 +220,11 @@ for (const sceneId of sceneIds) {
       errors.push({
         sceneId,
         rule: "css-wrapper-ancestor",
-        detail: `<style> 用 ${wrapperAncestor} 作祖先选择器（${wrapperHits.length} 处）— producer 渲染时这层 wrapper 会被剥掉，selector 全部失配。改成${fixHint}；root 元素自身的 token / 背景 / 字体写到 #root { ... }`,
+        detail: `<style> uses ${wrapperAncestor} as an ancestor selector (${wrapperHits.length} hit(s)) — producer rendering strips that wrapper, so every selector misses. Use ${fixHint}; put root-level tokens / background / font styles on #root { ... }`,
       });
     }
 
-    // 2b: self data-composition-id selector 会触发 CLI warning；root 样式用 #root。
+    // 2b: self data-composition-id selector triggers a CLI warning; root styles use #root.
     const selfAttrRe = new RegExp(
       `\\[\\s*data-composition-id\\s*=\\s*["']${escapedSceneId}["']\\s*\\]`,
       "g",
@@ -232,29 +234,29 @@ for (const sceneId of sceneIds) {
       errors.push({
         sceneId,
         rule: "css-self-composition-selector",
-        detail: `<style> 用了 [data-composition-id="${sceneId}"] selector（${selfAttrHits.length} 处）— 会触发 npx hyperframes lint 的 composition_self_attribute_selector warning。root 样式改 #root { ... }；内部元素写 .${sN}foo / #${sN}foo`,
+        detail: `<style> uses [data-composition-id="${sceneId}"] selector (${selfAttrHits.length} hit(s)) — this triggers npx hyperframes lint composition_self_attribute_selector warning. Move root styles to #root { ... }; internal elements use .${sN}foo / #${sN}foo`,
       });
     }
 
-    // 2c: 禁 `#<scene-id>-root`，允许 `#root`。
+    // 2c: ban `#<scene-id>-root`; allow `#root`.
     const idSelectors = [...stripped.matchAll(/(^|[\s,>+~])#([a-zA-Z][\w-]*)/gm)];
     const banned = idSelectors.map((sm) => sm[2]).filter((id) => id === `${sceneId}-root`);
     if (banned.length > 0) {
       errors.push({
         sceneId,
         rule: "css-scene-root-id-selector",
-        detail: `<style> 用了禁用的 id selector：${[...new Set(banned)].map((b) => `#${b}`).join(", ")} — root 只能写 #root；内部元素改成${fixHint}`,
+        detail: `<style> uses banned id selector: ${[...new Set(banned)].map((b) => `#${b}`).join(", ")} — root may only use #root; change internal elements to ${fixHint}`,
       });
     }
   }
 
-  // Rule 3: JS —— <script> 里不能有 wrapper-ancestor selector / #<scene-id>-root
+  // Rule 3: JS — <script> must not contain wrapper-ancestor selectors / #<scene-id>-root
   const scriptBlocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
   for (const sb of scriptBlocks) {
     const js = sb[1];
     const stripped = js.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
 
-    // 3a: 字符串字面值里含 `.<scene-id>-root` 当祖先
+    // 3a: string literal contains `.<scene-id>-root` as an ancestor
     const wrapperJsRe = new RegExp(
       `["'\`][^"'\`]*\\.${escapeRegExp(sceneId)}-root[\\s>+~,.#:\\[][^"'\`]*["'\`]`,
       "g",
@@ -264,16 +266,16 @@ for (const sceneId of sceneIds) {
       errors.push({
         sceneId,
         rule: "js-wrapper-ancestor",
-        detail: `<script> 字符串含 ${wrapperAncestor} 祖先 selector：${wrapperJsHits
+        detail: `<script> string contains ${wrapperAncestor} ancestor selector: ${wrapperJsHits
           .slice(0, 3)
           .map((mm) => mm[0])
           .join(
             ", ",
-          )}${wrapperJsHits.length > 3 ? ` (+${wrapperJsHits.length - 3} more)` : ""} — producer 渲染时 wrapper 会被剥掉。改成${fixHint}`,
+          )}${wrapperJsHits.length > 3 ? ` (+${wrapperJsHits.length - 3} more)` : ""} — producer rendering strips the wrapper. Use ${fixHint}`,
       });
     }
 
-    // 3b: 字符串字面值里含 `#<scene-id>-root`
+    // 3b: string literal contains `#<scene-id>-root`
     const bannedJsRe = new RegExp(
       `["'\`][^"'\`]*#${escapeRegExp(sceneId)}-root\\b[^"'\`]*["'\`]`,
       "g",
@@ -283,12 +285,12 @@ for (const sceneId of sceneIds) {
       errors.push({
         sceneId,
         rule: "js-scene-root-id-selector",
-        detail: `<script> 含禁用 selector：${matches
+        detail: `<script> contains banned selector: ${matches
           .slice(0, 3)
           .map((mm) => mm[0])
           .join(
             ", ",
-          )}${matches.length > 3 ? ` (+${matches.length - 3} more)` : ""} — 改成${fixHint}`,
+          )}${matches.length > 3 ? ` (+${matches.length - 3} more)` : ""} — use ${fixHint}`,
       });
     }
 
@@ -302,12 +304,12 @@ for (const sceneId of sceneIds) {
       errors.push({
         sceneId,
         rule: "js-scene-root-id-selector",
-        detail: `<script> 用了 ${geiMatches[0][0]} — 改用 document.querySelector("#root") 或 document.querySelector("#${sN}foo")`,
+        detail: `<script> uses ${geiMatches[0][0]} — use document.querySelector("#root") or document.querySelector("#${sN}foo")`,
       });
     }
   }
 
-  // Rule 4: 引用的 public/ asset 必须真存在
+  // Rule 4: referenced public/ assets must exist
   const assetRefs = new Set();
   for (const m of html.matchAll(/\bpublic\/[A-Za-z0-9._/-]+/g)) {
     assetRefs.add(m[0]);
@@ -317,18 +319,18 @@ for (const sceneId of sceneIds) {
       errors.push({
         sceneId,
         rule: "asset",
-        detail: `引用了 "${ref}" 但 project-root/public/ 里没这个文件`,
+        detail: `reference "${ref}" does not exist under project-root/public/`,
       });
     }
   }
 
-  // Rule 5: forbidden pattern（CSS animation、Date.now() 等）
+  // Rule 5: forbidden patterns (CSS animation, Date.now(), etc.)
   const forbidden = [
     { re: /\btransition\s*:/i, name: "CSS transition:", scope: "style" },
     { re: /\banimation\s*:/i, name: "CSS animation:", scope: "style" },
     {
       re: /@font-face\b/i,
-      name: "@font-face（在 index.html 声明，不在 scene 里）",
+      name: "@font-face (declare in index.html, not in scene)",
       scope: "style",
     },
     { re: /\bDate\.now\b/, name: "Date.now()", scope: "script" },
@@ -351,47 +353,49 @@ for (const sceneId of sceneIds) {
     for (const m of blocks) {
       if (f.re.test(m[1])) {
         const src = plvOnly.has(f.name)
-          ? "PLV pre-flight 约束（强制改成 GSAP tween；非 core 契约，css-animations adapter 本身支持可 seek CSS）"
+          ? "PLV pre-flight constraint (force GSAP tween; not a core contract; css-animations adapter supports seekable CSS)"
           : f.name.startsWith("@font-face")
-            ? "PLV 约束（@font-face 移到 index.html <head>）"
-            : "core 确定性契约";
+            ? "PLV constraint (@font-face belongs in index.html <head>)"
+            : "core determinism contract";
         errors.push({
           sceneId,
           rule: "forbidden",
-          detail: `<${f.scope}> 里出现 ${f.name} — ${src}`,
+          detail: `<${f.scope}> contains ${f.name} — ${src}`,
         });
         break;
       }
     }
   }
 
-  // Rule 6: asset 路径不能有前导斜杠
+  // Rule 6: asset paths must not have a leading slash
   if (/\bsrc=["']\/public\//.test(html) || /\burl\(["']?\/public\//.test(html)) {
     errors.push({
       sceneId,
       rule: "asset-path",
-      detail: `asset 引用用了前导斜杠 "/public/..." — 必须 "public/..."（无前导斜杠）`,
+      detail: `asset reference uses leading slash "/public/..." — must be "public/..." with no leading slash`,
     });
   }
 
-  // Rule 6b: 注释里禁止字面 HTML 开标签
-  // `npx hyperframes lint` 用正则扫 <template> / <style> / <script>，注释里写字面标签会被当成真标签 → 误报结构错。
-  // 在预飞阶段拦住，省掉 finalize 90s 的 lint debug 循环。
+  // Rule 6b: comments must not contain literal HTML opening tags
+  // `npx hyperframes lint` scans <template> / <style> / <script> with regexes, so
+  // literal tags in comments can be mistaken for real tags and create false structure errors.
+  // Catch this during preflight to avoid a 90s finalize lint-debug loop.
   if (/<!--[^>]*<(template|style|script)[> ][^>]*-->/.test(html)) {
     errors.push({
       sceneId,
       rule: "literal-tag-in-comment",
-      detail: `注释里有字面 <template>/<style>/<script> — 会污染 npx hyperframes lint 的正则扫描；把 < 转义成 &lt; 或改成纯文本描述`,
+      detail: `comment contains literal <template>/<style>/<script> — this pollutes npx hyperframes lint regex scanning; escape < as &lt; or rewrite as plain text`,
     });
   }
 
-  // Rule 7（soft）：blueprint 引用
+  // Rule 7 (soft): blueprint references
   //
-  // group_spec.json.groups[].scenes[<sid>].blueprint 取值：
-  //   "composed"            → 无 blueprint 引用，跳过
-  //   "based-on <id>"       → <id>.md 应在 blueprints/ 下存在
-  //   "extended <id>"       → 同上
-  // 缺失 → anomaly（worker 应该已经按 composed 回退）；不阻塞 finalize。
+  // group_spec.json.groups[].scenes[<sid>].blueprint values:
+  //   "composed"            -> no blueprint reference; skip
+  //   "based-on <id>"       -> <id>.md should exist under blueprints/
+  //   "extended <id>"       -> same as above
+  // Missing file -> anomaly (worker should already have fallen back to composed);
+  // does not block finalize.
   const entry = sceneEntries.get(sceneId) || {};
   const bp = String(entry.blueprint || "").trim();
   if (bp && bp !== "composed") {
@@ -403,28 +407,31 @@ for (const sceneId of sceneIds) {
         anomalies.push({
           sceneId,
           rule: "blueprint",
-          detail: `blueprint "${bp}" 引用的 ${bpId}.md 在 ${blueprintsDir} 不存在 — worker 应该已按 composed 回退`,
+          detail: `blueprint "${bp}" references ${bpId}.md, which does not exist in ${blueprintsDir} — worker should already have fallen back to composed`,
         });
       }
     } else {
       anomalies.push({
         sceneId,
         rule: "blueprint",
-        detail: `blueprint 字段 "${bp}" 格式异常（既非 "composed" 也非 "based-on <id>" / "extended <id>"）`,
+        detail: `blueprint field "${bp}" has invalid format (expected "composed", "based-on <id>", or "extended <id>")`,
       });
     }
   }
 
-  // Rule 8 (fatal once metadata is present)：rank-1 唯一性 + forbidden_with 冲突
+  // Rule 8 (fatal once metadata is present): rank-1 uniqueness + forbidden_with conflicts
   //
-  // 来源 = design-system/chunks/index.json.components[].{rank, forbidden_with}（由
-  // emit-chunks.mjs 写出，最初由 preset components/<id>.md 的 YAML frontmatter 声明）。
-  // 旧 preset 没有 frontmatter → componentMeta 为空 → 这条规则自动跳过；不破坏向后兼容。
+  // Source = design-system/chunks/index.json.components[].{rank, forbidden_with}
+  // (written by emit-chunks.mjs, originally declared by YAML frontmatter in preset
+  // components/<id>.md). Older presets without frontmatter leave componentMeta empty,
+  // so this rule silently skips and preserves backward compatibility.
   //
-  // 检查 1：每个 scene 至多 1 个 rank=1（focal）component。两个 rank=1 同 scene =
-  //         "primary/supporting handoff" 失败（参考 commit a75be37 的历史 bug）。
-  // 检查 2：scene 引用的 components 之间没有 forbidden_with 冲突（如 hero-badge
-  //         的 forbidden_with: [chip] —— 两个不能同 scene）。
+  // Check 1: each scene may cite at most one rank=1 (focal) component. Two rank=1
+  // components in the same scene means the "primary/supporting handoff" failed
+  // (see historical bug in commit a75be37).
+  // Check 2: components cited by a scene may not conflict via forbidden_with
+  // (for example, hero-badge has forbidden_with: [chip], so both cannot appear
+  // in the same scene).
   if (componentMeta.size > 0) {
     const cited = (entry.design_chunks?.components || []).map(componentIdFromPath).filter(Boolean);
 
@@ -459,7 +466,7 @@ for (const sceneId of sceneIds) {
   }
 }
 
-// ---------- 汇报 ----------
+// ---------- report ----------
 const anomalyByScene = new Map();
 for (const a of anomalies) {
   if (!anomalyByScene.has(a.sceneId)) anomalyByScene.set(a.sceneId, []);
@@ -478,14 +485,14 @@ if (errors.length === 0) {
   process.exit(0);
 }
 
-// 按 sceneId 分组方便看
+// Group by sceneId for readability.
 const bySceneId = new Map();
 for (const e of errors) {
   if (!bySceneId.has(e.sceneId)) bySceneId.set(e.sceneId, []);
   bySceneId.get(e.sceneId).push(e);
 }
 
-console.error(`✗ ${errors.length} 个 fatal 违规 跨 ${bySceneId.size} 个 scene：\n`);
+console.error(`✗ ${errors.length} fatal violation(s) across ${bySceneId.size} scene(s):\n`);
 for (const [sceneId, list] of bySceneId) {
   console.error(`  ${sceneId}:`);
   for (const e of list) {
@@ -493,11 +500,11 @@ for (const [sceneId, list] of bySceneId) {
   }
 }
 if (anomalies.length > 0) {
-  console.error(`\nanomalies (non-fatal)：`);
+  console.error(`\nanomalies (non-fatal):`);
   for (const [sid, list] of anomalyByScene) {
     console.error(`  ${sid}:`);
     for (const a of list) console.error(`    [${a.rule}] ${a.detail}`);
   }
 }
-console.error(`\n  修对应 scene HTML（或让编排器重派 worker）后再跑 finalize。`);
+console.error(`\n  Fix the corresponding scene HTML (or have the orchestrator re-dispatch the worker) and rerun finalize.`);
 process.exit(1);

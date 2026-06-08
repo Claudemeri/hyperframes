@@ -415,7 +415,7 @@ async function runSection(argv) {
     // Handoff) must precede the free prose. Once a prose sentence appears, no anchor
     // line may follow — interleaving makes prep.mjs's "creative_brief = text after
     // the last recognized anchor" slice unpredictable (e.g. PST/Handoff dropping out
-    // of, or prose leaking into, the worker's brief). See guide.md §2 "块内顺序".
+    // of, or prose leaking into, the worker's brief). See guide.md section 2, "block order".
     // PST/Handoff continuation lines (timecode-led) and bullets are NOT prose.
     {
       const ANCHOR_LINE_RE =

@@ -28,7 +28,7 @@
 }
 ```
 
-> `chromeFonts` makes the doc chrome render in the preset's native fonts; brand fonts still apply to §6 components. Four-face system: `script` slot points at Noto Sans JP because the cassette-package register uses Japanese characters (限定版) as its only "script" voice — there is no handwritten face in the system.
+> `chromeFonts` makes the doc chrome render in the preset's native fonts; brand fonts still apply to §6 components. Four-face system: `script` slot points at Noto Sans JP because the cassette-package register uses a Japanese-language limited-edition label as its only "script" voice — there is no handwritten face in the system.
 
 ## §A Director's intent
 
@@ -264,9 +264,9 @@ The atlas is the **sole authoring source** for non-component text. Do NOT invent
   {
     "id": "jp-accent",
     "family": "script",
-    "purpose": "Japanese cultural accent (限定版) inline inside a Latin label",
+    "purpose": "Japanese cultural accent, limited-edition label inline inside a Latin label",
     "px_min": 24, "px_max": 30, "weight": 500, "leading": "1.2", "tracking": "0", "case": "sentence",
-    "sample_html": "<div class=\"t-trole-micro\"><span class=\"t-trole-jp-accent\">限定版</span> · Limited edition</div>"
+    "sample_html": "<div class=\"t-trole-micro\"><span class=\"t-trole-jp-accent\">Limited Edition</span> · Special release</div>"
   }
 ]
 ```

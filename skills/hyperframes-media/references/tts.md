@@ -91,7 +91,7 @@ The first letter of a Kokoro voice ID picks the phonemizer language; `--lang` ov
 
 ```bash
 npx hyperframes tts "La reunión empieza a las nueve" --voice ef_dora --provider kokoro
-npx hyperframes tts "今日はいい天気ですね" --voice jf_alpha --provider kokoro
+npx hyperframes tts "Today is a nice day" --voice af_heart --provider kokoro
 ```
 
 Valid `--lang` codes (only needed to override the voice's auto-detected language): `en-us`, `en-gb`, `es`, `fr-fr`, `hi`, `it`, `pt-br`, `ja`, `zh`.

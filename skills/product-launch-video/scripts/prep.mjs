@@ -115,9 +115,10 @@ if (!existsSync(hyperframesDir)) {
 const publicDir = join(hyperframesDir, "public");
 mkdirSync(publicDir, { recursive: true });
 
-// `.bin` 是抓取阶段对未识别 MIME 的图片的兜底命名（典型为 image/* 但 Content-Type
-// 缺失或被 CDN 改写）。下游 Phase 4b worker 把它们当 <img src> 引用 —— 浏览器会按 magic bytes
-// 渲染，绝大多数能正常显示。把它纳入白名单避免文件被孤立。
+// `.bin` is the capture-stage fallback name for images with unrecognized MIME
+// (typically image/* with a missing or CDN-rewritten Content-Type). Downstream
+// Phase 4b workers reference them as <img src>; browsers render by magic bytes
+// and almost all display correctly. Include it in the allowlist to avoid orphaning files.
 const ASSET_EXTS = new Set([
   ".png",
   ".jpg",
@@ -227,7 +228,8 @@ function parseSceneBlock(body, sceneId, isFirst) {
     const end = m.index + m[0].length;
     if (end > lastAnchorEnd) lastAnchorEnd = end;
   }
-  // Optional anchors — 出现则纳入 lastAnchorEnd（防泄漏到 creative_brief），缺失不报错
+  // Optional anchors — include them in lastAnchorEnd when present to avoid leaking
+  // into creative_brief; missing optional anchors are fine.
   for (const a of OPTIONAL_ANCHORS) {
     const m = body.match(anchorRe(a));
     if (m) {
@@ -255,7 +257,8 @@ function parseSceneBlock(body, sceneId, isFirst) {
   if (isFirst && cont !== "break") die(`${sceneId}: scene 1 must be **Continuity:** break`);
 
   // Blueprint (soft): "based-on <id>" | "extended <id>" | "composed" | (absent → "composed")
-  // 不做格式校验 —— validator 可后补；id 引用是松绑定，build agent 自行处理
+  // Do not validate shape here: the validator can add that later; id references are
+  // loosely bound and the build agent handles them.
   const blueprint = raw.Blueprint || "composed";
 
   // Transition (OPTIONAL): how THIS scene is entered.
@@ -485,7 +488,7 @@ if (audioMetaPath) {
 }
 
 // Duration truth ladder (highest → lowest):
-//   audio_meta.scenes[sceneId].voiceDuration   ← TTS wav 实测 = TRUE TRUTH
+//   audio_meta.scenes[sceneId].voiceDuration   <- measured TTS wav = TRUE TRUTH
 //   section_plan.md "**Duration:** Xs"          ← plan agent decision (already
 //                                                  reconciled with audio per guide)
 //   narrator_scripts.json estimatedDuration    ← earliest estimate

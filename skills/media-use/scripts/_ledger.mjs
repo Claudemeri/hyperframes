@@ -5,6 +5,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { homedir } from "node:os";
 
 export const SUBDIRS = [
   "assets/raw",
@@ -12,12 +13,59 @@ export const SUBDIRS = [
   "assets/processed",
   "assets/audio/bgm",
   "assets/audio/sfx",
+  "assets/audio/voice",
   "assets/preview",
   ".media-use/reports",
   ".media-use/snippets",
 ];
 
 export const REQUIRED = ["asset_id", "type", "path", "source", "status"];
+
+export const DEFAULT_CONFIG = {
+  profile: "free-first",
+  default_provider: "free-first",
+  auto_register_outputs: true,
+  composition_ref_policy: "project_local_asset_id",
+};
+
+// PATH scan, no spawn — best-effort "is this binary available".
+function onPath(bin) {
+  return (process.env.PATH || "").split(":").some((d) => d && existsSync(join(d, bin)));
+}
+
+// What the agent can currently use. fs/env only; the skill never hardcodes model state.
+export function probeProviders() {
+  const heygenAuthed =
+    existsSync(join(homedir(), ".heygen/credentials")) || !!process.env.HEYGEN_API_KEY;
+  return {
+    heygen: {
+      cli: onPath("heygen"),
+      authed: heygenAuthed,
+      capabilities: heygenAuthed
+        ? ["tts (voice speech)", "bgm (audio sounds)", "asset upload"]
+        : [],
+    },
+    hyperframes: {
+      cli: onPath("hyperframes"),
+      capabilities: ["tts", "transcribe", "remove-background"],
+    },
+    elevenlabs: { key: !!process.env.ELEVENLABS_API_KEY },
+    local: { ffmpeg: onPath("ffmpeg"), python3: onPath("python3") },
+  };
+}
+
+// Write .media-use/config.json once (defaults + a provider probe). Idempotent.
+export function ensureConfig(ws) {
+  const cfg = join(ws, ".media-use/config.json");
+  if (!existsSync(cfg)) {
+    mkdirSync(dirname(cfg), { recursive: true });
+    writeFileSync(
+      cfg,
+      JSON.stringify({ ...DEFAULT_CONFIG, providers: probeProviders() }, null, 2) + "\n",
+    );
+  }
+  return cfg;
+}
 
 export function paths(ws) {
   return { ws, manifest: join(ws, "assets/manifest.jsonl"), index: join(ws, "assets/index.md") };
@@ -28,6 +76,7 @@ export function ensureWorkspace(ws) {
   const p = paths(ws);
   if (!existsSync(p.manifest)) writeFileSync(p.manifest, "");
   if (!existsSync(p.index)) renderIndex(ws);
+  p.config = ensureConfig(ws);
   return p;
 }
 

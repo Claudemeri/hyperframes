@@ -20,20 +20,33 @@ If a media op is requested and no `assets/manifest.jsonl` is in scope, create on
 - standalone (no HyperFrames project in cwd) → `./.media-use-workspace/assets/...`
 - inside a HyperFrames project → `<project>/assets/...`
 
-Runnable: `node scripts/init-workspace.mjs --workspace <dir>` (idempotent — creates the structure + empty manifest + initial index). Report what was created in one line, then proceed with the op. Example:
+Runnable: `node scripts/init-workspace.mjs --workspace <dir>` (idempotent — creates the structure + empty manifest + initial index + `.media-use/config.json` with a provider probe). Report what was created in one line, then proceed with the op. Example:
 
 ```
 No media-use workspace found. Created ./assets/manifest.jsonl and ./assets/index.md.
 ```
 
-## Config (illustrative)
+## Config (written by `init`)
 
-`<project>/.media-use/config.json`
+`init` writes `<project>/.media-use/config.json` once — defaults plus a **provider probe** (PATH + env scan, no spawn) so the agent knows what's available without re-checking:
 
 ```json
 {
+  "profile": "free-first",
   "default_provider": "free-first",
   "auto_register_outputs": true,
-  "composition_ref_policy": "project_local_asset_id"
+  "composition_ref_policy": "project_local_asset_id",
+  "providers": {
+    "heygen": {
+      "cli": true,
+      "authed": true,
+      "capabilities": ["tts (voice speech)", "bgm (audio sounds)", "asset upload"]
+    },
+    "hyperframes": { "cli": true, "capabilities": ["tts", "transcribe", "remove-background"] },
+    "elevenlabs": { "key": false },
+    "local": { "ffmpeg": true, "python3": true }
+  }
 }
 ```
+
+The probe is best-effort: binary on PATH? `heygen` authed via `~/.heygen/credentials` or `HEYGEN_API_KEY`? `ELEVENLABS_API_KEY` set? Deeper provider/model status stays with the CLI — the skill only records what it sees.

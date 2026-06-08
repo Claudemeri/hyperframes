@@ -22,6 +22,15 @@ process --asset img_001 --action remove-bg
 3. register a new AssetRecord with `source: "processed"` and `provenance.derived_from: "img_001"`
 4. regenerate `index.md`
 
+## Runnable (v0.1)
+
+`node scripts/process.mjs --workspace <dir> --asset <id> --action <remove-bg|transcribe>`:
+
+- **remove-bg** — `hyperframes remove-background` → transparent `.png` (image) / `.webm` (video) into `assets/processed/`.
+- **transcribe** — `hyperframes transcribe`. Note: `--json` returns a _status_ summary, not the transcript; the script moves the real word-level transcript from `transcriptPath` to a stable `assets/processed/<id>_transcript.json` (the tool otherwise writes a generic `transcript.json` next to the audio, which collides on repeat).
+
+Both register a new AssetRecord with `source: processed` + `provenance.derived_from: <id>`, then regenerate the index.
+
 ## Paid / heavy [later]
 
 HQ matting / upscale / A-roll are GPU-heavy → route to the key-gated provider when available; otherwise a local rough version, or skip-with-report. These are the monetizable capabilities that come after the free wedge.

@@ -19,7 +19,7 @@ Agent Media OS. Turns an **explicit media need** into a stable workspace asset, 
 media-use is a thin **orchestration + ledger** layer. It does not re-implement capabilities — it **routes** to existing tools:
 
 - `/hyperframes-media` — local / free CLI tools: `npx hyperframes tts | transcribe | remove-background`, captions.
-- `heygen` CLI — account-backed: `heygen voice speech create` (TTS), `heygen asset create` (upload); BGM / SFX when they ship.
+- `heygen` CLI — account-backed: `heygen audio sounds list` (BGM catalog search — **shipped** v0.1.0), `heygen voice speech create` (TTS), `heygen asset create` (upload). SFX endpoint still pending.
 - `/hyperframes-core` — placing a resolved asset into a composition (placement is not media-use's job).
 
 > Status: **v0.0 draft skeleton** (branch `feat/media-use-skill`). Scoped to the MVP agreed in the 2026-06-04 review — see `references/roadmap.md`.
@@ -43,7 +43,13 @@ Each verb is a **skill procedure** executed over the real underlying commands �
 | process        | transform an asset (remove-bg, upscale, trim, transcribe, normalize) | `references/process.md`                                   |
 | prepare ◇      | (open) emit a declarative HyperFrames snippet for an asset           | `references/prepare.md`                                   |
 
-**Runnable layer (v0.1):** `scripts/{init-workspace,register-asset,render-index,find-asset}.mjs` — zero-dependency node helpers that make setup / organize / find **executable and reproducible** (manifest = SSOT, index regenerated). Capability calls (`hyperframes remove-background`, image gen, `heygen audio`) run as documented, then pipe their output path into `register-asset.mjs`.
+**Runnable layer (v0.1):** zero-dependency node helpers under `scripts/` make the verbs **executable and reproducible** (manifest = SSOT, index regenerated after every write):
+
+- **setup / organize / find** — `init-workspace`, `register-asset`, `render-index`, `find-asset`.
+- **resolve** — `resolve.mjs --type bgm` (heygen audio: search hands candidates back, `--pick <id>` / `--auto` then downloads + **freezes** the signed URL into the workspace) · `--type tts` (hyperframes Kokoro, free).
+- **process** — `process.mjs --asset <id> --action remove-bg | transcribe` (hyperframes, local; output lands in `processed/`, registered with `provenance.derived_from`).
+
+The four wedge capabilities — **BGM, TTS, background-removal, transcribe** — are verified end-to-end. Image search and SFX are not wired yet (see `references/roadmap.md`).
 
 ## Workspace contract
 

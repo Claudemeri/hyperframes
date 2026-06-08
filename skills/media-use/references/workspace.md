@@ -13,7 +13,7 @@ project/assets/
   manifest.jsonl           # SSOT for this project (one AssetRecord per line)
   index.md                 # generated, agent-readable view
   raw/ generated/ processed/
-  audio/{bgm,sfx}/  preview/
+  audio/{bgm,sfx,voice}/  preview/
 project/.media-use/
   config.json  reports/  snippets/
 ```

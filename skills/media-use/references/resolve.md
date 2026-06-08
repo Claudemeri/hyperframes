@@ -32,6 +32,15 @@ resolve --type sfx --intent "premium CTA click"
 - **BGM — available.** `heygen` CLI **v0.1.0** adds an `audio` group: "search the background-music catalog." (The installed binary here is v0.0.10 — run `heygen update` first.) Wire resolve's search step to `heygen audio ...` for BGM.
 - **SFX — still pending.** No SFX command in v0.1.0 (the `audio` group is BGM _search_ only, no generation). Until an SFX path exists: with key → `needs_endpoint` + royalty-free fallback; without key → royalty-free base library.
 
+## Runnable (v0.1)
+
+`node scripts/resolve.mjs --workspace <dir> --type <bgm|tts> …`:
+
+- **bgm** — `--intent "<text>"` runs `heygen audio sounds list` and prints ranked candidates **without registering** (selection is the agent's call). Re-run with `--pick <track_id|index>` (or `--auto` for top-1) to download, **freeze** into `assets/audio/bgm/`, and register (`source: search`, `metadata.duration`). The signed URL is never stored — only the frozen file.
+- **tts** — `--text "<text>" [--voice af_heart]` runs `hyperframes tts` (Kokoro, free) into `assets/audio/voice/` and registers (`type: voice`, `source: generated`).
+
+The two-step search→pick is deliberate — the script never silently takes the first hit.
+
 ## Search design — RWA origin + asset_scout (image slice)
 
 resolve's search is not one step — it's **analyze → search → review → organize**, with the two-pole query strategy (atomic vs specific) and multiple sources (image / news / tweet / web). The canonical design is the **RWA subagent** (`opus/rwa-subagent-standalone`, Wenbo's). **Full design: `search-strategy.md`.**

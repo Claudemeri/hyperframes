@@ -1,6 +1,6 @@
 ---
 name: general-video
-description: General HTML video composition authoring — the router fallback for any "make a video" request that is NOT a marketed product (→ product-launch-video), a topic explainer (→ faceless-explainer), a GitHub PR (→ pr-to-video), existing footage to recut (→ footage-recut), or a Remotion port (→ remotion-to-hyperframes). Use for title cards, lower thirds, logo reveals, kinetic typography, data / stat montages, brand reels, motion posters, overlays, or any custom composition, at any length and format. Input- and length-agnostic. This is the original `hyperframes` authoring flow — design system → prompt expansion → plan → layout-before-animation → build → validate — delegating contract / creative / motion details to the `hyperframes-*` domain skills.
+description: General HTML video composition authoring — the router fallback for any "make a video" request that is NOT a marketed product (→ product-launch-video), a general website to turn into a video (→ website-to-hyperframes), a topic explainer (→ faceless-explainer), a GitHub PR (→ pr-to-video), existing footage to caption (→ embedded-captions), or a Remotion port (→ remotion-to-hyperframes). Use for title cards, lower thirds, logo reveals, kinetic typography, data / stat montages, brand reels, motion posters, overlays, or any custom composition, at any length and format. Input- and length-agnostic. This is the original `hyperframes` authoring flow — design system → prompt expansion → plan → layout-before-animation → build → validate — delegating contract / creative / motion details to the `hyperframes-*` domain skills.
 metadata:
   tags: orchestrator, general-video, fallback, freeform, composition-authoring
 ---
@@ -114,6 +114,6 @@ This maps the skill's full surface (see the `description`) to its references —
 - A specific **product / company / SaaS / website** being marketed, launched, or promoted → `/product-launch-video`
 - A **concept / topic / article / how-X-works** being explained, no product → `/faceless-explainer`
 - A **GitHub PR / code change** → `/pr-to-video`
-- An **existing video file** to re-edit, recut, or annotate → `/footage-recut`
+- An **existing talking-head video** to add captions to → `/embedded-captions`
 - Porting an existing **Remotion** composition → `/remotion-to-hyperframes`
 - Cutting / editing a **finished video file** like an NLE → out of scope (HyperFrames composites HTML and media into a deterministic timeline; it does not edit footage)

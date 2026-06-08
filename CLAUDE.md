@@ -4,23 +4,18 @@
 
 **Always invoke the relevant skill before writing or modifying compositions.** Skills encode framework-specific patterns (e.g., `window.__timelines` registration, `data-*` attribute semantics, shader-compatible CSS rules) that are NOT in generic web docs. Skipping them produces broken compositions.
 
-**Making a video?** Start at the router (`/video-workflows`) — it maps your request to the right workflow before you invoke a specific one.
+**Doing anything with HyperFrames?** Start at `/hyperframes-read-first` — it orients you to the whole surface (what HyperFrames can and can't do, and which skill or workflow handles your intent) and routes every "make me a video" request to the right workflow. Read it first, especially when there's no project context to orient you. The video workflows it routes to:
 
-| Skill                        | Command                    | When to use                                                                                                                                                                           |
-| ---------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **video-workflows** (router) | `/video-workflows`         | **FIRST** stop for any "make me a video" intent — routes to the right workflow                                                                                                        |
-| **product-launch-video**     | `/product-launch-video`    | URL or product brief / script → product launch / SaaS / promo video, up to ~2 min (sweet spot ~60-90s)                                                                                |
-| **faceless-explainer**       | `/faceless-explainer`      | Arbitrary text (topic / article / notes), **no URL, no website capture** → faceless explainer, up to ~2 min (sweet spot ~60-90s)                                                      |
-| **footage-recut**            | `/footage-recut`           | Existing local video (MP4) → re-edited MP4 with transcript-synced AI info-card overlays; any length. Transforms footage, not text/URL generation                                      |
-| **pr-to-video**              | `/pr-to-video`             | A GitHub PR (URL / `owner/repo#N` / "this PR") → code-change explainer, up to ~2 min (changelog / feature reveal / fix / refactor)                                                    |
-| **general-video**            | `/general-video`           | Fallback for any other video — title cards, logo reveals, data / stat montages, brand reels, motion posters, custom compositions; the original hyperframes authoring flow, any length |
-| **remotion-to-hyperframes**  | `/remotion-to-hyperframes` | Port / convert / migrate an existing **Remotion** (React) composition into HyperFrames HTML — source translation, not creation                                                        |
-| **hyperframes-core**         | `/hyperframes-core`        | HTML composition contract: data attributes, clips, tracks, sub-compositions, variables, media, deterministic rules                                                                    |
-| **hyperframes-creative**     | `/hyperframes-creative`    | Creative direction: `design.md`, palettes, typography, narration, beat planning, audio-reactive, composition patterns                                                                 |
-| **hyperframes-animation**    | `/hyperframes-animation`   | All motion: atomic rules, scene blueprints, transitions, and runtime adapters (GSAP default; Lottie, Three.js, Anime.js, CSS, WAAPI, TypeGPU)                                         |
-| **hyperframes-cli**          | `/hyperframes-cli`         | Dev-loop CLI: init, lint, validate, inspect, preview, render, doctor                                                                                                                  |
-| **hyperframes-media**        | `/hyperframes-media`       | Asset preprocessing: TTS, BGM, transcribe, remove-background, and caption authoring                                                                                                   |
-| **hyperframes-registry**     | `/hyperframes-registry`    | Installing registry blocks and components via `hyperframes add`                                                                                                                       |
+- `/product-launch-video` — a **product** URL or brief / script → product launch / SaaS / promo video, up to ~3 min (sweet spot ~60-90s).
+- `/website-to-hyperframes` — a **general** website / URL → a video _of_ the site (tour / showcase / social clip from captured screenshots + assets); a product **launch / promo** is `/product-launch-video`.
+- `/faceless-explainer` — arbitrary text (topic / article / notes), **no URL, no website capture** → faceless explainer, up to ~3 min; every visual is LLM-invented.
+- `/embedded-captions` — an existing talking-head video (MP4) → the same footage with captions / subtitles added (verbatim rail + embedded climax, or pure-cinematic embed); the footage itself is untouched.
+- `/pr-to-video` — a GitHub PR (URL / `owner/repo#N` / "this PR") → code-change explainer, up to ~3 min (changelog / feature reveal / fix / refactor).
+- `/general-video` — fallback for any other video (title card, logo reveal, data / stat montage, brand reel, motion poster, custom composition); the original hyperframes authoring flow, any length.
+
+**Porting an existing composition?** `/remotion-to-hyperframes` translates a Remotion (React) composition into HyperFrames HTML — a source migration, separate from the creation workflows above.
+
+The domain skills (`/hyperframes-core`, `/hyperframes-animation`, `/hyperframes-creative`, `/hyperframes-cli`, `/hyperframes-media`, `/hyperframes-registry`) and the full capability map live inside `/hyperframes-read-first` — it is the single source of truth for which skill handles which intent. **Adding or removing a workflow?** See `skills/_meta/registering-a-workflow.md` for the full registration checklist.
 
 > **Tailwind v4 projects** (`hyperframes init --tailwind`): see `/hyperframes-core` → `references/tailwind.md`.
 

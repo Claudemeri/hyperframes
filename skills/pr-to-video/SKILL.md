@@ -368,5 +368,5 @@ Read `$PROJECT_DIR/context.log` and resume from:
 
 - **Input:** a **GitHub PR** — a code change (PR URL, `owner/repo#N`, or "this PR"). A URL, but **a `github.com/.../pull/N` link, not a product/marketing website**.
 - **Output:** code-change explainer, up to ~3 min (sweet spot ~30-90s); 5 min+ exhaustive deep-dives → `/general-video`.
-- **Triggers:** "make a video about this PR", "turn PR #1187 into a changelog video", "explain what this pull request does as a video", "release-notes video from github.com/org/repo/pull/123", "把这个 PR 做成视频".
-- **Do NOT use for:** a product/marketing website URL (-> `/product-launch-video`); a topic/article/text with no PR (-> `/faceless-explainer`); existing video footage (-> `/footage-recut`); a whole-repo tour or multi-PR release (no workflow yet -> 通用).
+- **Triggers:** "make a video about this PR", "turn PR #1187 into a changelog video", "explain what this pull request does as a video", "release-notes video from github.com/org/repo/pull/123", "turn this PR into a video".
+- **Do NOT use for:** a product/marketing website URL (-> `/product-launch-video`) or a general website to turn into a video (-> `/website-to-hyperframes`); a topic/article/text with no PR (-> `/faceless-explainer`); adding captions to an existing video (-> `/embedded-captions`); a whole-repo tour or multi-PR release (no workflow yet -> `/general-video`).

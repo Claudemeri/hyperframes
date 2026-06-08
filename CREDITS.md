@@ -28,7 +28,3 @@ broader Node.js ecosystem.
 - **[mediabunny](https://github.com/nicoch/mediabunny)** — media toolkit used
   in the studio for fast metadata extraction from file headers. Licensed under
   the [Mozilla Public License 2.0 (MPL-2.0)](https://mozilla.org/MPL/2.0/).
-- **[vtake-skills](https://github.com/notedit/vtake-skills)** — the
-  `footage-recut` workflow (existing footage → transcript-synced AI card-overlay
-  re-edit) is derived from the `vtake-cut` skill by notedit. Licensed under the
-  [MIT License](https://github.com/notedit/vtake-skills/blob/main/LICENSE).

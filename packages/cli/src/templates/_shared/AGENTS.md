@@ -6,9 +6,10 @@
 
 **Doing anything with HyperFrames?** Start at `/hyperframes-read-first` — it tells you what HyperFrames can do and which skill or workflow handles your intent (make a video, TTS / BGM, prep footage, author / animate, render, install blocks), and routes every "make me a video" request to the right workflow. Read it first, especially when there's no project context to orient you. The video workflows it routes to:
 
-- `/product-launch-video` — URL or product brief / script → 60-90s product launch / SaaS / promo video.
+- `/product-launch-video` — a **product** URL or brief / script → 60-90s product launch / SaaS / promo video.
+- `/website-to-hyperframes` — a **general** website / URL → a video _of_ the site (tour / showcase / social clip from captured visuals); a product **launch / promo** is `/product-launch-video`.
 - `/faceless-explainer` — arbitrary text (topic / article / notes), **no URL, no website capture** → 60-90s faceless explainer.
-- `/footage-recut` — an existing local video (MP4) → re-edited MP4 with transcript-synced AI info-card overlays; any length.
+- `/embedded-captions` — an existing talking-head video (MP4) → the same footage with captions / subtitles added (rail + embed, or pure-cinematic embed); the footage itself is untouched.
 - `/pr-to-video` — a GitHub PR (URL / `owner/repo#N` / "this PR") → 30-90s code-change explainer (changelog / feature reveal / fix / refactor).
 - `/general-video` — fallback for any other video (title card, logo reveal, data / stat montage, brand reel, motion poster, custom composition); the original hyperframes authoring flow, any length.
 

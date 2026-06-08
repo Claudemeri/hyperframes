@@ -22,7 +22,7 @@ Inspectable intermediate files in the work directory:
 
 - `metadata.json` — duration / width / height / fps
 - `audio.mp3` — extracted audio
-- `transcript.json` — segments + words with timestamps
+- `transcript.json` — a flat **word array** `[{ text, start, end }, …]` (Whisper; no `segments`, no `words` wrapper)
 - `storyboard.json` — lightweight card outline (the agent's plan)
 - `public/cards/card-XX.html` — one HTML fragment per card
 - `public/index.html` — final assembled composition
@@ -100,14 +100,17 @@ Read it for the word / sentence timings that drive card timing in Step 6; group
 words into sentences yourself at punctuation / pauses if you need segment-level
 chunks.
 
+**Clamp to media duration.** Whisper can return the final word's `end` a hair past the
+actual clip length — clamp every card `endSec` and `composition.durationSeconds` to the
+`metadata.json` duration, or the render will show a black tail past the video.
+
 ### 5. Correct Transcript
 
-Read `transcript.json` and fix obvious ASR errors:
+`transcript.json` is a **flat array of word objects** — `[{ "text": "...", "start": s, "end": s }, …]` (no `segments` array, no `words` wrapper; the per-word key is **`text`**). Read it and fix obvious ASR errors:
 
 - Homophones, product names, technical terms, punctuation
-- Preserve all `start` / `end` timestamps
-- Prefer editing `segments[].text` only
-- Edit individual `words[].word` only for clear one-to-one replacements
+- Edit a word's `text` in place; **preserve its `start` / `end`** timestamps
+- There is no pre-grouped `segments` array — **group words into sentences yourself** (split at terminal punctuation / pauses) when you need segment-level chunks for card timing
 
 ### 6. Draft a Lightweight Storyboard (in chat)
 
@@ -758,9 +761,12 @@ SKILL_DIR="<SKILL_DIR>"
 mkdir -p "$WORK_DIR/public/fonts" "$WORK_DIR/public/vendor" "$WORK_DIR/public/cards"
 cp -n "$SKILL_DIR/assets/fonts/"*            "$WORK_DIR/public/fonts/"
 cp -n "$SKILL_DIR/assets/vendor/gsap.min.js" "$WORK_DIR/public/vendor/"
-# stage the input video so the composition can reference it by relative path
-ln -f "$VIDEO_PATH" "$WORK_DIR/public/input-video.mp4" 2>/dev/null \
-  || cp "$VIDEO_PATH" "$WORK_DIR/public/input-video.mp4"
+# stage the input video — RE-ENCODE with dense keyframes. Sources with a sparse GOP
+# (keyframe interval > ~1s) freeze on seek in the renderer (a frozen frame under the
+# overlays); -g / -keyint_min set to your composition fps make every frame seekable.
+# (Set both to your fps — 30 shown; use 24/25/60 to match.)
+ffmpeg -y -i "$VIDEO_PATH" -c:v libx264 -crf 18 -g 30 -keyint_min 30 \
+  -pix_fmt yuv420p -movflags +faststart -c:a aac "$WORK_DIR/public/input-video.mp4"
 ```
 
 #### Composition Template
@@ -1044,7 +1050,7 @@ For a sanity check before the full render, capture a single frame at a
 specific timestamp:
 
 ```bash
-npx hyperframes snapshot public --at 5 --out snapshot-5s.png
+npx hyperframes snapshot public --at 5    # → public/snapshots/frame-00-at-5s.png (a single --at ignores --out)
 ```
 
 ### 11. Report Results

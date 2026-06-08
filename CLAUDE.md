@@ -1,85 +1,86 @@
-# HyperFrames Composition Project
+# Hyperframes
 
-## Skills — USE THESE FIRST
+Open-source video rendering framework: write HTML, render video.
 
-**Always invoke the relevant skill before writing or modifying compositions.** Skills encode framework-specific patterns (e.g., `window.__timelines` registration, `data-*` attribute semantics, shader-compatible CSS rules) that are NOT in generic web docs. Skipping them produces broken compositions.
+## Skills
 
-**Doing anything with HyperFrames?** Start at `/hyperframes-read-first` — it orients you to the whole surface (what HyperFrames can and can't do, and which skill or workflow handles your intent) and routes every "make me a video" request to the right workflow. Read it first, especially when there's no project context to orient you. The video workflows it routes to:
-
-- `/product-launch-video` — a **product** URL or brief / script → product launch / SaaS / promo video, up to ~3 min (sweet spot ~60-90s).
-- `/website-to-hyperframes` — a **general** website / URL → a video _of_ the site (tour / showcase / social clip from captured screenshots + assets); a product **launch / promo** is `/product-launch-video`.
-- `/faceless-explainer` — arbitrary text (topic / article / notes), **no URL, no website capture** → faceless explainer, up to ~3 min; every visual is LLM-invented.
-- `/embedded-captions` — an existing talking-head video (MP4) → the same footage with captions / subtitles added (verbatim rail + embedded climax, or pure-cinematic embed); the footage itself is untouched.
-- `/pr-to-video` — a GitHub PR (URL / `owner/repo#N` / "this PR") → code-change explainer, up to ~3 min (changelog / feature reveal / fix / refactor).
-- `/general-video` — fallback for any other video (title card, logo reveal, data / stat montage, brand reel, motion poster, custom composition); the original hyperframes authoring flow, any length.
-
-**Porting an existing composition?** `/remotion-to-hyperframes` translates a Remotion (React) composition into HyperFrames HTML — a source migration, separate from the creation workflows above.
-
-The domain skills (`/hyperframes-core`, `/hyperframes-animation`, `/hyperframes-creative`, `/hyperframes-cli`, `/hyperframes-media`, `/hyperframes-registry`) and the full capability map live inside `/hyperframes-read-first` — it is the single source of truth for which skill handles which intent. **Adding or removing a workflow?** See `skills/_meta/registering-a-workflow.md` for the full registration checklist.
-
-> **Tailwind v4 projects** (`hyperframes init --tailwind`): see `/hyperframes-core` → `references/tailwind.md`.
-
-> **Skills not available?** Ask the user to run `npx hyperframes skills` and restart their
-> agent session, or install manually: `npx skills add heygen-com/hyperframes`.
-
-## Commands
+This repo ships AI agent skills via [vercel-labs/skills](https://github.com/vercel-labs/skills). Install them before writing compositions — they encode framework-specific patterns that generic docs don't cover.
 
 ```bash
-npm run dev          # start the preview server (long-running — keep it alive in background)
-npm run check        # lint + validate + inspect
-npm run render       # render to MP4
-npm run publish      # publish and get a shareable link
-npx hyperframes lint --verbose  # include info-level findings
-npx hyperframes lint --json     # machine-readable output for CI
-npx hyperframes docs <topic> # reference docs in terminal
+npx skills add heygen-com/hyperframes
 ```
 
-> **`npm run dev` is a long-running server, not a one-shot command.** It blocks until stopped.
-> In Claude Code, always run it with `run_in_background: true`. Never run it as a foreground
-> command — it will time out and the server will die, breaking the browser preview.
+**Video-creation workflows** route through one entry skill — `/hyperframes-read-first` orients you to the whole surface and maps "make me a video" intent to a concrete workflow. Consult it before invoking a specific workflow:
 
-## Documentation
+- `/product-launch-video` — a **product** URL (or a pre-written script / text brief in no-capture mode) → product launch / promo video, up to ~2 min (sweet spot ~60-90s).
+- `/website-to-hyperframes` — a **general** website / URL → a video _of_ the site (tour / showcase / social clip from captured screenshots + assets); for a product **launch / promo**, use `/product-launch-video`.
+- `/faceless-explainer` — arbitrary text, **no URL and no website capture** → faceless explainer, up to ~2 min (sweet spot ~60-90s); every visual is LLM-invented (typography / abstract graphics / diagram / data-viz).
+- `/embedded-captions` — an existing talking-head video (MP4) → the same footage with captions / subtitles added (verbatim rail + embedded climax, or pure-cinematic embed); the footage itself is untouched (no NLE-style editing).
+- `/pr-to-video` — a GitHub PR (URL / `owner/repo#N` / "this PR") → code-change explainer, up to ~2 min (changelog / feature reveal / fix / refactor). A PR link, not a product website.
+- `/general-video` — fallback for any other video creation (title card, logo reveal, data / stat montage, brand reel, motion poster, custom composition); the original hyperframes flow — design → plan → layout → build → validate, any length.
 
-**For quick reference**, use the local CLI docs command (no network required):
+**Porting an existing composition?** `/remotion-to-hyperframes` translates a Remotion (React) video composition into HyperFrames HTML — a source migration, separate from the creation workflows above.
+
+## Build & Test
 
 ```bash
-npx hyperframes docs <topic>
+bun install     # Install dependencies (NOT pnpm — do not create pnpm-lock.yaml)
+bun run build   # Build all packages
+bun run test    # Run all tests
 ```
 
-Topics: `data-attributes`, `gsap`, `compositions`, `rendering`, `examples`, `troubleshooting`
+### Linting & Formatting
 
-**For full documentation**, discover pages via the machine-readable index — do NOT guess URLs:
+Uses **oxlint** and **oxfmt** (not eslint, not prettier, not biome).
 
+```bash
+bunx oxlint <files>        # Lint
+bunx oxfmt <files>         # Format
+bunx oxfmt --check <files> # Check formatting (CI / pre-commit)
 ```
-https://hyperframes.heygen.com/llms.txt
+
+Always lint and format changed files before committing. Lefthook pre-commit hooks enforce this automatically.
+
+### Composition Validation
+
+After creating or editing any `.html` composition:
+
+```bash
+npx hyperframes lint       # Static HTML structure check
+npx hyperframes validate   # Runtime check (headless Chrome — catches JS errors, missing assets)
 ```
+
+Both must pass before previewing or considering work complete.
 
 ## Project Structure
 
-- `index.html` — main composition (root timeline)
-- `compositions/` — sub-compositions referenced via `data-composition-src`
-- `meta.json` — project metadata (id, name)
-- `transcript.json` — whisper word-level transcript (if generated)
-
-## Linting — ALWAYS RUN AFTER CHANGES
-
-After creating or editing any `.html` composition, **always** run the full check before considering the task complete:
-
-```bash
-npm run check
+```
+packages/
+  cli/                  → hyperframes CLI (create, preview, lint, render)
+  core/                 → Types, parsers, generators, linter, runtime, frame adapters
+  engine/               → Seekable page-to-video capture engine (Puppeteer + FFmpeg)
+  player/               → Embeddable <hyperframes-player> web component
+  producer/             → Full rendering pipeline (capture + encode + audio mix)
+  shader-transitions/   → WebGL shader transitions for compositions
+  studio/               → Browser-based composition editor UI
+registry/
+  blocks/               → Installable sub-composition scenes (50+)
+  components/           → Installable effects and snippets
+  examples/             → Starter project templates
+docs/                   → Mintlify documentation site (hyperframes.heygen.com)
+skills/                 → AI agent skill definitions
 ```
 
-Fix all errors before presenting the result. Inspect warnings should be reviewed before rendering.
+## Key Conventions
 
-## Key Rules
+- **Package manager**: bun (not pnpm, not npm for workspace operations)
+- **Commit format**: Conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`)
+- **TypeScript**: Avoid `any` and `as T` assertions. Prefer type guards and narrowing.
+- **Compositions**: HTML files with `data-*` attributes. Clips need `class="clip"`. GSAP timelines must be paused and registered on `window.__timelines`.
+- **Frame Adapters**: Animation runtimes plug in via the seek-by-frame adapter pattern. GSAP is the primary adapter.
+- **Deterministic rendering**: No `Date.now()`, no unseeded `Math.random()`, no render-time network fetches.
 
-1. Every timed element needs `data-start`, `data-duration`, and `data-track-index`
-2. Elements with timing **MUST** have `class="clip"` — the framework uses this for visibility control
-3. Timelines must be paused and registered on `window.__timelines`:
-   ```js
-   window.__timelines = window.__timelines || {};
-   window.__timelines["composition-id"] = gsap.timeline({ paused: true });
-   ```
-4. Videos use `muted` with a separate `<audio>` element for the audio track
-5. Sub-compositions use `data-composition-src="compositions/file.html"` to reference other HTML files
-6. Only deterministic logic — no `Date.now()`, no `Math.random()`, no network fetches
+## Documentation
+
+- Docs: https://hyperframes.heygen.com/introduction
+- Catalog (50+ blocks): https://hyperframes.heygen.com/catalog/blocks/data-chart

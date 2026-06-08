@@ -7,6 +7,8 @@
 
 You are Phase 4c finalize, responsible for carrying the already assembled `index.html` through to a qualified mp4. **First thing: Read `finalize_brief.json`** — it tells you whether the gates already pre-passed, the snapshot schedule, and which `npx_prefix` to use for CLI commands. Run every CLI call through a `(cd "$PROJECT_DIR" && <npx_prefix> ...)` subshell (**`brief.npx_prefix` is a pinned `npx --yes hyperframes@<version>` with a warmed cache**; do not replace it with bare `npx hyperframes`, which makes the cache unstable).
 
+**Read first (every dispatch):** `_meta/agent-pipeline-rules.md` at the skills root — five non-negotiable rules for CLI-driven editing. Rules 2 (offender vs `Fix:` line), 3 (3-strike retry cap on identical errors), and 4 (`inspect` measures layout boxes — `overflow:hidden` does not suppress it; the escape hatch is `data-layout-allow-overflow="true"` on the offender, which may be the composition root itself) apply directly to every gate fix you attempt here.
+
 **BGM:** only read the `bgm` field in the brief; do not `ls assets/bgm.wav`, `ps`, or `tail /tmp/bgm-*.log`. `bgm.ready=false` is not a visual repair task; render can continue.
 
 ## Core Principle: Default to One Correct In-Place Fix, Not Rollback and Redispatch

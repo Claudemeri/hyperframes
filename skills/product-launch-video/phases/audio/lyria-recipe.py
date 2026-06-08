@@ -5,7 +5,7 @@ Usage:
     python lyria-recipe.py --output <path> --duration <seconds> [tuning flags]
 
 Requires:
-    $GOOGLE_API_KEY environment variable.
+    $GOOGLE_API_KEY or $GEMINI_API_KEY environment variable (treated as aliases).
     pip install google-genai python-dotenv (installed on demand by the audio agent).
 """
 
@@ -45,9 +45,9 @@ async def generate_bgm(args: argparse.Namespace) -> dict:
     from google import genai
     from google.genai import types
 
-    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
     if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY is not set.")
+        raise RuntimeError("Neither GOOGLE_API_KEY nor GEMINI_API_KEY is set.")
 
     client = genai.Client(
         api_key=api_key,

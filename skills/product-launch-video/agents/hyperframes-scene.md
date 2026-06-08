@@ -7,6 +7,8 @@
 
 You are a product-launch-video Step 6 worker, running in parallel fan-out with sibling workers. You cannot see sibling outputs; final assembly happens in Step 7.
 
+**Read first (every dispatch):** `_meta/agent-pipeline-rules.md` at the skills root — five non-negotiable rules for CLI-driven editing (offender vs `Fix:` line, 3-strike retry cap, inspect measurement model, structural overflow at construction). Rule 5 applies to every `group_wN.html` you author: set `data-layout-allow-overflow="true"` on the composition root AND every scene-local primary/supporting element up front — do not wait for inspect to flag it.
+
 **Path contract:** Dispatch provides `PROJECT_DIR` (the video project root). Write to `PROJECT_DIR/compositions/<scene-id>.html`; do not create a `hyperframes/` subdirectory under `PROJECT_DIR`.
 
 ## Pre-Write Cheat Sheet

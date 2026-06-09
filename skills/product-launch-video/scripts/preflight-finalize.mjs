@@ -174,7 +174,9 @@ function runGate(name, args, { timeoutMs = 90_000 } = {}) {
   // brief.gates.<gate>.{errors,warnings,info} surfaces without a second CLI
   // call. Absent / un-parseable → null fields; orchestrator falls back to
   // exit_code for the block decision.
-  const summaryMatch = out.match(/(\d+)\s+error\(s\)(?:,\s+(\d+)\s+warning\(s\))?(?:,\s+(\d+)\s+info\(s\))?/i);
+  const summaryMatch = out.match(
+    /(\d+)\s+error\(s\)(?:,\s+(\d+)\s+warning\(s\))?(?:,\s+(\d+)\s+info\(s\))?/i,
+  );
   const errors = summaryMatch ? Number(summaryMatch[1]) : null;
   const warnings = summaryMatch && summaryMatch[2] != null ? Number(summaryMatch[2]) : null;
   const info = summaryMatch && summaryMatch[3] != null ? Number(summaryMatch[3]) : null;
@@ -395,6 +397,7 @@ try {
       perception = {
         skipped: false,
         scanned: r.scenes_scanned || 0,
+        failed: r.scenes_failed || 0, // probed but threw — no coverage for those scenes
         skipped_scenes: r.scenes_skipped || 0, // in group_spec but no file/<template>
         no_timeline: r.scenes_no_timeline || 0, // probed at t=0 only (no timeline registered)
         violations: r.violations || [],
@@ -432,9 +435,17 @@ const criticalPerceptionViolations = perception.violations.filter(
 // explicitly required it via `--require-perception` / `PLV_REQUIRE_PERCEPTION=1`.
 // In that mode skipped is NOT clean — preflight_clean turns false and the
 // blocking-exit gate below promotes the run to exit 2.
-const perceptionClean = perception.skipped
-  ? !requirePerception
-  : criticalPerceptionViolations.length === 0;
+// Coverage honesty: a non-skipped run that crashed scenes (scenes_failed) or
+// probed nothing (scanned 0 while scenes exist) did NOT cover its scope — an
+// empty violations list then means the probe aborted, NOT that the scenes are
+// clean. Gate it on the same terms as a skip (soft by default; blocks under
+// --require-perception) so a silent crash / partial run can never read as a pass.
+const perceptionPartial =
+  !perception.skipped && ((perception.failed || 0) > 0 || perception.scanned === 0);
+const perceptionClean =
+  perception.skipped || perceptionPartial
+    ? !requirePerception
+    : criticalPerceptionViolations.length === 0;
 
 const preflightClean = gatesClean && keepoutClean && perceptionClean;
 
@@ -492,6 +503,13 @@ if (perception.skipped) {
     actionable_alternative: `npm i puppeteer-core && npx hyperframes browser install`,
   });
 }
+if (perceptionPartial) {
+  anomalies.push({
+    code: "perception_check_partial",
+    severity: requirePerception ? "error" : "warning",
+    message: `Rendered-perception ran but covered nothing usable (scenes_failed=${perception.failed || 0}, scenes_scanned=${perception.scanned}). An empty violations list here means the probe crashed/aborted on those scenes, NOT that they are clean${requirePerception ? " — and --require-perception was set, so this BLOCKS preflight" : " — finalize snapshot eye-check is the only remaining safety net"}. See the check-rendered-perception stderr for the per-scene error.`,
+  });
+}
 
 // ---------- 6. Write brief ----------
 const brief = {
@@ -511,8 +529,10 @@ const brief = {
     // doesn't have to cross-reference brief.anomalies[] to find it.
     install_to_enable: perception.skipped ? `cd "${hyperframesDir}" && npm i puppeteer` : null,
     scenes_scanned: perception.scanned,
+    scenes_failed: perception.failed || 0, // probed but threw → no coverage for those scenes
     scenes_not_scanned: perception.skipped_scenes, // no file/<template> → never measured
     scenes_no_timeline: perception.no_timeline, // probed at t=0 only → late reveals unseen
+    partial: perceptionPartial, // ran but covered nothing usable (crash / 0 scanned) — treat like skipped
     violations: perception.violations,
     critical_violations_count: criticalPerceptionViolations.length,
   },
@@ -659,13 +679,20 @@ if (!gatesClean && !allowGateFailure) {
   if (!gates.lint.ok) failed.push(`lint (exit ${gates.lint.exit_code})`);
   if (!gates.validate.ok) failed.push(`validate (exit ${gates.validate.exit_code})`);
   if (!gates.inspect.ok) {
-    const cnt = gates.inspect.errors != null ? `${gates.inspect.errors} error(s)` : `exit ${gates.inspect.exit_code}`;
+    const cnt =
+      gates.inspect.errors != null
+        ? `${gates.inspect.errors} error(s)`
+        : `exit ${gates.inspect.exit_code}`;
     failed.push(`inspect (${cnt})`);
   }
   console.error(`\n✗ BLOCKED: ${failed.join(", ")} — pipeline must NOT proceed to finalize.`);
   console.error(`  brief: ${outPath}`);
-  console.error(`  → read brief.gates.<gate>.output_tail to diagnose, then fix the upstream scene file (or re-dispatch the worker).`);
-  console.error(`  → re-run this script after fix. Override with --allow-gate-failure only if you want finalize to chase the gate errors itself.`);
+  console.error(
+    `  → read brief.gates.<gate>.output_tail to diagnose, then fix the upstream scene file (or re-dispatch the worker).`,
+  );
+  console.error(
+    `  → re-run this script after fix. Override with --allow-gate-failure only if you want finalize to chase the gate errors itself.`,
+  );
   process.exit(2);
 }
 
@@ -683,6 +710,8 @@ if (requirePerception && perception.skipped) {
   console.error(`  brief: ${outPath}`);
   console.error(`  → install puppeteer to enable the check:`);
   console.error(`     (cd "${hyperframesDir}" && npm i puppeteer)`);
-  console.error(`  → or rerun without --require-perception / unset PLV_REQUIRE_PERCEPTION to fall back to snapshot-only safety net.`);
+  console.error(
+    `  → or rerun without --require-perception / unset PLV_REQUIRE_PERCEPTION to fall back to snapshot-only safety net.`,
+  );
   process.exit(2);
 }

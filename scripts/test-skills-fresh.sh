@@ -12,9 +12,10 @@
 #
 # Agents: works for Claude Code (default) and Codex. `--agent` is passed straight
 # to `skills add`, so the skills land in that agent's project dir:
-#   • claude-code → .claude/skills/   (launch: claude)
-#   • codex       → .agents/skills/   (launch: codex)   ← project-local, does NOT
-#                   touch your global ~/.codex/skills.
+#   • claude-code → .claude/skills/   (launch: claude --dangerously-skip-permissions)
+#   • codex       → .agents/skills/   (launch: codex --dangerously-bypass-approvals-and-sandbox)
+#                   ← both launch fully auto (no approval prompts); codex stays
+#                   project-local and does NOT touch your global ~/.codex/skills.
 #
 # Why a sandbox (and not `npx skills add heygen-com/hyperframes#test/skills-fresh`):
 #   `skills add` only copies skills/. The capture tool you changed lives in
@@ -82,7 +83,7 @@ fi
 # Map the agent to its project skills dir + launch binary.
 case "$AGENT" in
   claude-code) SKILLS_DIR=".claude/skills"; AGENT_BIN="claude"; LAUNCH="claude --dangerously-skip-permissions" ;;
-  codex)       SKILLS_DIR=".agents/skills"; AGENT_BIN="codex";  LAUNCH="codex" ;;
+  codex)       SKILLS_DIR=".agents/skills"; AGENT_BIN="codex";  LAUNCH="codex --dangerously-bypass-approvals-and-sandbox" ;;
   *)           SKILLS_DIR=".agents/skills"; AGENT_BIN="$AGENT"; LAUNCH="$AGENT" ;;
 esac
 

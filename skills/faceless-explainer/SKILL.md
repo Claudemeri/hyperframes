@@ -7,7 +7,7 @@ metadata:
 
 # faceless-explainer - dispatch entry
 
-Input is **arbitrary text** (article / notes / topic / brief). Output is a **faceless explainer** video: no captured website, no product screenshots — every visual is invented by the LLM (typography / abstract graphics / diagram / data-viz), chosen per scene by content. The shipped style preset is always **pin-and-paper**.
+Input is **arbitrary text** (article / notes / topic / brief). Output is a **faceless explainer** video: no captured website, no product screenshots — every visual is invented by the LLM (typography / abstract graphics / diagram / data-viz), chosen per scene by content. The style preset is **auto-selected per input** by the scriptwriting agent (Step 2) from the 5 shipped presets (`block-frame` / `capsule` / `claude` / `pin-and-paper` / `scatterbrain`; default `pin-and-paper` when nothing clearly fits).
 
 > **Confirm the route before Step 0.** This skill explains a **topic / concept** with **no product and no site to capture**. If the text actually **markets a product / names its site** → `/product-launch-video`; there's a **URL to turn into a video** → `/website-to-video`; a **GitHub PR** → `/pr-to-video`; **existing footage** to caption / package → `/embedded-captions` · `/graphic-overlays`. **Out of scope**: timing visuals to a **user-supplied / pre-recorded voiceover** (faceless generates its own TTS → `/general-video`), or live / at-render-time data. Unsure product-vs-topic, or routed here on a vague request? **Read `/hyperframes-read-first` first.**
 
@@ -39,9 +39,9 @@ macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node f
 
 ## Flow
 
-### Step 0.0 - Confirm the brief (one round, then build)
+### Step 0.0 - Confirm the brief (ALWAYS ask one round, then build)
 
-Before Step 0, in **one** message confirm only what materially shapes the explainer and you can't infer — lead with a recommended default, skip anything the user already gave: the **topic / angle** (the one idea), **length** (default ~60-90s), and — if `/hyperframes-read-first` did not already set them — **aspect** (default 16:9; 9:16 for vertical) and **language**. Style is always `pin-and-paper`. For a fully specified request, skip this and build.
+Before Step 0, **always pause and ask the brief in one message, then wait for the user — never skip this, even for a request that looks complete.** Lead with a recommended default for each field and pre-fill anything the user already gave (confirm it rather than re-asking blindly): the **topic / angle** (the one idea), **length** (default ~60-90s), and — if `/hyperframes-read-first` did not already set them — **aspect** (default 16:9; 9:16 for vertical) and **language**. Style is **not** asked here — the scriptwriting agent auto-picks the preset from the input in Step 2. Proceed to Step 0 only after the user replies; a "go" / "use the defaults" is a valid reply that accepts every default.
 
 ### Step 0 - Initialize the video project
 
@@ -307,7 +307,7 @@ Normal path (`preflight_clean: true`): finalize skips straight to snapshots (pas
 
 ### Completion report
 
-Summarize per phase: input title / topic, preset (always `pin-and-paper`), explainer structure, scene count / total duration, worker grouping, transitions, gate status, visual files repaired in place, final mp4 path + bytes + duration.
+Summarize per phase: input title / topic, preset (auto-picked by scriptwriting from the 5 shipped presets), explainer structure, scene count / total duration, worker grouping, transitions, gate status, visual files repaired in place, final mp4 path + bytes + duration.
 
 **Offer a live preview — never auto-open one.** The deliverable is the mp4 above. A browser preview is optional and **must not be started until the user asks for it**. Do NOT run `hyperframes preview` / `play` during any earlier phase: a preview opened mid-run shows half-edited compositions and dies when that phase's own snapshot/render server is torn down, which confuses more than it helps. End the report with a single offer line, e.g.:
 

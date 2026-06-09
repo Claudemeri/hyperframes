@@ -42,9 +42,9 @@ macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node f
 
 ## Flow
 
-### Step 0.0 - Confirm the brief (one round, then build)
+### Step 0.0 - Confirm the brief (ALWAYS ask one round, then build)
 
-Before Step 0, in **one** message confirm only what you can't infer from the PR — lead with a default, skip what's given: the **angle** (changelog / feature reveal / fix / refactor — default: infer from the PR), the **audience** (developers vs general users — default: developers), **length** (default ~60-90s), and — if `/hyperframes-read-first` didn't set them — **aspect** (default 16:9) and **language**. Style is always `claude`. For a clearly specified ask, skip this and build.
+Before Step 0, **always pause and ask the brief in one message, then wait for the user — never skip this, even for a request that looks complete.** Lead with a recommended default for each field and pre-fill anything the user already gave (confirm it rather than re-asking blindly): the **angle** (changelog / feature reveal / fix / refactor — default: infer from the PR), the **audience** (developers vs general users — default: developers), **length** (default ~60-90s), and — if `/hyperframes-read-first` didn't set them — **aspect** (default 16:9) and **language**. Style is always `claude`. Proceed to Step 0 only after the user replies; a "go" / "use the defaults" is a valid reply that accepts every default.
 
 ### Step 0 - Initialize the video project
 

@@ -299,6 +299,20 @@ Normal path (`preflight_clean: true`): finalize skips straight to snapshots (pas
 
 Summarize per phase: input title / topic, preset (always `pin-and-paper`), explainer structure, scene count / total duration, worker grouping, transitions, gate status, visual files repaired in place, final mp4 path + bytes + duration.
 
+**Offer a live preview — never auto-open one.** The deliverable is the mp4 above. A browser preview is optional and **must not be started until the user asks for it**. Do NOT run `hyperframes preview` / `play` during any earlier phase: a preview opened mid-run shows half-edited compositions and dies when that phase's own snapshot/render server is torn down, which confuses more than it helps. End the report with a single offer line, e.g.:
+
+> Optional: I can open a live preview so you can scrub frame-by-frame, change playback speed, or get a shareable link — say the word and I'll start it.
+
+Only **after** the user asks, start a long-lived dev server (it serves the final on-disk files and stays up until stopped), then report the actual URL with the real port + project name:
+
+```bash
+(cd "$PROJECT_DIR" && npx hyperframes preview)   # Studio UI, e.g. http://localhost:3002/#project/<project-name>
+# or a lightweight shareable player link instead:
+(cd "$PROJECT_DIR" && npx hyperframes play)       # plain http://localhost:<port>
+```
+
+Flags (custom port, external browser) live in the `hyperframes-cli` skill (`references/preview-render.md`).
+
 ---
 
 ## Resume table

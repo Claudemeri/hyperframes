@@ -398,6 +398,16 @@ Exit codes / behavior:
 
 After completion, summarize for the user: key outputs for every phase (capture URL/section/asset counts, preset, archetype, scene count/total duration, worker grouping, transitions, gate status, scene files repaired in place, final mp4 path + bytes + duration). The complete per-phase field list is in "Design notes / Completion report fields" below.
 
+**Offer a live preview — never auto-open one.** The deliverable is the mp4 above. A browser preview is optional and **must not be started until the user asks for it**. Do NOT run `hyperframes preview` / `play` during any earlier phase: a preview opened mid-run shows half-edited compositions and dies when that phase's own snapshot/render server is torn down. When the user asks, start a long-lived dev server **after** the render (it serves the final on-disk files and stays up until stopped), then report the actual URL with the real port + project name:
+
+```bash
+(cd "$PROJECT_DIR" && npx hyperframes preview)   # Studio UI, e.g. http://localhost:3002/#project/<project-name>
+# or a lightweight shareable player link instead:
+(cd "$PROJECT_DIR" && npx hyperframes play)       # plain http://localhost:<port>
+```
+
+Flags (custom port, external browser) live in the `hyperframes-cli` skill (`references/preview-render.md`).
+
 ---
 
 ## Resume table

@@ -1066,4 +1066,10 @@ Tell the user:
 - Card count + how you chose them (in 1 sentence)
 - Any missing keys or quality caveats
 
+**Optional live preview (on request only).** The clip plays unchanged inside `public/index.html` with the overlays on top, so it previews faithfully. **Don't open it during the run.** When the user asks, start a long-lived server **after** render and report the URL:
+
+```bash
+(cd "$WORK_DIR/public" && npx hyperframes preview)   # or `npx hyperframes play` for a shareable link
+```
+
 Do not delete the work directory unless the user asks.

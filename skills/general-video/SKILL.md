@@ -118,6 +118,7 @@ This maps the skill's full surface (see the `description`) to its references —
 - [ ] `npx hyperframes inspect` passes, or every overflow is intentionally marked
 - [ ] contrast warnings addressed; for multi-scene work, review the animation map (`hyperframes-animation/scripts/animation-map.mjs`)
 - [ ] deliver the preview; render to MP4 only on explicit request
+- [ ] surface the preview **only at handoff** (it is the stable, final preview); don't pop one mid-build — build-phase snapshots are headless
 
 ## Not this workflow
 

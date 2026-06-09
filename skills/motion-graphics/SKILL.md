@@ -128,6 +128,16 @@ Dispatch a subagent. prompt = full `agents/builder.md` + dispatch context (`shot
 
 exit 0 → done. On lint/inspect errors, dispatch the repair subagent (`agents/finalize.md`: snapshot QA + one in-place fix pass + re-render). Never change a fixed duration in repair.
 
+### Report + optional preview
+
+Report the final output (`renders/video.mp4`, or the `.webm` / `.mov` overlay variant) + duration. **Don't open a preview during the run.** Offer one only on request, started **after** render so it serves the final file:
+
+```bash
+(cd "$PROJECT_DIR" && npx hyperframes preview)   # Studio UI; or `npx hyperframes play` for a shareable link
+```
+
+Flags live in the `hyperframes-cli` skill (`references/preview-render.md`).
+
 ## Resume table
 
 | State                                                    | Continue from            |

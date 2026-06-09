@@ -20,6 +20,8 @@ The craft prose below is long; the **pipeline itself is short**:
 3. **author**: Cinematic → write `plan.json` → `make-composition.cjs`; Standard → author `index.html` (embed) + `rail.html` (rail) from a chosen template
 4. `render-and-composite.sh` → `final.mp4`
 
+**Handoff.** `final.mp4` is the deliverable — report its path + duration. **`hyperframes preview` / `play` do NOT apply here**: the final is an ffmpeg composite of the rendered caption layers + RVM matte + the untouched footage, not a servable HyperFrames project, so previewing `index.html` / `rail.html` alone would not show the real result. No preview is surfaced during the run; to review, open `final.mp4` in a video player on request.
+
 Load-bearing rules people miss:
 
 - **rail (default) + embed (promotion).** `drop` (filler, not shown) / `rail` (verbatim lower-third subtitle, in front, carries most text) / `embed` (a peak word composited behind the subject). **Standard mode does both**, embedding only the peak(s). See **§ Caption model**.

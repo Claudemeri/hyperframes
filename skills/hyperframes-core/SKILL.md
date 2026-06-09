@@ -100,11 +100,11 @@ For non-GSAP runtimes (Lottie / Three / WAAPI / CSS / Anime.js / TypeGPU), the e
 
 ## Non-Negotiable Rules
 
-These break the renderer — or produce **silent visual bugs that `lint`/`validate`/`inspect` do NOT catch** (rules 7-8). (Synchronous timeline construction is covered above in **Timeline Contract**.)
+These break the renderer — or produce **silent visual bugs that `lint`/`validate`/`inspect` do NOT catch** (rules 3, 7-8). (Synchronous timeline construction is covered above in **Timeline Contract**.)
 
 1. No `Math.random()` / `Date.now()` / `performance.now()` driving visuals — use a seeded PRNG.
 2. No `repeat: -1`. Use `repeat: Math.max(0, Math.floor(duration / cycleDuration) - 1)` — **`floor`, not `ceil`** (`ceil` overshoots `data-duration` and trips the `gsap_repeat_ceil_overshoot` lint; `max(0, …)` avoids a negative repeat = infinite).
-3. No `video.play()` / `audio.play()` / `currentTime = …`. The framework owns media playback.
+3. `<video>`/`<audio>` must be a **direct child of the host root** (`index.html`) — never inside a sub-comp `<template>`, never inside a wrapper `<div>`; otherwise it is never decoded and renders blank/black (silent). The framework owns playback: no `video.play()` / `audio.play()` / `currentTime = …`. A sub-comp **cannot** drive host elements (selector or `querySelector`), so animate host media from the **main timeline** at global time. See `references/variables-and-media.md`.
 4. No `gsap.set()` on clip elements from later scenes (they are not in the DOM yet). Use `tl.set(selector, vars, time)` at or after the clip's `data-start`.
 5. No animating `display` / `visibility`. Animate `opacity` / transforms; the clip lifecycle handles show/hide.
 6. No `<br>` in body text. Let text wrap via `max-width`.

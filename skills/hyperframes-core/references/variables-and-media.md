@@ -44,6 +44,13 @@ document.documentElement.style.setProperty("--accent", accent);
 
 ## Media
 
+**NON-NEGOTIABLE: `<video>`/`<audio>` must be a DIRECT child of the host composition root (`index.html`).** The runtime only registers + drives media that is a direct root child. Media placed inside a sub-composition `<template>`, or wrapped in any intermediate `<div>`, is never seeked/decoded → renders blank (paper/white) or black. `lint`/`validate`/`inspect` do not catch this; per-frame `snapshot` shows the blank panel.
+
+Consequences:
+
+- A scene-specific clip still lives at the host root, not in the scene's sub-comp. The sub-comp keeps only the frame/shell; the media is a sibling host element positioned over it.
+- A sub-composition **cannot reach or animate host elements** — neither `document.querySelector("#host-id")` nor a gsap selector string (`tl.to("#host-id", …)`) resolves across the boundary; a sub-comp timeline only drives its own subtree. So **all per-scene motion on host media (scale/opacity/morph/tilt/breathing) must be authored on the MAIN timeline in `index.html`, at GLOBAL time** (scene-local time + the scene slot's `data-start`). For 3D tilt without a perspective parent, use gsap `transformPerspective` on the element. See `composition-patterns.md` archetype B.
+
 Video elements must be muted and inline. Audio must be a separate `<audio>` element, even when it uses the same source file.
 
 ```html
@@ -71,6 +78,8 @@ Video elements must be muted and inline. Audio must be a separate `<audio>` elem
 ### Media Rules
 
 - **Do not** call `video.play()`, `audio.play()`, pause, or seek in composition code. HyperFrames owns playback.
+- **Do not** place media inside a sub-comp `<template>` or any wrapper `<div>` — direct host-root child only (see above), else it never decodes.
+- **Do not** drive host media from a sub-comp timeline — it has no effect. Drive it from the main timeline at global time.
 - **Do not** animate timed media element dimensions; animate a non-timed wrapper instead.
 - **Do not** nest video inside a timed wrapper. Put timing on the media element or keep the wrapper untimed.
 - Add `crossorigin="anonymous"` for external media that needs canvas capture or pixel inspection.

@@ -20,6 +20,8 @@ The root should be `position: relative`, have explicit pixel dimensions, and hid
 
 Timed child elements are clips. **`class="clip"` is required on visible timed elements** (`<div>`, `<img>`, etc.) — without it the runtime keeps the element visible for the whole composition, ignoring `data-start` / `data-duration`. Omit on `<video>` (framework manages visibility directly) and `<audio>` (no visual).
 
+**Clips must be DIRECT children of the composition root.** A clip nested inside a wrapper `<div>` is not registered — most visibly, a `<video>` in a wrapper is never seeked/decoded and renders black. To wrap/transform a clip, put the wrapper _inside_ the clip, or animate the clip element itself; do not wrap the clip. (`<video>`/`<audio>` additionally must be at the **host** root, never in a sub-comp `<template>` — see `variables-and-media.md`.)
+
 | Attribute          | Required                                        | Meaning                                                                                                                           |
 | ------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `id`               | Yes                                             | Stable DOM ID for linting, timeline targets, and debugging.                                                                       |
@@ -53,6 +55,7 @@ See `sub-compositions.md` for the full wiring pattern.
   - `inspect` measures `getBoundingClientRect` at sampled timestamps, not rendered pixels — `overflow: hidden` clips the visual but does **not** suppress an `inspect` overflow finding. This attribute is the escape hatch; CSS overflow is not.
   - Can be set on the composition **root** as well as on any child. When the cited offender is `div.<comp>-root inside div.<comp>-root` (the root reports its own children's union as overflowing), the fix goes on the root, not on individual text descendants — shrinking font sizes will not converge.
   - In a multi-scene `group_wN.html` (continue runs), every scene-local element stays in the DOM during the other scenes' time windows; the layout-box union almost always overflows the canvas during morph seams. Mark the root and every scene-local primary/supporting element with this attribute **at construction**, not after `inspect` flags it.
+  - **Blast radius — it silences more than `inspect`.** The attribute is inherited down the subtree (the perception probe walks ancestors), so it also suppresses the rendered-perception checks `text-clipping`, `content-cramped-container`, and `foreground-over-panel` for every descendant. Putting it on a persistent panel that also hosts real foreground content disables collision checks on that content for the panel's whole lifetime. Prefer the narrowest opt-out: scope it to the smallest decorative wrapper, or use per-element `data-layout-bleed="true"` for one intentional primary-text crop. The two canvas/edge checks `primary-offscreen` and `foreground-over-panel` deliberately run **even under** allow-overflow, so it cannot hide a wordmark sliced by the frame or text bleeding onto a panel edge.
 - `data-layout-ignore` — exclude this element from layout audits entirely.
 
 ## Legacy / Removed Attributes

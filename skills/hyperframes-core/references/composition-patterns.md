@@ -130,9 +130,11 @@ Key properties of this layout:
 
 The sub-comp contains the scene's full DOM, scoped CSS, and timeline. This is the standard pattern in `sub-compositions.md` — most scenes are this.
 
-### B. Driver-only sub-composition
+### B. Host media + main-timeline driver (REQUIRED for any `<video>`/`<audio>`)
 
-A sub-comp can have an effectively empty root and use its timeline to animate elements that live at the **host** level (e.g. a root-level `<video>`). Useful when a media element needs to play across the project, but the entry/exit animation belongs to a specific scene window.
+Media playback only works when the `<video>`/`<audio>` is a **direct child of the host root** — never inside a sub-comp `<template>` (it would render blank/black). This is not optional or "for media that spans scenes"; it applies to every clip, including a scene-specific one. The scene's sub-comp keeps the frame/shell; the media is a host sibling positioned over it.
+
+A sub-comp timeline **cannot** drive host elements (a global selector or `document.querySelector` does not resolve across the boundary). So author the media's per-scene motion (scale/opacity/morph/tilt/breathing) on the **main timeline** in `index.html`, at **global time** = scene-local time + the scene slot's `data-start`.
 
 ```html
 <!-- index.html (host) -->
@@ -145,6 +147,7 @@ A sub-comp can have an effectively empty root and use its timeline to animate el
   data-track-index="1"
 ></div>
 
+<!-- media is a DIRECT root child; sits over the sub-comp's frame -->
 <video
   id="final-video"
   class="clip"
@@ -154,26 +157,34 @@ A sub-comp can have an effectively empty root and use its timeline to animate el
   data-track-index="2"
   muted
   playsinline
+  style="position:absolute; left:360px; top:100px; width:1200px; height:680px; object-fit:cover; border-radius:24px;"
 ></video>
 
-<!-- compositions/final-anim.html -->
+<script>
+  // MAIN timeline drives the host video. Global time: scene starts at 20.
+  window.__timelines = window.__timelines || {};
+  const main = window.__timelines["main"];
+  main.fromTo(
+    "#final-video",
+    { scale: 1.4, filter: "blur(14px)" },
+    { scale: 1.0, filter: "blur(0px)", duration: 0.9, ease: "power3.out" },
+    20,
+  ); // = slot data-start (+ any scene-local offset)
+</script>
+
+<!-- compositions/final-anim.html — frame/shell only, no <video>, no host-element animation -->
 <template>
-  <div data-composition-id="final-anim" data-width="1920" data-height="1080" data-duration="6">
-    <style>
-      [data-composition-id="final-anim"] {
-        pointer-events: none;
-      }
-    </style>
+  <div
+    data-composition-id="final-anim"
+    data-width="1920"
+    data-height="1080"
+    data-duration="6"
+    style="position:absolute; inset:0; pointer-events:none;"
+  >
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
-      // Animate a host-level element by global selector.
-      tl.fromTo(
-        "#final-video",
-        { scale: 1.4, filter: "blur(14px)" },
-        { scale: 1.0, filter: "blur(0px)", duration: 0.9, ease: "power3.out" },
-        0,
-      );
+      // animate ONLY this sub-comp's own elements here (labels, frame, overlays)
       window.__timelines["final-anim"] = tl;
     </script>
   </div>
@@ -182,8 +193,9 @@ A sub-comp can have an effectively empty root and use its timeline to animate el
 
 Caveats:
 
-- The host element must exist in the DOM by the time the sub-comp timeline is sampled. Since the sub-comp slot and the video share `data-start="20"`, they enter the DOM together and this is fine.
-- Do not animate a property that another timeline (including the host's root timeline) is also driving — overwrite behavior is order-dependent and can flip between renders. See `determinism-rules.md`.
+- The host media must be a direct root child and exist in the DOM (static in `index.html`) — it always is.
+- Clip lifecycle owns the media element's visibility across its `[data-start, data-start+data-duration]` window. The main-timeline opacity/scale tweens compose with it fine; for an opacity reveal/crossfade prefer a host **wrapper** so you are not fighting the lifecycle on the media element itself.
+- Two media elements sharing the same `src` + `data-start` trigger `duplicate_media_discovery_risk` (benign — both still render).
 
 ### C. Multi-scene merge
 

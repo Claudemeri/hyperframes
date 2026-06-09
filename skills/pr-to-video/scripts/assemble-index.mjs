@@ -13,10 +13,11 @@
 // Structure is modeled verbatim on proven artifacts — the brex-launch-video
 // real pipeline output (scene track 0 + voice track 10) and the style-10-prod
 // producer golden test (sub-comp host divs carry data-composition-id matching
-// the inner file's id; <audio> carries class="clip"). The whole
-// product-launch-video pipeline is fixed at 1920x1080 (scene workers hardcode
-// and self-check those dims — agents/hyperframes-scene.md), so the root dims
-// are constants here too.
+// the inner file's id; <audio> carries class="clip"). The canvas size is set
+// once by prep (group_spec.width/height — landscape 1920×1080 by default,
+// portrait/square when the intent layer requested it); scene workers author and
+// self-check against those same dims (agents/hyperframes-scene.md), so the root
+// dims here are read from group_spec, not hardcoded.
 //
 // Track lanes (must not collide — lint flags overlapping_clips_same_track):
 //   0      visual sub-comp clips (scene_N.html or multi-scene group_wN.html)
@@ -45,6 +46,7 @@
 
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { readDims } from "./lib/dimensions.mjs";
 
 // ---------- argv ----------
 const argv = process.argv.slice(2);
@@ -65,8 +67,6 @@ const outPath = resolve(flag("out", join(hyperframesDir, "index.html")));
 // echo it on the root; anything past this slack desyncs the precomputed start_s
 // / voice / SFX / captions timing, so it's fatal (fix upstream, not here).
 const DUR_EPSILON = 0.01;
-const WIDTH = 1920;
-const HEIGHT = 1080;
 
 if (!existsSync(groupSpecPath)) die(`group_spec.json not found at ${groupSpecPath}`);
 let groupSpec;
@@ -75,6 +75,11 @@ try {
 } catch (e) {
   die(`group_spec.json parse: ${e.message}`);
 }
+
+// Canvas size flows from prep → group_spec.width/height (landscape default for
+// pre-dims group_specs). Scene workers author + self-check against these same
+// dims, so the index root matches.
+const { width: WIDTH, height: HEIGHT } = readDims(groupSpec);
 
 const totalDuration = Number(groupSpec.total_duration_s);
 if (!isFinite(totalDuration) || totalDuration <= 0)

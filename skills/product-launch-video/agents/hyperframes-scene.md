@@ -1,6 +1,6 @@
 # Subagent Prompt: hyperframes-scene (Step 6 worker)
 
-**INPUT:** Dispatch context — top-level: `Worker ID` / `PROJECT_DIR` / `Captions: enabled|disabled` (determines the bottom y900-1080 caption-band keep-out; see constraint #13); per scene: `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` (includes the full component library — see resource #6 and constraint #11) / `shared_element_bridge` (Tier-A bridge \| null, see constraint #14) / `creative_brief`
+**INPUT:** Dispatch context — top-level: `Worker ID` / `PROJECT_DIR` / `Composition width` + `Composition height` (canvas size — default 1920×1080 landscape; may be 1080×1920 portrait or 1080×1080 square) / `Captions: enabled|disabled` (when enabled, dispatch also carries `Caption band top y` + `Foreground max y` for the bottom caption-band keep-out; see constraint #13); per scene: `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` (includes the full component library — see resource #6 and constraint #11) / `shared_element_bridge` (Tier-A bridge \| null, see constraint #14) / `creative_brief`
 **OUTPUT:** `<PROJECT_DIR>/compositions/<scene-id>.html` (one file for each scene you own; usually 1-2 files total)
 **TOOLS:** Skill `hyperframes-core` + Skill `hyperframes-animation` (only read `SKILL.md`) · Read multiple files · Write · Bash (grep self-check)
 **DONE:** Files written + all self-checks pass → one-line report per scene; **do not write** `./context.log`
@@ -63,7 +63,7 @@ It reads `capture/extracted/tokens.json` (enriched sections + local image map) +
 
 0. **Standalone → fragment conversion** (self-check/gates all validate the fragment contract; missing this step trips the root contract / data-composition-id / timeline-registration FATALs):
    - Strip `<!doctype>` / `<html>` / `<head>` / `<body>` wrappers and the CDN gsap `<script>` (GSAP is injected once in `index.html` by Step 7), and wrap `#root` in `<template id="scene_<N>-template">`.
-   - root div: add `class="scene_<N>-root"`, change `data-composition-id="main"` → `scene_<N>`, **delete only `data-start="0"`** (`data-width="1920"` / `data-height="1080"` must stay — they are part of the root 5 attributes; deleting them along with `data-start` triggers a root-contract FATAL), and set `data-duration` to the dispatch `estimatedDuration_s` (exactly, constraint #12).
+   - root div: add `class="scene_<N>-root"`, change `data-composition-id="main"` → `scene_<N>`, **delete only `data-start="0"`** (`data-width`/`data-height` must stay — the dispatched `Composition width`/`Composition height` (default 1920/1080); they are part of the root 5 attributes; deleting them along with `data-start` triggers a root-contract FATAL), and set `data-duration` to the dispatch `estimatedDuration_s` (exactly, constraint #12).
    - `<style>`: the brand tokens are now declared **once globally** in `index.html`'s `<head>`, so **delete the `--*` custom-property declarations** from the standalone `:root { }` block instead of carrying them over; move any remaining `:root` rules (background / font-family — they reference `var(--*)`) onto `#root { }`, and fold bare `html,body { }` and bare `* { }` into `#root` / `#root *` (constraint #1).
    - `window.__timelines["main"]` → `window.__timelines["scene_<N>"]` (constraint #8; this host-id / registration-key rename is **not** covered by step 1's "sync timeline selectors"; do it separately).
 1. Prefix all classes/ids with `s<N>-`, and sync timeline selectors.
@@ -71,6 +71,12 @@ It reads `capture/extracted/tokens.json` (enriched sections + local image map) +
 3. Use the script's suggested `SCROLL_DISTANCE`, measure `#pop-target` rect to calibrate, and sync the `.spotlight` gradient center.
 
 Rewrite image `src` in `page-card.html` from `capture/assets/<file>` to **`public/<basename>`** (remove the `capture/assets/` prefix and keep only the filename) — prep flat-copies `capture/assets/**` into `public/`, preserving basenames; `public/` is the only asset surface that gates validate and render-time guarantees. `capture/` is a capture-stage directory and **does not enter the render surface** (writing `capture/assets/...` bypasses all gates and may fail at render time). **Do not switch back to remote URLs** (hotlinking/offline render can break images). For fidelity details, you may **read only for reference** from `capture/extracted/page.html` (read it, but do not render from it).
+
+**Captured 16:9 assets on a portrait / square canvas** — when the dispatched `Composition width`/`Composition height` is **not** 16:9 (portrait 1080×1920 or square 1080×1080), a wide screenshot / captured product asset does not fit the frame. Do **not** letterbox it with dead bars and do **not** stretch-distort it to fill. Instead:
+
+- **Crop to the salient region** (the headline UI / the one panel that matters) and place that.
+- **Seat it as a top or bottom band** and fill the remaining vertical space with kinetic type / supporting graphics from the component library.
+- Or **scale it down inside a device / browser-frame mock** so the wide asset reads as "a screen" within the tall composition.
 
 ## Constraints Specific to This Skill (Not Separately Covered by hyperframes-core)
 
@@ -137,7 +143,7 @@ Workers must execute these constraints exactly.
 8. **Timeline registration uses a literal scene id string:** `window.__timelines["scene_1"] = tl;`. Do not wrap it behind a `SID` variable (`check-compositions.mjs` cannot recognize it with regex). The whole `<script>` selector / dataset key / timeline key must use literals.
 9. **Macro-camera scenes get a layout escape hatch by default**
    - If `effects` contains any of `coordinate-target-zoom` / `multi-phase-camera` / `camera-cursor-tracking` / `viewport-change` → add `data-layout-allow-overflow="true"` to the outermost zoom/pan wrapper.
-   - Reason: the zoom peak necessarily exceeds the 1920×1080 viewport, and `hyperframes inspect` will report `text_box_overflow`. This is by design; declare it in advance.
+   - Reason: the zoom peak necessarily exceeds the canvas viewport, and `hyperframes inspect` will report `text_box_overflow`. This is by design; declare it in advance.
    - Example: `<div class="s2-zoom-outer" id="s2-zoom-outer" data-layout-allow-overflow="true">`
    - ⚠ **`allow-overflow` only pardons decorative bleed; it does not pardon primary large text**: the perception gate still checks whether display text is clipped by the canvas (`primary-offscreen`, caused by zoom scaling). Pushing brand text/headlines out of frame = bug, not by-design. Only mark that text element with `data-layout-bleed="true"` if large-text bleed is truly intentional.
    - ⚠ **Zooming into an asymmetric target (e.g. companion wider than chip) → measure the offset, do not hand-derive it**: after `await document.fonts.ready`, read the target's real `getBoundingClientRect()` center and bake `TARGET_OFFSET` (`center − viewport_center`); the equal-width card formula gives the **wrong sign** in asymmetric layouts, and 3×+ scaling magnifies the error out of frame. See the `coordinate-target-zoom` rule in `/hyperframes-animation`, section "Getting the offset".
@@ -156,36 +162,30 @@ Workers must execute these constraints exactly.
 12. **`data-duration` must equal dispatch `estimatedDuration_s` exactly** — Step 7 `assemble-index.mjs` places the full-film timeline using `group_spec` `start_s`, then checks each scene root `data-duration`; mismatch is **fatal** and blocks all of Step 7 back to you. Do not use an approximate value from `creative_brief`; do not round yourself. This is especially important when `voicePath` is non-empty (global timings for voice / SFX / captions are based on this value).
 13. **Bottom caption-band keep-out (HARD constraint — only when dispatch `Captions: enabled`, machine-checked in preflight)**
 
-    **One-line principle:** when `Captions: enabled`, finalize places a full-film word-by-word karaoke pill at the bottom; **the caption band occupies y900-1080 (180px), and every FOREGROUND element's target rendered lower edge must be ≤ y880** (20px safety). Foreground = headline / cards / CTA / button / chip / stat / hero text / quote / key logo / any readable content.
+    The canvas is `<Composition width>×<Composition height>` (from dispatch — landscape 1920×1080 by default, but portrait 1080×1920 or square 1080×1080 when the dispatch says so). When `Captions: enabled`, finalize places a full-film word-by-word karaoke pill in a bottom band. **The dispatch hands you two numbers — use them, never hardcode 900 / 880:**
+    - **`Caption band top y`** — the band runs from this y down to the canvas bottom (the bottom ~16.67% of canvas height).
+    - **`Foreground max y`** — every FOREGROUND element's target rendered lower edge must be ≤ this (= `Caption band top y` − 20px safety). Foreground = headline / cards / CTA / button / chip / stat / hero text / quote / key logo / any readable content.
 
-    Geometry (mental-calculate before writing each absolute position; if the lower edge computes to > 880, it is a bug):
+    Worked values: landscape 1920×1080 → band y900–1080, `Foreground max y` = 880. Portrait 1080×1920 → band y1600–1920, `Foreground max y` = 1580.
 
-    | CSS shape                                        | element lower-edge y formula              | Legal condition            |
-    | ------------------------------------------------ | ----------------------------------------- | -------------------------- |
-    | `bottom: <B>px` (no `top` / `height`)            | `1080 − B`                                | `B ≥ 200`                  |
-    | `top: <T>px` + `height: <H>px`                   | `T + H`                                   | `T + H ≤ 880`              |
-    | `top: <T>px` + natural height (estimate)         | `T + content height`                      | `T ≤ 880 − content height` |
-    | `top: <T>px` + `bottom: <B>px` (stretched strip) | `1080 − B` (bottom determines lower edge) | `B ≥ 200`                  |
-    | flex/grid child + `align-self: end`              | Parent container bottom                   | Parent lower edge ≤ 880    |
+    Geometry (mental-calculate before each absolute position; if the lower edge computes to > `Foreground max y`, it is a bug). Let **H = `<Composition height>`** and **FGmax = `Foreground max y`**:
 
-    **Safe anchoring cheat sheet for common elements** (no calculation needed; copy these):
+    | CSS shape                                        | element lower-edge y                   | Legal condition              |
+    | ------------------------------------------------ | -------------------------------------- | ---------------------------- |
+    | `bottom: <B>px` (no `top` / `height`)            | `H − B`                                | `B ≥ H − FGmax`              |
+    | `top: <T>px` + `height: <Hc>px`                  | `T + Hc`                               | `T + Hc ≤ FGmax`             |
+    | `top: <T>px` + natural height (estimate)         | `T + content height`                   | `T ≤ FGmax − content height` |
+    | `top: <T>px` + `bottom: <B>px` (stretched strip) | `H − B` (bottom determines lower edge) | `B ≥ H − FGmax`              |
+    | flex/grid child + `align-self: end`              | Parent container bottom                | Parent lower edge ≤ FGmax    |
 
-    | Element                                                 | Recommended positioning                                                           | Notes                            |
-    | ------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------- |
-    | chip / tag / pill (font 18-28, padding 10×20)           | `bottom: 200px` (height ≤ 60)                                                     | lower edge y ≤ 880               |
-    | small button (font 18-24, padding 14×32)                | `bottom: 200px`                                                                   | same                             |
-    | medium CTA button (font 28-36, padding 20×64)           | `bottom: 220px`                                                                   | leaves room for height ≤ 80      |
-    | large CTA / hero close button (font 40+, padding 28×72) | `bottom: 260px`                                                                   | leaves room for height ≤ 120     |
-    | full feature-card                                       | `top: 100-148px`, `height` capped to ≤ 720                                        | top + height ≤ 880               |
-    | vertical ticker / stretched strip                       | `top: 80px; bottom: 200px`                                                        | lower edge fixed at y=880        |
-    | centered hero text                                      | use flex `justify-content: center`, vertically anchor around y≈454 instead of 540 | center within y0-880 usable area |
+    `H − FGmax` is the minimum bottom offset: **200px on landscape, 340px on portrait** — i.e. a chip that sits at `bottom: 200px` on landscape must move to `bottom: 340px` on portrait. A centered hero anchors around **y ≈ 0.42 × H** (landscape ≈ 454, portrait ≈ 806), not the canvas midpoint.
 
-    **BACKGROUND exceptions (exempt, may be full-bleed to bottom y1080):**
+    **BACKGROUND exceptions (exempt, may be full-bleed to the canvas bottom):**
     - `#root` background / surface decoration / `::before` / `::after` frame / ambient mesh / full-bleed screenshot base layer.
     - Decorative leaf class names — preflight automatically skips selectors containing any of these keywords (split by hyphen/underscore): `bg` / `background` / `dot-grid` / `mesh` / `gradient` / `swell` / `ambient` / `texture` / `noise` / `scanline` / `surface` / `overlay` / `halo` / `glow` / `frame` / `pin` / `corner-pin` / `deco` / `star-burst` / `burst` / `ring` / `stripe` / `rect` / `shadow` / `pulse` / `ripple` / `measure` / `probe` / `hidden` / `scrim` / `backdrop` / `veil` / `fog` / `grain`.
     - Macro-camera overflow wrappers from constraint #9 (with `data-layout-allow-overflow="true"`) — zoom peaks naturally exceed the frame.
 
-    **When `Captions: disabled`:** full-canvas, vertical center y=540, content may extend all the way to y=1080. All constraints above are disabled; positioning is free.
+    **When `Captions: disabled`:** full-canvas, vertical center y = H / 2, content may extend all the way to the canvas bottom. All constraints above are disabled; positioning is free.
 
     **Preflight machine check** (Step 7 (2) `captions.mjs keepout`) catches three shapes:
     1. `position: absolute` + `bottom: <X>px`, X < 180 and non-decorative
@@ -263,10 +263,10 @@ Example below uses `scene_1` (for other scenes, replace `scene_1` / `s1-` with t
     id="root"
     class="scene_1-root"
     data-composition-id="scene_1"
-    data-width="1920"
-    data-height="1080"
+    data-width="<Composition width>"
+    data-height="<Composition height>"
     data-duration="<estimatedDuration_s>"
-    style="position:relative; width:1920px; height:1080px; overflow:hidden;"
+    style="position:relative; width:<Composition width>px; height:<Composition height>px; overflow:hidden;"
   >
     <style>
       /* Root element styles — write #root (not a self data-composition-id selector or .scene_1-root).
@@ -329,12 +329,13 @@ Replace `<scene-id>` / `<N>` / `<estimatedDuration_s>` below with real values (e
 PROJECT_DIR="<Dispatch context PROJECT_DIR>"
 F="$PROJECT_DIR/compositions/<scene-id>.html"
 SID=<scene-id>; N=<N>; EXPDUR=<estimatedDuration_s>
+W=<Composition width>; H=<Composition height>   # from dispatch (default 1920 / 1080 landscape)
 
 # File exists
 [ -s "$F" ] || echo "FAIL: empty/missing $F"
 
 # Root 5 attributes present at once (most common omissions: data-duration / id=\"root\") — if any are missing, finalize will catch it later and waste a round-trip
-for ATTR in 'id="root"' "class=\"${SID}-root\"" "data-composition-id=\"${SID}\"" 'data-width="1920"' 'data-height="1080"' 'data-duration="'; do
+for ATTR in 'id="root"' "class=\"${SID}-root\"" "data-composition-id=\"${SID}\"" "data-width=\"${W}\"" "data-height=\"${H}\"" 'data-duration="'; do
   grep -q "$ATTR" "$F" || echo "FAIL: root missing $ATTR — all 5 attributes must be present"
 done
 

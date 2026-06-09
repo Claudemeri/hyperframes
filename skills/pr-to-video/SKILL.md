@@ -1,6 +1,6 @@
 ---
 name: pr-to-video
-description: pr-to-video workflow - a GitHub pull request (URL like github.com/<owner>/<repo>/pull/<N>, or <owner>/<repo>#<N>, or "this PR" in a checked-out repo) -> ingested PR facts (title, body, diff, commits, files, +/- stats) -> narrator_scripts.json + audio (voice + BGM) + section_plan.md -> code-diff / before-after / impact explainer video. Input is a CODE CHANGE. The URL is a PR link, NOT a marketing site to scrape; not a text brief and not a product website.
+description: pr-to-video workflow - a GitHub pull request (URL like github.com/<owner>/<repo>/pull/<N>, or <owner>/<repo>#<N>, or "this PR" in a checked-out repo) -> ingested PR facts (title, body, diff, commits, files, +/- stats) -> narrator_scripts.json + audio (voice + BGM) + section_plan.md -> code-diff / before-after / impact explainer video. Input is a CODE CHANGE. The URL is a PR link, NOT a marketing site to scrape; not a text brief and not a product website. For a non-PR input (product site, general website, topic text), see /hyperframes-read-first.
 metadata:
   tags: orchestrator, pipeline, pr-to-video, changelog, dev-rel, code-explainer, release-notes
 ---
@@ -8,6 +8,8 @@ metadata:
 # pr-to-video - dispatch entry
 
 Input is a **GitHub pull request** (a code change), supplied as a PR URL, an `<owner>/<repo>#<N>` ref, or "this PR" while a repo with an open PR is checked out. Output is a **code-change explainer**: what shipped, why, and how it works — rendered from the diff/commits as before-after, diff-highlight, file-tree, and impact scenes. Default length **up to ~3 min** (sweet spot ~30-90s); a genuinely longer or exhaustive every-file walkthrough (5 min+) is a different register → `/general-video`. There is **no website scrape and no headless Chrome for ingest** — ingest is the `gh` CLI. The shipped style preset is always **claude** (warm editorial; signature navy code window).
+
+> **Confirm the route before Step 0.** This skill explains a **GitHub pull request** (a code change read via `gh`). If the input is a **marketing / product site** → `/product-launch-video`; a **general website** → `/website-to-video`; a **topic / article with no PR** → `/faceless-explainer`; a **whole-repo tour or multi-PR release** → `/general-video`. **Out of scope**: live / at-render-time data — PR facts are read once at author time and baked in. Handed a non-PR input, or unsure? **Read `/hyperframes-read-first` first.**
 
 This workflow owns only the PR-specific front (**ingest + story-design**); every phase marked _shared_ reuses the engine copied from faceless-explainer unchanged (it lives under this skill's own `scripts/` + `agents/` + `phases/`, so `<SKILL_DIR>` resolves to pr-to-video).
 
@@ -28,7 +30,7 @@ All artifacts go to `PROJECT_DIR = videos/<project-name>/` (created in Step 0); 
 
 ## Prerequisites
 
-macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node ffmpeg` (use Homebrew Python, **not** `/usr/bin/python3`, or `pip install` is blocked by PEP 668); then `npx hyperframes doctor` once (downloads Chrome — needed for snapshot/render, not for ingest). CLIs: **`gh`** (GitHub CLI, authenticated — `gh auth status` must pass) and `hyperframes`. Optional cloud keys (else local fallbacks) — inject in Step 0.5:
+macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node ffmpeg` (use Homebrew Python, **not** `/usr/bin/python3`, or `pip install` is blocked by PEP 668); then `npx hyperframes doctor` once (downloads Chrome — needed for snapshot/render, not for ingest). For a final/shipping render also install Puppeteer (`npm i puppeteer`) so the Tier-1 perception gate (collision / contrast / cramped / panel-bleed) actually runs — without it the gate soft-skips and only the finalize eye-check remains; set `PLV_REQUIRE_PERCEPTION=1` (or pass `--require-perception`) to make a skipped gate fail preflight instead of soft-passing. CLIs: **`gh`** (GitHub CLI, authenticated — `gh auth status` must pass) and `hyperframes`. Optional cloud keys (else local fallbacks) — inject in Step 0.5:
 
 | Key / requirement                             | Used for                                    | Default / fallback                                             |
 | --------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
@@ -39,6 +41,10 @@ macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node f
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` (aliases) | Lyria BGM                                   | unset -> local MusicGen (first run downloads ~300 MB)          |
 
 ## Flow
+
+### Step 0.0 - Confirm the brief (one round, then build)
+
+Before Step 0, in **one** message confirm only what you can't infer from the PR — lead with a default, skip what's given: the **angle** (changelog / feature reveal / fix / refactor — default: infer from the PR), the **audience** (developers vs general users — default: developers), **length** (default ~60-90s), and — if `/hyperframes-read-first` didn't set them — **aspect** (default 16:9) and **language**. Style is always `claude`. For a clearly specified ask, skip this and build.
 
 ### Step 0 - Initialize the video project
 
@@ -52,9 +58,10 @@ Only when `$PROJECT_DIR/hyperframes.json` is absent:
 PROJECT_DIR="${PR_VIDEO_DIR:-videos/<project-name>}"
 mkdir -p "$(dirname "$PROJECT_DIR")"
 npx hyperframes init "$PROJECT_DIR" --non-interactive --skip-skills --example=blank
+rm -f "$PROJECT_DIR/CLAUDE.md"   # Claude Code auto-loads CLAUDE.md from the project subtree; its generic `/hyperframes` guidance competes with this skill. (AGENTS.md is never auto-loaded — leave it as scaffolding.)
 ```
 
-> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`; **leave them in place** — they are agent scaffolding for whoever opens the finished project later.
+> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`. **Remove `CLAUDE.md`** (done above): Claude Code auto-loads it on-demand the moment the agent touches a file under `$PROJECT_DIR`, and its generic guidance competes with this skill (the source of truth). **Leave `AGENTS.md`**: Claude Code never auto-loads it, so it stays inert during the build and remains as scaffolding for whoever opens the finished project later.
 
 **Constraints:** never run `hyperframes init` / generate `AGENTS.md` / `CLAUDE.md` in the workspace root; never nest another `hyperframes/` inside `PROJECT_DIR`; every Bash command (master + subagents) is a `(cd "$PROJECT_DIR" && ...)` subshell — never bare `cd`.
 
@@ -142,10 +149,11 @@ Diff: ./capture/diff.patch                           # the actual change — pul
 Brief: ./capture/extracted/visible-text.txt          # the assembled narrative brief
 People: ./capture/extracted/people.json              # contributors (PR author + commit authors w/ commitCount + reviewers/commenters) + avatarFile; avatars in public/avatars/ — optional credits close
 Design DNA: ./design-system/inference.json           # Read site_dna once to set register (soft hint only)
+Orientation: <landscape | portrait | square>        # From the Step 0.0 aspect (16:9→landscape, 9:16→portrait, 1:1→square; default landscape). Emit VERBATIM as the top-level `orientation` field — dictated, not a choice; sets the canvas (portrait→1080×1920) for the whole pipeline.
 Script style: concise, dev-facing — 1-2 sentences/scene, <=20 words; name the change, the why, the impact
 ```
 
-The agent picks a PR **archetype** for `narrativeArchetype` (`changelog` / `feature-reveal` / `fix-explainer` / `refactor-walkthrough`, or `"<outer> with <inner>"`) and emits `narrator_scripts.json` (it runs the validator before returning). `continuity` drives worker grouping: `continue` = same worker as the previous scene (cap=3); `break` = new worker; scene 1 is always `break`. `intent` / `sharedMotif` are soft hints. `assetCandidates` is `[]` on essentially every scene (faceless) — the one exception is an **optional credits / shipped-by close** that may reference the contributor avatars in `public/avatars/<login>.png` (from `people.json`).
+The agent picks a PR **archetype** for `narrativeArchetype` (`changelog` / `feature-reveal` / `fix-explainer` / `refactor-walkthrough`, or `"<outer> with <inner>"`), echoes the dispatched **`orientation`** as a top-level field (Step 5 prep → canvas size), and emits `narrator_scripts.json` (it runs the validator before returning). `continuity` drives worker grouping: `continue` = same worker as the previous scene (cap=3); `break` = new worker; scene 1 is always `break`. `intent` / `sharedMotif` are soft hints. `assetCandidates` is `[]` on essentially every scene (faceless) — the one exception is an **optional credits / shipped-by close** that may reference the contributor avatars in `public/avatars/<login>.png` (from `people.json`).
 
 ### Step 3 - Audio — SHARED
 
@@ -192,7 +200,8 @@ Then dispatch the visual-design subagent. prompt = full contents of `agents/visu
 SKILL_DIR: <absolute path>
 PROJECT_DIR: <video project root>
 Schema validator: <SKILL_DIR>/scripts/validate.mjs section
-Captions: <enabled | disabled>   # Planning hint from the node -e above: enabled => leave bottom ~17% as caption territory in prose
+Canvas: <width>×<height>   # default 1920×1080 (16:9 landscape); 1080×1920 (9:16 portrait) or 1080×1080 (1:1 square) if requested upstream (narrator_scripts.orientation/dimensions). Plan layouts for THIS aspect ratio — see composition.md "Portrait & Square".
+Captions: <enabled | disabled>   # Planning hint from the node -e above: enabled => leave the bottom ~17% of canvas height as caption territory in prose
 Dispatch packet: /tmp/vd-dispatch.txt   # Step 0 reads it once for all inputs
 Visuals: faceless code-change — every scene is a code-window / before-after split / file-tree / +/- counter / diagram / typography invented from the script + the featured diff hunk. assetCandidates is [] for most or all scenes; plan visuals from the script and diff, not from captured assets.
 ```
@@ -250,9 +259,9 @@ mkdir -p /tmp/scene-dispatch
 # Then per worker: shared header + that worker's Scenes YAML -> /tmp/scene-dispatch/w<N>.txt
 ```
 
-Start **N scene workers in parallel in the same message** (`general-purpose`, each `run_in_background: true`). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body + a `Scenes:` list.
+Start **N scene workers in parallel in the same message** (`general-purpose`, each `run_in_background: true`). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height`) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body + a `Scenes:` list.
 
-For the worker top-level context, copy from `group_spec.json.groups[i]`: `worker_id`, `composition_id`, `composition_file`, `duration_s`, `scene_ids`. Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-3 logical scenes): `scene_id` / `local_start_s` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `design_chunks` (absolute paths to the whole component library — the worker chooses by visual judgment) / `creative_brief`. A continue run of 2-3 scenes writes one `group_wN.html` with true shared DOM across the segments.
+For the worker top-level context, copy from `group_spec.json.groups[i]`: `worker_id`, `composition_id`, `composition_file`, `duration_s`, `scene_ids`; and from the top of `group_spec.json`: `width`, `height` (the worker authors + self-checks the root at these dims — landscape 1920×1080 unless portrait/square was requested upstream). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580) — constraint #13 keep-out is computed from these, not hardcoded. Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-3 logical scenes): `scene_id` / `local_start_s` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `design_chunks` (absolute paths to the whole component library — the worker chooses by visual judgment) / `creative_brief`. A continue run of 2-3 scenes writes one `group_wN.html` with true shared DOM across the segments.
 
 `assetCandidates` is `[]` for most or all scenes — the worker invents the visual from `creative_brief` + design chunks (code-window for diffs, before/after, +/- counters); there are no captured assets to place. `design_chunks: null` (chunks missing) → worker falls back to reading `./design-system/design.html` fully; should not happen in the normal path.
 

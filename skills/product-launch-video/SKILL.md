@@ -10,12 +10,15 @@ description: >
   or URL (faceless-explainer), GitHub PR/code-change videos (pr-to-video),
   general non-launch website videos (website-to-video), captions on
   existing video (embedded-captions), or short design-led motion graphics
-  (motion-graphics).
+  (motion-graphics). When product-vs-topic or launch-vs-general-site is unclear,
+  do not assume — start at /hyperframes-read-first.
 metadata:
   tags: orchestrator, pipeline, product-launch
 ---
 
 # product-launch-video - dispatch entry
+
+> **Confirm the route before Step 0.** This skill makes a video for a **product being marketed / launched / promoted**. If it's really a **general (non-launch) site → video** (site tour / showcase, not selling a product) → `/website-to-video`; a **topic / concept with no product** → `/faceless-explainer`; a **GitHub PR** → `/pr-to-video`; an **existing video to caption / package** → `/embedded-captions` · `/graphic-overlays`. **Out of scope** (decline, don't fake): live / at-render-time data (every value is baked in at author time), or footage / screenshots / an avatar that doesn't exist yet (HyperFrames can't record or capture). Routed here on a vague "make a video", or unsure product-vs-topic / launch-vs-general-site? **Read `/hyperframes-read-first` first.**
 
 All artifacts are written to `PROJECT_DIR = videos/<project-name>/` (created in Step 0). All paths in the table below are relative to `PROJECT_DIR`.
 
@@ -45,6 +48,7 @@ npx hyperframes doctor                                  # One-time check that Ch
 - `node >= 18` - used by `npx hyperframes`
 - `ffmpeg` - `audio.mjs` uses `ffprobe` to read voice duration
 - `hyperframes` CLI - Phase 1 capture and design-system share the same capture; on first `npx hyperframes capture`, the browser manager downloads Chrome automatically
+- **Puppeteer (for a final/shipping render)** - `npm i puppeteer` so the Tier-1 perception gate (collision / contrast / cramped / panel-bleed) actually runs; without it the gate soft-skips and only the finalize eye-check remains. Set `PLV_REQUIRE_PERCEPTION=1` (or pass `--require-perception`) to make a skipped gate **fail** preflight instead of soft-passing
 
 Optional API keys (if unset, the workflow uses local fallbacks). Injection is described in Step 0.5. `GEMINI_API_KEY` and `GOOGLE_API_KEY` are equivalent aliases.
 
@@ -73,10 +77,10 @@ cwd is the agent workspace root (for example `/tmp/launch-video-202347`) and sho
 PROJECT_DIR="${LAUNCH_VIDEO_DIR:-videos/<project-name>}"
 mkdir -p "$(dirname "$PROJECT_DIR")"
 npx hyperframes init "$PROJECT_DIR" --non-interactive --skip-skills --example=blank
-rm -f "$PROJECT_DIR/AGENTS.md" "$PROJECT_DIR/CLAUDE.md"   # Workflow constraints live in this skill; do not rely on project-local helper docs
+rm -f "$PROJECT_DIR/CLAUDE.md"   # Claude Code auto-loads CLAUDE.md from the project subtree; its generic `/hyperframes` guidance competes with this skill. (AGENTS.md is never auto-loaded — leave it as scaffolding.)
 ```
 
-> `AGENTS.md` / `CLAUDE.md` are generated only once during `hyperframes init` - deleting them once above is enough. **Later capture / build-design / any phase will not regenerate them**, so do not repeat `rm` in later Bash blocks.
+> Only `CLAUDE.md` is removed: Claude Code auto-loads it on-demand the moment the agent touches a file under `$PROJECT_DIR`, injecting generic guidance that competes with this skill (the source of truth). `AGENTS.md` is **left in place** — Claude Code never auto-loads it, so it stays inert during the build and remains as scaffolding for whoever opens the finished project later. `CLAUDE.md` is generated only once during `hyperframes init`; **later capture / build-design / any phase will not regenerate the root `CLAUDE.md`**, so do not repeat `rm` in later Bash blocks.
 
 **Constraints** (violating any one of these makes later phases unable to find artifacts or triggers lint errors):
 
@@ -183,6 +187,7 @@ The Step 1 Bash phase has already deterministically produced `design-system/infe
 - **design-system** (Phase 1b): dispatch a subagent. `## Dispatch context` contains `SKILL_DIR` / `PROJECT_DIR` / `Target URL`, and includes the full Step 1 `inference.json` by `cat` (`(cd "$PROJECT_DIR" && cat design-system/inference.json)`, ~2-4 KB, saving the subagent one Read). The four-step flow of preset selection / brand color trimming / build-design / emit-chunks belongs to `agents/design-system.md`; the master does not need to expand it.
 
 - **story-design** (Phase 2): dispatch a subagent. `## Dispatch context`:
+
   ```
   SKILL_DIR: <absolute path>
   PROJECT_DIR: <video project root>
@@ -191,7 +196,10 @@ The Step 1 Bash phase has already deterministically produced `design-system/infe
   Provided script: ./user_script.txt   # ONLY when the user supplied a script (Step 1.0). This file is the narration spine; omit the whole line when there is no user script.
   Voice-over mode: <verbatim | restructure>   # From Step 1.0; pair it with the Provided script line. Omit when there is no user script.
   Script style: Keep each scene's script concise - 1-2 sentences, no more than 20 words   # Applies in restructure / no-user-script mode ONLY. In verbatim mode this budget is suspended — preserve the user's wording and let total length follow the script (see story-design guide "Provided-Script Modes").
+  Orientation: <landscape | portrait | square>   # From the user's requested aspect / `/hyperframes-read-first` (16:9→landscape, 9:16→portrait, 1:1→square; default landscape when unspecified). Emit VERBATIM as the top-level `orientation` field — dictated, not a choice; it sets the canvas (portrait→1080×1920) for the whole pipeline.
   ```
+
+  > Fill `Orientation:` from the user's requested aspect (default `landscape`); story-design echoes it into `narrator_scripts.orientation`, which Step 5 prep maps to `group_spec.width/height`. Without it the launch video stays 16:9.
 
 ### Step 3 - Audio (Phase 2.5)
 
@@ -241,7 +249,8 @@ Then start the visual-design subagent. **Its prompt = the full contents of `agen
 SKILL_DIR: <absolute path>
 PROJECT_DIR: <video project root>
 Schema validator: <SKILL_DIR>/scripts/validate.mjs section
-Captions: <enabled | disabled>   # Planning hint computed by the node -e above: enabled => leave key content in the upper ~83% and the bottom ~17% as caption territory in prose (see guide Section 4, rule 2)
+Canvas: <width>×<height>   # default 1920×1080 (16:9 landscape); 1080×1920 (9:16 portrait) or 1080×1080 (1:1 square) if the orientation source requested it (narrator_scripts.orientation/dimensions). Plan layouts for THIS aspect ratio — see composition.md "Portrait & Square".
+Captions: <enabled | disabled>   # Planning hint computed by the node -e above: enabled => leave key content in the upper ~83% and the bottom ~17% of canvas height as caption territory in prose (see guide Section 4, rule 2)
 Dispatch packet: /tmp/vd-dispatch.txt   # Step 0 reads it once to get all inputs; section order described below. Reading it is enough; normally no further disk Reads are needed
 ```
 
@@ -305,7 +314,7 @@ mkdir -p /tmp/scene-dispatch
 
 **Scene workers** (each writes `compositions/scene_<N>.html`):
 
-- N `Agent` calls (`subagent_type: "general-purpose"`, each `run_in_background: true`). prompt = the full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, passed through verbatim. Top-level dispatch context fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus `## Tokens/easings/voice` (the shared header body) + a two-part `Scenes:` list (the packet contents).
+- N `Agent` calls (`subagent_type: "general-purpose"`, each `run_in_background: true`). prompt = the full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, passed through verbatim. Top-level dispatch context fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height` — the worker authors + self-checks the root at these dims; landscape 1920×1080 unless portrait/square was requested upstream) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus `## Tokens/easings/voice` (the shared header body) + a two-part `Scenes:` list (the packet contents). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580) — constraint #13 keep-out is computed from these, not hardcoded.
 
   Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-2 scenes): `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `shared_element_bridge` (Tier-A, usually null) / `design_chunks` (contains absolute paths to the whole component library - the worker chooses by visual judgment) / `creative_brief` (the Phase 3 prose for that scene). Field semantics are in `agents/hyperframes-scene.md`.
 

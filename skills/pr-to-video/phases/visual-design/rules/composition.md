@@ -1,12 +1,12 @@
 ---
 name: video-composition
-description: "Composition design decisions for 1920x1080 HyperFrames videos — canvas zones, 7 layout templates, density rules, hierarchy logic, depth principles. Specific px / scale / shadow values live in build agent territory."
+description: "Composition design decisions for HyperFrames videos (1920x1080 landscape by default; also 1080x1920 portrait / 1080x1080 square) — canvas zones, 7 layout templates, density rules, hierarchy logic, depth principles. Specific px / scale / shadow values live in build agent territory."
 category: visual-design
 ---
 
-# Composition for 1920x1080 Video - Design-Judgment Layer
+# Composition for Video - Design-Judgment Layer
 
-Plan-layer only — canvas zones, 7 templates, density rules, hierarchy logic, depth principles. Concrete px / scale / shadow values are build-agent territory.
+Plan-layer only — canvas zones, 7 templates, density rules, hierarchy logic, depth principles. Concrete px / scale / shadow values are build-agent territory. The default canvas is **1920×1080 (16:9 landscape)**; for **portrait (1080×1920)** and **square (1080×1080)** see "Portrait & Square" below — the principles are identical, the aspect ratio is not.
 
 ## Squint Test
 
@@ -20,7 +20,7 @@ If everything has equal weight after blur, hierarchy is broken - redesign before
 
 ## Canvas Zones (conceptual)
 
-1920x1080 canvas has four zones:
+The canvas (shown here as 1920×1080 landscape) has four zones:
 
 ```
 +--------------------------------------------------+
@@ -42,9 +42,20 @@ If everything has equal weight after blur, hierarchy is broken - redesign before
 - **Top chrome** - only for workspace mockup scenes; otherwise skip.
 - **Safe margin** - key content stays away from edges; hero / editorial scenes need more air.
 - **Primary content area** - the center 65-75% of the frame is where the eye naturally rests; body text blocks should **never** press against the edge.
-- **Caption band (bottom ~17%, HARD reserved when captions are enabled)** - when this film has captions enabled (`group_spec.captions_enabled`), the bottom ~17% (1920x1080 -> bottom 180px, y 900-1080) is a **HARD reserved zone**: primary content area and all key visuals **must cap at y <= 900**, and vertical centering should anchor at **y ≈ 454 (0.42 × height)**, not the canvas midpoint. BACKGROUND / ambient / surface decoration layers are exempt and may remain full-bleed. When captions are disabled, this zone can be used normally. Plan example: "captions enabled - hero block centered in upper ~83%, stat card bottom edge sits at y≈880 just above the caption band; background mesh stays full-bleed."
+- **Caption band (bottom ~17%, HARD reserved when captions are enabled)** - when this film has captions enabled (`group_spec.captions_enabled`), the bottom ~17% of **canvas height** is a **HARD reserved zone** (landscape 1080h -> bottom 180px, y 900-1080; portrait 1920h -> bottom 320px, y 1600-1920): primary content area and all key visuals **must cap at the caption-band top y**, and vertical centering should anchor at **y ≈ 0.42 × height** (landscape ≈454, portrait ≈806), not the canvas midpoint. BACKGROUND / ambient / surface decoration layers are exempt and may remain full-bleed. When captions are disabled, this zone can be used normally. Plan example: "captions enabled - hero block centered in upper ~83%, stat card bottom edge sits at y≈880 just above the caption band; background mesh stays full-bleed."
 
 Plan writes "hero word centered with generous safe margins"; it does not write `padding: 150px 120px 92px`.
+
+## Portrait & Square (non-16:9 canvases)
+
+The canvas is **1920×1080 (16:9 landscape) by default**, but the dispatch `Canvas:` line may be **1080×1920 (9:16 portrait — reels / shorts / TikTok)** or **1080×1080 (1:1 square — feed)**. The zones, density rules, hierarchy logic, and depth principles above all still apply; what changes is the **aspect ratio**, and a layout designed for a wide frame does not transplant into a tall one. Read the dispatched `Canvas:` and design for that shape from the start — do not plan landscape and "crop".
+
+- **Stack vertically, not side-by-side.** Portrait has little horizontal room: split-screen / triptych / asymmetric 60-40 become **top/bottom stacks**, vertical step lists, and stacked bands. A wide marquee strip becomes a centered stack. Square tolerates side-by-side only for two compact items.
+- **Code / diff / PR panels stack and shrink their content, not their type.** A wide unified diff does not fit a 9:16 frame — stack panels vertically (before-over-after, or panel over file tree), drop to **fewer columns with larger line-height and shorter wrapped lines**, and show **shorter excerpts** (the load-bearing hunk, not the whole file). Contributor-avatar rows become compact vertical stacks. Never shrink code to illegibility — keep every line ≥ 24px.
+- **Vertical center moves with the canvas.** Anchor a centered hero around **y ≈ 0.42 × canvas height** (portrait ≈ 806, square ≈ 454), not a fixed 540. The caption band is still the bottom ~17% of **height** (portrait → y1600–1920; square → y900–1080) and is HARD-reserved when captions are enabled.
+- **Type runs larger, fewer words per line.** A narrow frame wraps long headlines (and long code lines) badly — prefer short kinetic lines, bigger type, and more vertical rhythm. Treat the tall axis as the primary reading flow.
+- **Templates that travel well to portrait:** Centered (hero/climax), Layered Depth, Full-Width Strip (now a stacked band), vertical Rule-of-Thirds. **Avoid** wide Split Screen and Triptych in portrait; reach for stacked equivalents.
+- **Density still rules.** Primary visual ≥ 40% of canvas, ≥ 3 depth layers — but measured against the tall frame; an empty top or bottom third reads as placeholder just like dead center does on landscape.
 
 ## 7 Composition Templates
 

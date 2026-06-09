@@ -22,6 +22,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
+import { readDims, captionBand } from "./lib/dimensions.mjs";
 
 // =====================================================================
 // group  — was build-captions.mjs
@@ -298,8 +299,13 @@ async function runGroup(argv) {
     }
   }
 
+  const { width: cgW, height: cgH } = readDims(spec);
   const out = {
     total_duration_s: Number(spec.total_duration_s) || 0,
+    // Canvas size flows group_spec → here → captions.mjs html (which sizes the
+    // skin root). Landscape default for pre-dims specs.
+    width: cgW,
+    height: cgH,
     source_word_count: rawWords.length,
     cleaned_word_count: cleaned.length,
     groups: outGroups,
@@ -501,6 +507,10 @@ async function runHtml(argv) {
   if (!isFinite(totalDuration) || totalDuration <= 0)
     die(`caption_groups.total_duration_s missing/invalid (${cg.total_duration_s})`);
 
+  // Canvas size — stamped into caption_groups.json by `group`; landscape default.
+  // Skin root + body box are retargeted to these in buildPresetSkin.
+  const { width: skinW, height: skinH } = readDims(cg);
+
   const tokensCss = readFileSync(tokensPath, "utf8");
 
   // ---------- transform helpers (assert-or-die) — shared by both skin sources ----------
@@ -581,6 +591,23 @@ async function runHtml(argv) {
       `<style data-brand-tokens>\n${tokensCss.trim()}\n    </style>`,
       "preset brand tokens",
     );
+    // Canvas retarget — skins are authored landscape 1920×1080; for portrait/
+    // square, rewrite the root data-width/height + the body/root px box (the
+    // skins' own `@media (max-aspect-ratio: 9/16)` block then repositions the
+    // pill). No-op on landscape, so the common path is byte-identical.
+    if (skinW !== 1920 || skinH !== 1080) {
+      // Two-phase swap via sentinels: a naive `.split("1920px")…split("1080px")`
+      // collides (the px the first pass writes is re-hit by the second), leaving
+      // width stuck at 1920 for portrait. Sentinels make the swap simultaneous.
+      h = h
+        .split('data-width="1920"').join(`data-width="${skinW}"`)
+        .split('data-height="1080"').join(`data-height="${skinH}"`)
+        .split("1920px").join(" WPX ")
+        .split("1080px").join(" HPX ")
+        .split(" WPX ").join(`${skinW}px`)
+        .split(" HPX ").join(`${skinH}px`)
+        .split("width=1920, height=1080").join(`width=${skinW}, height=${skinH}`);
+    }
     return h;
   }
 
@@ -1194,15 +1221,18 @@ ${tokensCss.trim()}
 //
 // Exit codes (CLI): 0 = captions disabled or no violations, 1 = violations.
 async function runKeepout(argv) {
-  // ---------- constants ----------
-  const CANVAS_HEIGHT_PX = 1080;
-  const CAPTION_BAND_TOP_Y = 900; // foreground must end at or above this y
-  const FAIL_THRESHOLD_BOTTOM_PX = 180; // any `bottom:` strictly less than this is suspect
-  const SUGGESTED_MIN_BOTTOM_PX = 200; // safe blanket — element bottom lands at y=880 (20px clearance)
-  // Geometry note: with `position: absolute; bottom: 200px;` the element's
-  // bottom edge is at y = 1080 − 200 = 880, which is 20px above the caption
-  // band edge at y=900. This works regardless of element height — the
-  // constraint is "where does the element END", not "where does it start".
+  // ---------- constants (canvas-relative; recomputed from group_spec.height in
+  // runCli before the check runs — these are the landscape defaults / fallback) ----------
+  let CANVAS_HEIGHT_PX = 1080;
+  let CAPTION_BAND_TOP_Y = 900; // foreground must end at or above this y
+  let FAIL_THRESHOLD_BOTTOM_PX = 180; // any `bottom:` strictly less than this is suspect (= band height)
+  let SUGGESTED_MIN_BOTTOM_PX = 200; // safe blanket — element bottom lands 20px above the band
+  // Geometry note: with `position: absolute; bottom: <SUGGESTED_MIN>px;` the
+  // element's bottom edge is at y = H − SUGGESTED_MIN = CAPTION_BAND_TOP_Y − 20,
+  // i.e. 20px above the band edge. Holds for any canvas height — the constraint
+  // is "where does the element END", not "where does it start". Landscape:
+  // H=1080, band top y=900, min bottom 200. Portrait: H=1920, band top y=1600,
+  // min bottom 340.
 
   // Decoration / background name patterns. Selectors whose LEAF class/id name
   // matches any of these are skipped — they're allowed to extend full-bleed
@@ -1258,7 +1288,7 @@ async function runKeepout(argv) {
         v.file = visual.file;
         v.visual_id = visual.id;
         v.logical_scene_ids = visual.sceneIds;
-        v.suggestion = v.suggestion.replace(`compositions/${visual.id}.html`, visual.file);
+        v.instruction = v.instruction.replace(`compositions/${visual.id}.html`, visual.file);
         violations.push(v);
       }
     }
@@ -1535,6 +1565,15 @@ async function runKeepout(argv) {
       process.exit(2);
     }
     const groupSpec = JSON.parse(readFileSync(groupSpecPath, "utf8"));
+    // Recompute the band geometry for this canvas (portrait/square shift it down).
+    {
+      const { height: H } = readDims(groupSpec);
+      const { bandHeight, bandTopY } = captionBand(H, 20);
+      CANVAS_HEIGHT_PX = H;
+      CAPTION_BAND_TOP_Y = bandTopY;
+      FAIL_THRESHOLD_BOTTOM_PX = bandHeight;
+      SUGGESTED_MIN_BOTTOM_PX = bandHeight + 20;
+    }
     const result = checkCaptionKeepout({ groupSpec, hyperframesDir });
 
     if (asJson) {

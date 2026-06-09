@@ -14,6 +14,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { transitionsByName } from "./lib/transition-registry.mjs";
+import { readDims } from "./lib/dimensions.mjs";
 
 // ===========================================================================
 // inject ← inject-transitions.mjs
@@ -41,6 +42,11 @@ async function runInject(argv) {
   } catch (e) {
     die(`group_spec.json parse: ${e.message}`);
   }
+
+  // Slide transitions push a wrapper fully off-canvas, so the travel distance is
+  // the canvas dimension along the slide axis (read from group_spec; landscape
+  // default for pre-dims specs).
+  const { width: CANVAS_W, height: CANVAS_H } = readDims(spec);
 
   const transitions = Array.isArray(spec.transitions) ? spec.transitions : [];
   // Both tiers get the SAME wrapper overlap + ping-pong-track mechanics; only the
@@ -223,11 +229,11 @@ async function runInject(argv) {
       if (!template)
         die(`transition ${t.type}: missing ${vertical ? "vertical" : "horizontal"} template`);
       if (vertical) {
-        const dy = dir === "UP" ? -1080 : 1080;
+        const dy = dir === "UP" ? -CANVAS_H : CANVAS_H;
         extra.__DY__ = String(dy);
         extra.__DYIN__ = String(-dy); // incoming enters from the opposite edge
       } else {
-        const dx = dir === "LEFT" ? -1920 : 1920;
+        const dx = dir === "LEFT" ? -CANVAS_W : CANVAS_W;
         extra.__DX__ = String(dx);
         extra.__DXIN__ = String(-dx);
       }

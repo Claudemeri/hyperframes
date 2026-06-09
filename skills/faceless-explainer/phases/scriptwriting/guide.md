@@ -257,6 +257,7 @@ Downstream agents expect these **exact** field names. Wrong names (e.g. `scene_i
   "project": "Project name",
   "narrativeArchetype": "Explainer structure (concept-explainer | how-to-process | listicle | story-explainer), or compound \"<outer> with <inner>\"",
   "stylePreset": "One of: pin-and-paper | block-frame | capsule | scatterbrain | claude — drives the entire visual system (default pin-and-paper)",
+  "orientation": "Canvas aspect, echoed verbatim from the dispatch Orientation line: landscape (16:9, default) | portrait (9:16) | square (1:1). Dictated by the user's aspect, not chosen. prep maps it to group_spec.width/height. Omit → landscape.",
   "emotionalArc": "Comprehension journey description (e.g. 'Puzzlement at why time speeds up shifting to clarity and a small delight as memory density explains it.')",
   "scenes": [
     {

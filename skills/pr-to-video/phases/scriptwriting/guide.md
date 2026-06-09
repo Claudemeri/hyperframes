@@ -265,6 +265,7 @@ Downstream agents expect these **exact** field names. Wrong names (e.g. `scene_i
 {
   "project": "Project name",
   "narrativeArchetype": "PR archetype (changelog | feature-reveal | fix-explainer | refactor-walkthrough), or compound \"<outer> with <inner>\"",
+  "orientation": "Canvas aspect, echoed verbatim from the dispatch Orientation line: landscape (16:9, default) | portrait (9:16) | square (1:1). Dictated by the user's aspect, not chosen. prep maps it to group_spec.width/height. Omit → landscape.",
   "emotionalArc": "Comprehension journey (e.g. 'Frustration at a flaky timeout shifting to relief as the retry loop recovers the request.')",
   "scenes": [
     {

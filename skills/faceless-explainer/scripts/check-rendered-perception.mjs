@@ -36,6 +36,12 @@
 //                                    ancestor. The signature of an asset / wordmark
 //                                    placed on a surface it was not authored for
 //                                    (e.g. a dark-glyph svg on a dark card).
+//   8. foreground-over-panel      — a non-decorative text node overlaps an opaque
+//                                    sibling panel/card it is NOT inside (supporting
+//                                    text bleeding onto a primary panel edge). Fills
+//                                    the gap between 3a (primary↔primary only) and
+//                                    3b (text↔text ≥40px only). Checked EVEN under
+//                                    data-layout-allow-overflow.
 //
 // All thresholds live in one CFG block below so they are tunable in one place.
 // Writes a JSON report (schema-compatible with check-caption-keepout violations
@@ -48,6 +54,7 @@
 
 import { readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { readDims } from "./lib/dimensions.mjs";
 import { homedir } from "node:os";
 import { parseArgs } from "node:util";
 
@@ -108,6 +115,11 @@ const CFG = {
   //                            font-too-small or by validate's WCAG-AA rail
   contrastMinAssetSizePx: 96, // …and skip tiny SVGs (icon glyphs) — only flag wordmark-
   //                            scale assets (≥96×40 ish)
+  panelBleedMinFontPx: 16, // foreground-over-panel: ignore sub-16px chrome
+  panelBleedOverlapFrac: 0.05, // flag when the text bbox straddles a panel edge: ≥5% over it…
+  panelBleedMaxFrac: 0.5, // …but <50% (≥50% = text sitting fully ON the panel = content placed there, not an edge-bleed)
+  panelMinSidePx: 200, // a "panel" is a substantial opaque surface (≥200px on both sides)
+  panelMinBgAlpha: 0.8, // …with an effectively opaque background-color
 };
 
 // ─────────────────────────────────────────── browser bootstrap ───
@@ -192,6 +204,11 @@ try {
 const groupSpec = JSON.parse(readFileSync(values["group-spec"], "utf8"));
 const projectRoot = resolve(values.hyperframes);
 
+// Canvas size — render + geometry checks must run at the authored resolution
+// (portrait/square clip differently than landscape). From group_spec.width/
+// height; landscape default for pre-dims specs.
+const { width: CANVAS_W, height: CANVAS_H } = readDims(groupSpec);
+
 // Brand @font-face block — assemble-index.mjs injects this into index.html's
 // <head> (the skill forbids @font-face inside scenes, so the scene <template>
 // alone renders every `var(--font-*)` in a system-ui fallback). Inject the SAME
@@ -199,6 +216,14 @@ const projectRoot = resolve(values.hyperframes);
 // face. url(public/fonts/…) is relative; the probe file lives at projectRoot so
 // file:// resolves it. Empty string when the project ships no brand fonts.
 const fontFaceCss = (groupSpec.font_face_css || "").trim();
+
+// Brand design tokens — the `:root { --cl-*: … }` block assemble-index.mjs injects
+// into index.html's <head>. Scene <template>s reference these via var(--*) but do
+// NOT define them, so without this the probe resolves every token-driven
+// background / color to its unset fallback (transparent panels, default text
+// color) — which silently defeats the contrast AND foreground-over-panel checks.
+// Inject the SAME block so the probe paints the real surfaces.
+const brandTokensCss = (groupSpec.brand_tokens_css || "").trim();
 
 // ─────────────────────────────────────────── launch browser ───
 const launchOpts = executablePath
@@ -219,7 +244,7 @@ let scenesNoTimeline = 0;
 
 // ─────────────────────────────────────────── DOM-side probe ───
 // This function runs inside the puppeteer page context. It must be self-contained.
-const PROBE = function probe(sid, compRel, cfg) {
+const PROBE = function probe(sid, compRel, cfg, CANVAS_W, CANVAS_H) {
   const v = [];
   const minFontPx = cfg.minFontPx;
 
@@ -651,8 +676,9 @@ const PROBE = function probe(sid, compRel, cfg) {
   // skipped. And the clip must be ZOOM-induced (a scaled ancestor ≥1.5×) — a
   // rest-size headline the layout parks bleeding off the margin is by design, not
   // a bug. data-layout-bleed="true" opts a specific element out entirely.
-  const CANVAS_W = 1920,
-    CANVAS_H = 1080;
+  // CANVAS_W / CANVAS_H are PROBE params (passed at page.evaluate). Module-level
+  // Node consts do NOT cross into the page context — referencing them bare here
+  // ReferenceErrors and throws the whole probe.
   for (const c of candidates) {
     if (c.deco) continue;
     if (c.fs < cfg.primaryTextMinFontPx) continue; // display tier only
@@ -681,7 +707,7 @@ const PROBE = function probe(sid, compRel, cfg) {
         bbox: `(${Math.round(r.left)},${Math.round(r.top)}) ${Math.round(r.width)}x${Math.round(r.height)}`,
         center_offset_px: `x=${offX} y=${offY}`,
       },
-      principle: `Display-tier text is ${Math.round(clippedFrac * 100)}% clipped by the 1920×1080 canvas (center off by x=${offX} y=${offY}). data-layout-allow-overflow does NOT exempt primary text.`,
+      principle: `Display-tier text is ${Math.round(clippedFrac * 100)}% clipped by the ${CANVAS_W}×${CANVAS_H} canvas (center off by x=${offX} y=${offY}). data-layout-allow-overflow does NOT exempt primary text.`,
       suggestion: `Almost always a coordinate-target-zoom error. MEASURE the target's real center (getBoundingClientRect after document.fonts.ready) and bake the counter-translate offset — don't hand-derive it (the equal-cards formula gets the sign wrong on asymmetric layouts). Cap zoom scale so the text stays ≤~88% of canvas width. If the bleed is truly intentional, mark the text element data-layout-bleed="true".`,
       fix_kind: "manual",
     });
@@ -1001,6 +1027,67 @@ const PROBE = function probe(sid, compRel, cfg) {
     });
   }
 
+  // ── Check 8: foreground-over-opaque-panel ──
+  // A non-decorative text node overlaps an opaque sibling panel/card it is NOT
+  // inside. Catches supporting text (or any text below the 40px display tier)
+  // bleeding onto a primary card/panel edge — the gap that 3a (primary↔primary)
+  // and 3b (text↔text ≥40px) both leave open. Runs EVEN under
+  // data-layout-allow-overflow (like Check 5): that attribute is for decorative
+  // bleed and must not hide a real text/panel collision.
+  const opaquePanels = [];
+  for (const el of all) {
+    if (!isVisible(el) || isInDecor(el)) continue;
+    const pr = el.getBoundingClientRect();
+    if (pr.width < cfg.panelMinSidePx || pr.height < cfg.panelMinSidePx) continue;
+    if (pr.width >= window.innerWidth * 0.92 && pr.height >= window.innerHeight * 0.92) continue; // full-frame backdrop, not a panel
+    const bg = parseRgb(getComputedStyle(el).backgroundColor);
+    if (!bg || bg.a < cfg.panelMinBgAlpha) continue;
+    opaquePanels.push({ el, rect: pr });
+  }
+  const reportedBleed = new Set();
+  for (const c of candidates) {
+    if (c.deco) continue;
+    if (c.fs < cfg.panelBleedMinFontPx) continue;
+    if (hasAriaHidden(c.el)) continue;
+    const t = c.rect;
+    const tArea = t.width * t.height;
+    if (tArea <= 0) continue;
+    for (const p of opaquePanels) {
+      if (p.el === c.el || isAncestor(p.el, c.el) || isAncestor(c.el, p.el)) continue; // inside it = legitimate
+      const ix = Math.max(0, Math.min(t.right, p.rect.right) - Math.max(t.left, p.rect.left));
+      const iy = Math.max(0, Math.min(t.bottom, p.rect.bottom) - Math.max(t.top, p.rect.top));
+      const inter = ix * iy;
+      if (inter <= 0) continue;
+      const frac = inter / tArea;
+      // Straddle only: a minority of the text dips over the panel edge. Full /
+      // majority containment (frac → 1) is text placed ON the panel as content
+      // (often a sibling layer, not a DOM child) — not an edge-bleed. z-order is
+      // not considered, so a partial straddle behind a higher panel is a known
+      // (rare) false-positive.
+      if (frac < cfg.panelBleedOverlapFrac || frac > cfg.panelBleedMaxFrac) continue;
+      const key = `${sid}|bleed|${c.sel}|${selectorFor(p.el)}`;
+      if (reportedBleed.has(key)) continue;
+      reportedBleed.add(key);
+      v.push({
+        type: "foreground-over-panel",
+        scene_id: sid,
+        file: compRel,
+        selector: c.sel + " over " + selectorFor(p.el),
+        text: c.txt.length > 60 ? c.txt.slice(0, 57) + "…" : c.txt,
+        metric: {
+          font_size_px: Math.round(c.fs * 10) / 10,
+          overlap_of_text: Math.round(frac * 1000) / 1000,
+          text_bbox: `(${Math.round(t.left)},${Math.round(t.top)}) ${Math.round(t.width)}x${Math.round(t.height)}`,
+          panel_bbox: `(${Math.round(p.rect.left)},${Math.round(p.rect.top)}) ${Math.round(p.rect.width)}x${Math.round(p.rect.height)}`,
+        },
+        principle: `Text "${c.txt.slice(0, 30)}" overlaps opaque panel ${selectorFor(p.el)} by ${(frac * 100).toFixed(0)}% of its bbox without being inside it — reads as text bleeding onto the panel edge. Not covered by primary↔primary or text↔text checks; data-layout-allow-overflow does NOT exempt it.`,
+        suggestion: `Reserve a gutter: move/narrow the text column (or the panel) so panel.right < text.left (or text.right < panel.left). Verify the gap numerically — don't eyeball. If this element is a connector/leader meant to touch the panel, mark it decorative (aria-hidden="true" or a decorative class) to exclude it.`,
+        fix_kind: "manual",
+      });
+      break;
+    }
+  }
+
   return v;
 };
 
@@ -1064,7 +1151,8 @@ for (const visual of visualTargets) {
 <meta charset="utf-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:1920px;height:1080px;overflow:hidden;background:#fff;font-family:system-ui,sans-serif;}
+html,body{width:${CANVAS_W}px;height:${CANVAS_H}px;overflow:hidden;background:#fff;font-family:system-ui,sans-serif;}
+${brandTokensCss ? `/* brand design tokens — mirrors index.html <head> so var(--*) backgrounds/colors resolve */\n${brandTokensCss}` : ""}
 ${fontFaceCss ? `/* brand @font-face — mirrors index.html <head> so text renders in the real face */\n${fontFaceCss}` : ""}
 </style>
 <script src="${values["gsap-cdn"]}"></script>
@@ -1078,7 +1166,7 @@ ${innerHtml}
   let page;
   try {
     page = await browser.newPage();
-    await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 });
+    await page.setViewport({ width: CANVAS_W, height: CANVAS_H, deviceScaleFactor: 1 });
     await page.goto(`file://${probePath}`, { waitUntil: "networkidle0", timeout: 30000 });
 
     // Block on brand @font-face loading — text-clipping / depth-ghost width
@@ -1136,7 +1224,7 @@ ${innerHtml}
           () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
         );
         await new Promise((r) => setTimeout(r, 60));
-        const frameVio = await page.evaluate(PROBE, sid, compRel, CFG);
+        const frameVio = await page.evaluate(PROBE, sid, compRel, CFG, CANVAS_W, CANVAS_H);
         for (const fv of frameVio) sceneRawViolations.push({ ...fv, probe_t: t });
       }
       // Dedup: keep the worst (largest metric) per (type, text, selector)

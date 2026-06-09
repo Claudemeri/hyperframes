@@ -41,11 +41,13 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { loadTransitionRegistry, transitionsByName } from "./lib/transition-registry.mjs";
+import { resolveDimensions } from "./lib/dimensions.mjs";
 
 // ---------- argv ----------
 const argv = process.argv.slice(2);
@@ -107,6 +109,9 @@ if (!existsSync(hyperframesDir)) {
     { stdio: "inherit" },
   );
   if (r.status !== 0) die("npx hyperframes init failed");
+  // Claude Code auto-loads CLAUDE.md from the project subtree; its generic guidance competes with the skill workflow.
+  // AGENTS.md is never auto-loaded — leave it as scaffolding for whoever opens the project later.
+  rmSync(join(hyperframesDir, "CLAUDE.md"), { force: true });
 }
 
 // ---------- Step 2: copy capture assets → public/ ----------
@@ -485,6 +490,16 @@ if (!existsSync(narratorScriptsPath))
   die(`narrator_scripts.json not found at ${narratorScriptsPath}`);
 const narratorScripts = JSON.parse(readFileSync(narratorScriptsPath, "utf8"));
 const narratorByNumber = new Map((narratorScripts.scenes || []).map((s) => [s.sceneNumber, s]));
+
+// Canvas dimensions — landscape 1920×1080 unless the upstream intent layer set
+// `orientation`/`dimensions` in narrator_scripts.json (or --width/--height here
+// override for testing). The resolved size is stamped into group_spec.width/
+// height; every downstream script + scene worker reads it from there. See the
+// seam doc at scripts/lib/dimensions.mjs.
+const { width: CANVAS_W, height: CANVAS_H, source: dimSource } = resolveDimensions(
+  { width: flag("width"), height: flag("height") },
+  narratorScripts,
+);
 
 let audioMeta = null;
 if (audioMetaPath) {
@@ -961,6 +976,8 @@ const captions_enabled = scenes.some((s) => Boolean(s.wordsPath));
 const spec = {
   scenes_per_group_max: scenesPerGroupMax,
   total_scenes: scenes.length,
+  width: CANVAS_W,
+  height: CANVAS_H,
   captions_enabled,
   total_duration_s: Number(total_duration_s.toFixed(3)),
   bgm_path,
@@ -986,6 +1003,7 @@ console.log(`✓ wrote ${outPath}`);
 console.log(
   `  scenes: ${spec.total_scenes}, groups: ${groups.length}, total: ${spec.total_duration_s}s`,
 );
+console.log(`  canvas: ${CANVAS_W}×${CANVAS_H} (${dimSource})`);
 console.log(
   `  captions: ${captions_enabled ? "enabled (scene keep-out + band reserved)" : "disabled (full-canvas scenes)"}`,
 );

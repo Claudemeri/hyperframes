@@ -259,7 +259,7 @@ Rules:
 - **The same asset can appear in multiple scenes** when the same hero should carry through narratively (for example, scenes 3-7 all showcase the same dashboard).
 - **Maximize useful coverage; do not waste assets.** Across all scenes, combined `assetCandidates` should cover **most** content assets in Inventory. If a real product screenshot / photo / chart is not used by any scene, prefer assigning it to the semantically best-fitting scene instead of making that scene text-only by default. (Pure title / transition cue scenes should still use `[]` when appropriate - coverage does not mean forcing an image into every scene.)
 - **List only content assets; use judgment to skip chrome / decorative junk.** Inventory is unfiltered: it may contain font files, favicon (`.ico`), social / payment / app-store badges, logo lockup variants, sprite sheets, and tiny (<~100px) decorative icons. These are **not candidates by default** (fonts are not images), unless a scene specifically needs them narratively (e.g. a social-proof media logo wall). Use `description` + `[kind]` + dimensions; `prep` will not filter for you.
-- **`[video]` / `[video-still]` are high-value content, not chrome.** `[video]` = the page's embedded demo/hero video was downloaded as a real moving clip — cite its `public/<basename>.mp4`; the worker renders it as a `<video>` clip. `[video-still]` = only a static frame was captured (the video body was not downloadable) — cite its `public/<basename>.png` and treat it as a still image. The inventory caption is the strongest signal of content; a product demo video is usually the single best hero asset, so prefer assigning it to the product-intro / feature-showcase scene.
+- **`[video]` / `[video-still]` are high-value content, not chrome.** `[video]` = the page's embedded demo/hero video was downloaded as a real moving clip — cite its `public/<basename>.mp4`; the worker renders it as a `<video>` clip at the **host root** (direct child of `index.html`, never inside a scene sub-comp `<template>`, animated from the main timeline — see `variables-and-media.md`). `[video-still]` = only a static frame was captured (the video body was not downloadable) — cite its `public/<basename>.png` and treat it as a still image. The inventory caption is the strongest signal of content; a product demo video is usually the single best hero asset, so prefer assigning it to the product-intro / feature-showcase scene.
 
 ## Validation Checklist
 
@@ -283,6 +283,7 @@ Frontend (and downstream agents) expect these **exact** field names. Wrong names
 {
   "project": "Project name",
   "narrativeArchetype": "Selected archetype (or compound: \"<outer> with <inner>\")",
+  "orientation": "Canvas aspect, echoed verbatim from the dispatch Orientation line: landscape (16:9, default) | portrait (9:16) | square (1:1). Dictated by the user's aspect, not chosen. prep maps it to group_spec.width/height. Omit → landscape.",
   "emotionalArc": "Emotional journey description (e.g. 'Frustration with manual processes shifting to relief and excitement through smart calling automation.')",
   "scenes": [
     {

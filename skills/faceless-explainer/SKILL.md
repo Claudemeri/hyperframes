@@ -1,6 +1,6 @@
 ---
 name: faceless-explainer
-description: faceless-explainer video workflow - arbitrary text (article / notes / topic / brief) -> narrator_scripts.json + audio (voice + BGM) + section_plan.md -> typography / abstract-graphics / diagram / data-viz video. Typical length up to ~3 min (sweet spot ~30-90s); a genuinely longer piece is general-video, not this workflow. Generates its OWN narration (TTS) — it does not sync to a user-supplied / pre-recorded voiceover (that is general-video). No website capture, no real product screenshots.
+description: faceless-explainer video workflow - arbitrary text (article / notes / topic / brief) -> narrator_scripts.json + audio (voice + BGM) + section_plan.md -> typography / abstract-graphics / diagram / data-viz video. Typical length up to ~3 min (sweet spot ~30-90s); a genuinely longer piece is general-video, not this workflow. Generates its OWN narration (TTS) — it does not sync to a user-supplied / pre-recorded voiceover (that is general-video). No website capture, no real product screenshots. If the text names a product / its site to promote, that is /product-launch-video; when product-vs-topic is unclear, start at /hyperframes-read-first.
 metadata:
   tags: orchestrator, pipeline, faceless-explainer, text-to-video
 ---
@@ -9,24 +9,26 @@ metadata:
 
 Input is **arbitrary text** (article / notes / topic / brief). Output is a **faceless explainer** video: no captured website, no product screenshots — every visual is invented by the LLM (typography / abstract graphics / diagram / data-viz), chosen per scene by content. The shipped style preset is always **pin-and-paper**.
 
+> **Confirm the route before Step 0.** This skill explains a **topic / concept** with **no product and no site to capture**. If the text actually **markets a product / names its site** → `/product-launch-video`; there's a **URL to turn into a video** → `/website-to-video`; a **GitHub PR** → `/pr-to-video`; **existing footage** to caption / package → `/embedded-captions` · `/graphic-overlays`. **Out of scope**: timing visuals to a **user-supplied / pre-recorded voiceover** (faceless generates its own TTS → `/general-video`), or live / at-render-time data. Unsure product-vs-topic, or routed here on a vague request? **Read `/hyperframes-read-first` first.**
+
 All artifacts go to `PROJECT_DIR = videos/<project-name>/` (created in Step 0); all paths below are relative to it.
 
-| Phase                    | Execution                                                                                                  | Primary artifact                                            | Detailed flow                             |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------- |
-| init                     | Bash                                                                                                       | `hyperframes.json`                                          | Step 0                                    |
-| scaffold                 | Bash (no agent)                                                                                            | `capture/extracted/tokens.json` + `visible-text.txt`        | Step 1                                    |
-| scriptwriting            | subagent (`general-purpose`)                                                                               | `narrator_scripts.json` (incl. chosen `stylePreset`)        | Step 2 / `agents/scriptwriting.md`        |
-| design-system            | Bash (no agent, deterministic — style = `narrator_scripts.stylePreset`)                                    | `design-system/design.html` + `chunks/`                     | Step 2b                                   |
-| audio                    | `audio.mjs` in Bash                                                                                        | `audio_meta.json`                                           | `phases/audio/guide.md`                   |
-| visual-design            | subagent (`general-purpose`)                                                                               | `section_plan.md`                                           | `agents/visual-design.md`                 |
-| prep                     | `prep.mjs` in Bash                                                                                         | `group_spec.json`                                           | `scripts/prep.mjs`                        |
-| captions (deterministic) | `captions.mjs group` -> `captions.mjs html` in Bash (no subagent)                                          | `caption_groups.json` + `compositions/captions.html`        | `scripts/captions.mjs`                    |
-| scenes                   | N x subagent (`general-purpose`, parallel in the same message)                                             | `compositions/scene_*.html` or `compositions/group_w*.html` | `agents/hyperframes-scene.md`             |
-| finalize (Phase 4c)      | Bash prelude (wait-bgm + assemble + inject/verify-transitions + sfx-verify + preflight) -> repair subagent | `renders/video.mp4`                                         | Step 7 / `agents/hyperframes-finalize.md` |
+| Phase                    | Execution                                                                                                  | Primary artifact                                                     | Detailed flow                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------- |
+| init                     | Bash                                                                                                       | `hyperframes.json`                                                   | Step 0                                    |
+| scaffold                 | Bash (no agent)                                                                                            | `capture/extracted/tokens.json` + `visible-text.txt`                 | Step 1                                    |
+| scriptwriting            | subagent (`general-purpose`)                                                                               | `narrator_scripts.json` (incl. chosen `stylePreset` + `orientation`) | Step 2 / `agents/scriptwriting.md`        |
+| design-system            | Bash (no agent, deterministic — style = `narrator_scripts.stylePreset`)                                    | `design-system/design.html` + `chunks/`                              | Step 2b                                   |
+| audio                    | `audio.mjs` in Bash                                                                                        | `audio_meta.json`                                                    | `phases/audio/guide.md`                   |
+| visual-design            | subagent (`general-purpose`)                                                                               | `section_plan.md`                                                    | `agents/visual-design.md`                 |
+| prep                     | `prep.mjs` in Bash                                                                                         | `group_spec.json`                                                    | `scripts/prep.mjs`                        |
+| captions (deterministic) | `captions.mjs group` -> `captions.mjs html` in Bash (no subagent)                                          | `caption_groups.json` + `compositions/captions.html`                 | `scripts/captions.mjs`                    |
+| scenes                   | N x subagent (`general-purpose`, parallel in the same message)                                             | `compositions/scene_*.html` or `compositions/group_w*.html`          | `agents/hyperframes-scene.md`             |
+| finalize (Phase 4c)      | Bash prelude (wait-bgm + assemble + inject/verify-transitions + sfx-verify + preflight) -> repair subagent | `renders/video.mp4`                                                  | Step 7 / `agents/hyperframes-finalize.md` |
 
 ## Prerequisites
 
-macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node ffmpeg` (use Homebrew Python, **not** `/usr/bin/python3`, or `pip install` is blocked by PEP 668); then `npx hyperframes doctor` once (downloads Chrome). Optional cloud keys (else local fallbacks) — inject in Step 0.5:
+macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node ffmpeg` (use Homebrew Python, **not** `/usr/bin/python3`, or `pip install` is blocked by PEP 668); then `npx hyperframes doctor` once (downloads Chrome). For a final/shipping render also install Puppeteer (`npm i puppeteer`) so the Tier-1 perception gate (collision / contrast / cramped / panel-bleed) actually runs — without it the gate soft-skips and only the finalize eye-check remains; set `PLV_REQUIRE_PERCEPTION=1` (or pass `--require-perception`) to make a skipped gate fail preflight instead of soft-passing. Optional cloud keys (else local fallbacks) — inject in Step 0.5:
 
 | Key                                           | Used for                                    | Default / fallback                                             |
 | --------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
@@ -36,6 +38,10 @@ macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node f
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` (aliases) | Lyria BGM                                   | unset -> local MusicGen (first run downloads ~300 MB)          |
 
 ## Flow
+
+### Step 0.0 - Confirm the brief (one round, then build)
+
+Before Step 0, in **one** message confirm only what materially shapes the explainer and you can't infer — lead with a recommended default, skip anything the user already gave: the **topic / angle** (the one idea), **length** (default ~60-90s), and — if `/hyperframes-read-first` did not already set them — **aspect** (default 16:9; 9:16 for vertical) and **language**. Style is always `pin-and-paper`. For a fully specified request, skip this and build.
 
 ### Step 0 - Initialize the video project
 
@@ -49,9 +55,10 @@ Only when `$PROJECT_DIR/hyperframes.json` is absent:
 PROJECT_DIR="${LAUNCH_VIDEO_DIR:-videos/<project-name>}"
 mkdir -p "$(dirname "$PROJECT_DIR")"
 npx hyperframes init "$PROJECT_DIR" --non-interactive --skip-skills --example=blank
+rm -f "$PROJECT_DIR/CLAUDE.md"   # Claude Code auto-loads CLAUDE.md from the project subtree; its generic `/hyperframes` guidance competes with this skill. (AGENTS.md is never auto-loaded — leave it as scaffolding.)
 ```
 
-> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`; **leave them in place** — they are agent scaffolding for whoever opens the finished project later. This skill (not those files) is the source of truth for the workflow, so do not treat their generic guidance as run-time constraints.
+> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`. **Remove `CLAUDE.md`** (done above): Claude Code auto-loads it on-demand the moment the agent touches a file under `$PROJECT_DIR`, and its generic guidance competes with this skill — which is the source of truth for the workflow. **Leave `AGENTS.md`**: Claude Code never auto-loads it, so it stays inert during the build and remains as scaffolding for whoever opens the finished project later (or opens it in another agent tool).
 
 **Constraints:** never run `hyperframes init` / generate `AGENTS.md` / `CLAUDE.md` in the workspace root; never nest another `hyperframes/` inside `PROJECT_DIR`; every Bash command (master + subagents) is a `(cd "$PROJECT_DIR" && ...)` subshell — never bare `cd`.
 
@@ -92,10 +99,13 @@ PROJECT_DIR: <video project root>
 Schema validator: <SKILL_DIR>/scripts/validate.mjs narrator
 Input text: ./capture/extracted/visible-text.txt   # The source article / notes / brief — the agent reads this first
 Style preset: pick one from the menu in the guide and emit it as the top-level `stylePreset` (default `pin-and-paper` when unsure); match the narration register to the chosen preset
+Orientation: <landscape | portrait | square>   # From the Step 0.0 aspect (16:9→landscape, 9:16→portrait, 1:1→square; default landscape). Emit it VERBATIM as the top-level `orientation` field — this is dictated, not a creative choice; it sets the canvas (portrait→1080×1920) for the whole pipeline.
 Script style: Keep each scene's script concise — 1-2 sentences, no more than 20 words
 ```
 
-The agent picks an explainer **structure** for `narrativeArchetype` (`concept-explainer` / `how-to-process` / `listicle` / `story-explainer`, or `"<outer> with <inner>"`), picks a top-level **`stylePreset`** from the 5 shipped presets (consumed by Step 2b), and emits `narrator_scripts.json` (it runs the validator before returning). `continuity` drives worker grouping: `continue` = same worker as the previous scene (a run of **up to 3** scenes, cap=3); `break` = new worker; scene 1 is always `break`. `intent` / `sharedMotif` are soft hints. `assetCandidates` is `[]` on essentially every scene (faceless).
+> Fill the `Orientation:` line from the aspect confirmed in Step 0.0 (default `landscape`). prep reads `narrator_scripts.orientation` → stamps `group_spec.width/height`; without it the video stays 16:9.
+
+The agent picks an explainer **structure** for `narrativeArchetype` (`concept-explainer` / `how-to-process` / `listicle` / `story-explainer`, or `"<outer> with <inner>"`), picks a top-level **`stylePreset`** from the 5 shipped presets (consumed by Step 2b), echoes the dispatched **`orientation`** as a top-level field (consumed by Step 5 prep → canvas size), and emits `narrator_scripts.json` (it runs the validator before returning). `continuity` drives worker grouping: `continue` = same worker as the previous scene (a run of **up to 3** scenes, cap=3); `break` = new worker; scene 1 is always `break`. `intent` / `sharedMotif` are soft hints. `assetCandidates` is `[]` on essentially every scene (faceless).
 
 ### Step 2b - Design system (Bash, NO agent, deterministic — style chosen by Step 2)
 
@@ -165,7 +175,8 @@ Then dispatch the visual-design subagent. prompt = full contents of `agents/visu
 SKILL_DIR: <absolute path>
 PROJECT_DIR: <video project root>
 Schema validator: <SKILL_DIR>/scripts/validate.mjs section
-Captions: <enabled | disabled>   # Planning hint from the node -e above: enabled => leave bottom ~17% as caption territory in prose
+Canvas: <width>×<height>   # default 1920×1080 (16:9 landscape); 1080×1920 (9:16 portrait) or 1080×1080 (1:1 square) if requested upstream (narrator_scripts.orientation/dimensions). Plan layouts for THIS aspect ratio — see composition.md "Portrait & square".
+Captions: <enabled | disabled>   # Planning hint from the node -e above: enabled => leave the bottom ~17% of canvas height as caption territory in prose
 Dispatch packet: /tmp/vd-dispatch.txt   # Step 0 reads it once for all inputs
 Visuals: faceless — every scene is typography / abstract graphics / diagram / data-viz invented from the script. assetCandidates is [] for most or all scenes; plan visuals from text, not from captured assets.
 ```
@@ -221,9 +232,9 @@ mkdir -p /tmp/scene-dispatch
 # Then per worker: shared header + that worker's Scenes YAML -> /tmp/scene-dispatch/w<N>.txt
 ```
 
-Start **N scene workers in parallel in the same message** (`general-purpose`, each `run_in_background: true`). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body + a `Scenes:` list.
+Start **N scene workers in parallel in the same message** (`general-purpose`, each `run_in_background: true`). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height`) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body + a `Scenes:` list.
 
-For the worker top-level context, copy from `group_spec.json.groups[i]`: `worker_id`, `composition_id`, `composition_file`, `duration_s`, `scene_ids`. Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-3 logical scenes): `scene_id` / `local_start_s` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `design_chunks` (absolute paths to the whole component library — the worker chooses by visual judgment) / `creative_brief`. A 2-3 scene worker writes one `group_wN.html` with true shared DOM across the segments.
+For the worker top-level context, copy from `group_spec.json.groups[i]`: `worker_id`, `composition_id`, `composition_file`, `duration_s`, `scene_ids`; and from the top of `group_spec.json`: `width`, `height` (the worker authors + self-checks the root at these dims — landscape 1920×1080 unless portrait/square was requested upstream). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580) — constraint #13 keep-out is computed from these, not hardcoded. Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-3 logical scenes): `scene_id` / `local_start_s` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `design_chunks` (absolute paths to the whole component library — the worker chooses by visual judgment) / `creative_brief`. A 2-3 scene worker writes one `group_wN.html` with true shared DOM across the segments.
 
 `assetCandidates` is `[]` for most or all scenes — the worker invents the visual from `creative_brief` + design chunks; there are no captured assets to place. `design_chunks: null` (chunks missing) → worker falls back to reading `./design-system/design.html` fully; should not happen in the normal path.
 

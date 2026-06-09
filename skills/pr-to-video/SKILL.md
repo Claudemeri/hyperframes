@@ -283,6 +283,7 @@ After Step 6 exits 0: a deterministic Bash prelude, then one repair finalize sub
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/transitions.mjs inject --group-spec ./group_spec.json --hyperframes .)
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/transitions.mjs verify --group-spec ./group_spec.json --index ./index.html)
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/verify-output.mjs sfx --group-spec ./group_spec.json --index ./index.html)
+(cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/verify-output.mjs audio --hyperframes . --group-spec ./group_spec.json --index ./index.html)
 ```
 
 `inject` only changes the `index.html` shell `data-start`/`data-duration`/`data-track-index`, never visual roots. Internal logic: header of each script.
@@ -290,6 +291,7 @@ After Step 6 exits 0: a deterministic Bash prelude, then one repair finalize sub
 - assemble exit 1 -> names a visual composition (root `data-duration` != group_spec, or file missing) = worker contract break → return to Step 6, re-dispatch that worker, rerun this step.
 - inject/verify-transitions exit 1 -> injector bug (prep already validated `transitions[]`) → report, don't roll back workers.
 - sfx-verify exit 1 -> assembler bug → report.
+- verify-output **audio** exit 1 -> a voice wav / `bgm.wav` / `captions.html` exists on disk but was NOT wired into `index.html` (the silent / caption-less render class). This is an upstream wiring bug — almost always empty `group_spec` voicePaths because prep ran without `--audio-meta`. **Do NOT render.** Re-run Step 5 prep with `--audio-meta ./audio_meta.json`, then re-run this Step 7(1) chain. `⚠`-prefixed lines (BGM / captions intended but never produced on disk) are non-blocking generation gaps — render proceeds.
 
 **(2) Preflight gate (Bash):**
 

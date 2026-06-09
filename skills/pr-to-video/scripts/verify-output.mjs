@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 // verify-output.mjs — merged post-render verification dispatcher.
 //
-// Merges two former standalone scripts into one subcommand-dispatched file:
+// Subcommand-dispatched verification:
 //   render → verify-render.mjs  (deterministic post-render mp4 verification)
 //   sfx    → sfx-verify.mjs      (SFX drift verifier against emitted index.html)
+//   audio  → reconcile on-disk audio assets (voice/bgm/captions) against the
+//            assembled index.html — the single gate for the silent-render class.
 //
-// Original usage lines (now subcommands):
+// Usage lines (subcommands):
 //   node verify-output.mjs render --hyperframes . --group-spec ./group_spec.json [--output renders/video.mp4]
 //   node verify-output.mjs sfx --group-spec ./group_spec.json --index ./index.html
+//   node verify-output.mjs audio --hyperframes . --group-spec ./group_spec.json --index ./index.html [--audio-meta ./audio_meta.json]
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
@@ -229,6 +232,165 @@ async function runSfx(argv) {
 }
 
 // ---------------------------------------------------------------------------
+// audio — pre-render reconciliation of INTENT vs REALITY.
+//
+// INTENT  = audio assets that exist (audio_meta.scenes[*].voicePath wavs,
+//           assets/bgm.wav, compositions/captions.html) + spec flags.
+// REALITY = the tracks assemble-index.mjs actually wired into index.html
+//           (voice = track 10, bgm = track 11, captions = track 12).
+//
+// This is the single gate for the silent-render class: a voice wav / bgm.wav /
+// captions.html that exists on disk but was never wired ships a silent or
+// caption-less video while every other gate stays green (the bug that shipped to
+// a user). SFX is covered by the `sfx` subcommand; this covers voice/bgm/captions.
+//
+//   FATAL (exit 1): asset exists on disk but is NOT wired — a wiring bug.
+//   WARN  (exit 0): intended (audio_meta/group_spec flag) but the asset isn't on
+//                   disk at all — a documented non-blocking generation gap
+//                   (a scene's TTS failed, BGM failed/pending, captions skipped).
+//
+// Usage:
+//   node verify-output.mjs audio --hyperframes . --group-spec ./group_spec.json \
+//        --index ./index.html [--audio-meta ./audio_meta.json]
+// ---------------------------------------------------------------------------
+async function runAudio(argv) {
+  const flag = (name, def) => {
+    const i = argv.indexOf(`--${name}`);
+    return i >= 0 && i + 1 < argv.length ? argv[i + 1] : def;
+  };
+  function die(msg) {
+    console.error(`✗ verify-audio: ${msg}`);
+    process.exit(1);
+  }
+
+  const hyperframesDir = resolve(flag("hyperframes", "."));
+  const groupSpecPath = resolve(flag("group-spec", join(hyperframesDir, "group_spec.json")));
+  const indexPath = resolve(flag("index", join(hyperframesDir, "index.html")));
+  const audioMetaPath = resolve(flag("audio-meta", join(hyperframesDir, "audio_meta.json")));
+
+  if (!existsSync(indexPath))
+    die(`index.html missing at ${indexPath} — run assemble-index.mjs first`);
+  const indexHtml = readFileSync(indexPath, "utf8");
+
+  let groupSpec = {};
+  if (existsSync(groupSpecPath)) {
+    try {
+      groupSpec = JSON.parse(readFileSync(groupSpecPath, "utf8"));
+    } catch (e) {
+      die(`group_spec.json parse: ${e.message}`);
+    }
+  }
+  let audioMeta = null;
+  if (existsSync(audioMetaPath)) {
+    try {
+      audioMeta = JSON.parse(readFileSync(audioMetaPath, "utf8"));
+    } catch {
+      // A malformed audio_meta is not this gate's job to fail on; fall back to a
+      // direct assets/voice/ disk scan for voice intent below.
+    }
+  }
+
+  const fatals = [];
+  const warns = [];
+
+  // Track-presence helpers — assemble-index.mjs emits these ids/track-indexes
+  // deterministically, so simple matches are robust.
+  const hasBgmTrack =
+    /id=["']el-bgm["']/.test(indexHtml) || /data-track-index=["']11["']/.test(indexHtml);
+  const hasCaptionTrack =
+    /id=["']el-captions["']/.test(indexHtml) || /data-track-index=["']12["']/.test(indexHtml);
+  const voiceTrackCount = (indexHtml.match(/data-track-index=["']10["']/g) || []).length;
+
+  // ---- VOICE: every voiced scene's wav must be referenced in index.html ----
+  // Intent = audio_meta voiced scenes whose wav is on disk (the manifest of what
+  // THIS run produced); fall back to scanning assets/voice/ when audio_meta is
+  // absent. Reality = the wav's basename appearing in a track-10 <audio src=…>.
+  const voiceDir = join(hyperframesDir, "assets", "voice");
+  let voiceIntent = [];
+  if (audioMeta && audioMeta.scenes) {
+    voiceIntent = Object.values(audioMeta.scenes)
+      .map((s) => s && s.voicePath)
+      .filter(Boolean)
+      .filter((p) => existsSync(join(hyperframesDir, p)));
+  } else {
+    try {
+      voiceIntent = readdirSync(voiceDir)
+        .filter((f) => f.toLowerCase().endsWith(".wav"))
+        .map((f) => `assets/voice/${f}`);
+    } catch {}
+  }
+  const missingVoice = voiceIntent.filter((p) => {
+    const base = p.split("/").pop();
+    return !indexHtml.includes(`voice/${base}"`);
+  });
+  if (voiceIntent.length > 0 && missingVoice.length === voiceIntent.length) {
+    fatals.push(
+      `ALL ${voiceIntent.length} voiced scene(s) are MISSING from index.html (0 track-10 audio) — the render will be SILENT. ` +
+        `voicePaths were never wired into group_spec; re-run prep.mjs with --audio-meta ./audio_meta.json, then reassemble.`,
+    );
+  } else if (missingVoice.length > 0) {
+    fatals.push(
+      `${missingVoice.length}/${voiceIntent.length} voice wav(s) not wired into index.html (those scenes play silent): ` +
+        `${missingVoice.map((p) => p.split("/").pop()).join(", ")} — check group_spec voicePaths, then reassemble.`,
+    );
+  }
+
+  // ---- BGM ----
+  const bgmRel = (audioMeta && audioMeta.bgm_path) || groupSpec.bgm_path || "assets/bgm.wav";
+  const bgmOnDisk = existsSync(join(hyperframesDir, bgmRel));
+  const bgmIntended = Boolean((audioMeta && audioMeta.bgm_enabled) || groupSpec.bgm_path);
+  if (bgmOnDisk && !hasBgmTrack) {
+    fatals.push(
+      `${bgmRel} exists on disk but is NOT wired into index.html (no track-11 <audio id="el-bgm">) — ` +
+        `BGM was generated but dropped; reassemble.`,
+    );
+  } else if (!bgmOnDisk && bgmIntended) {
+    let reason = "generation failed or still pending";
+    const statusPath = join(hyperframesDir, "bgm_status.json");
+    if (existsSync(statusPath)) {
+      try {
+        const st = JSON.parse(readFileSync(statusPath, "utf8"));
+        if (st.status) reason = `bgm_status=${st.status}${st.message ? ` (${st.message})` : ""}`;
+      } catch {}
+    }
+    warns.push(`BGM enabled but ${bgmRel} is absent — ${reason}. Render proceeds without BGM (non-blocking).`);
+  }
+
+  // ---- CAPTIONS ----
+  const capOnDisk = existsSync(join(hyperframesDir, "compositions", "captions.html"));
+  if (capOnDisk && !hasCaptionTrack) {
+    fatals.push(
+      `compositions/captions.html exists but is NOT wired into index.html (no track-12) — ` +
+        `captions were built but dropped; reassemble.`,
+    );
+  } else if (!capOnDisk && groupSpec.captions_enabled === true) {
+    warns.push(
+      `group_spec.captions_enabled=true but compositions/captions.html is absent (captions build skipped) — ` +
+        `render proceeds without captions. If narration exists, check that wordsPath survived prep (captions.mjs group/html).`,
+    );
+  }
+
+  // ---- report ----
+  for (const w of warns) console.log(`  ⚠ ${w}`);
+  if (fatals.length > 0) {
+    console.error(`\n${"!".repeat(80)}`);
+    console.error(
+      `✗ verify-audio: ${fatals.length} wiring failure(s) — index.html does not honor on-disk audio assets:`,
+    );
+    for (const f of fatals) console.error(`  - ${f}`);
+    console.error(`${"!".repeat(80)}\n`);
+    process.exit(1);
+  }
+  console.log(
+    `✓ verify-audio: voice ${voiceTrackCount} track(s) wired (${voiceIntent.length} voiced scene(s) on disk), ` +
+      `bgm ${hasBgmTrack ? "wired" : bgmIntended ? "absent (warned)" : "n/a"}, ` +
+      `captions ${hasCaptionTrack ? "wired" : groupSpec.captions_enabled ? "disabled-but-enabled (warned)" : "n/a"}` +
+      `${warns.length ? ` — ${warns.length} warning(s)` : ""}`,
+  );
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
 const sub = process.argv[2];
@@ -240,7 +402,10 @@ switch (sub) {
   case "sfx":
     await runSfx(rest);
     break;
+  case "audio":
+    await runAudio(rest);
+    break;
   default:
-    console.error("usage: node verify-output.mjs <render|sfx> [args...]");
+    console.error("usage: node verify-output.mjs <render|sfx|audio> [args...]");
     process.exit(2);
 }

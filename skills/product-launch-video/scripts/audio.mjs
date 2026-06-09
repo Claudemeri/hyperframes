@@ -179,7 +179,8 @@ if (!existsSync(hyperframesDir)) {
     { stdio: "inherit" },
   );
   if (r.status !== 0) die("npx hyperframes init failed");
-  rmSync(join(hyperframesDir, "AGENTS.md"), { force: true });
+  // Claude Code auto-loads CLAUDE.md from the project subtree; its generic guidance competes with the skill workflow.
+  // AGENTS.md is never auto-loaded — leave it as scaffolding for whoever opens the project later.
   rmSync(join(hyperframesDir, "CLAUDE.md"), { force: true });
 }
 const voiceDir = join(hyperframesDir, "assets", "voice");

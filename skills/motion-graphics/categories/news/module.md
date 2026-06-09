@@ -1,30 +1,56 @@
 # news — category module (search-driven)
 
-Search a real news article → animate it as an **article-highlight** (the agent-opus _article-highlight hook_, reimplemented in HF HTML/CSS). Signature motion: a real article sits soft/blurred, the camera **pulls focus and zooms into one keyword**, and a **marker highlight sweeps across it**. ~6–10s.
+Search a real news article → animate it as an **article-highlight** — a faithful HF port of agent-opus `CenteredTextEmphasis` / `HighlightableText`. Signature motion: the article text is laid out at a **readable size (NOT zoomed)**, slides + fades up, then the **keyword is highlighted in place** — a marker band grows left→right behind it. No blow-up zoom. ~5–7s.
+
+Two layouts share that one highlight core — pick by aspect + whether there's a logo / person to feature:
+
+| Layout                    | Aspect     | Use when                                                        | Has                                                                        |
+| ------------------------- | ---------- | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **A · centered-emphasis** | 9:16 / 1:1 | text-only, social vertical                                      | kicker + one centered sentence + keyword highlight                         |
+| **B · full article**      | 16:9       | there's a real **outlet logo** and/or a **person** in the story | logo + date + multi-line headline highlight + dek + outlet + person cutout |
 
 ## Source (Step 2)
 
-RWA / web search (or `hyperframes capture`) → a real article: `outlet`, `headline`, a `body`/snippet paragraph, the site font. The Director extracts the **keyword** (1–2 words — a product / number / name; the hook). `asset_needs: { kind: news|web, query }`.
+RWA / web search (or `hyperframes capture`) → a real article. The Director extracts the **keyword** (1–2 words / a number / a name — the hook) and, for Layout B, also a **brand logo**, a **date**, and a **person photo**. `asset_needs: { kind: news|web|image, query }` — request the logo (Wikimedia / simple-icons) and the person photo (Wikimedia) as separate asset queries. Run the person photo through `hyperframes remove-background <in> -o <out>.png` to get a transparent cutout.
 
-## The article-highlight technique (Builder)
+## The highlight core (shared by both layouts) — agent-opus, in HF
 
-1. **Render the article as real HTML** (not a screenshot): `.source` (outlet, accent) + `.headline` + `.body` paragraph; news font (serif body). Real content from search/capture.
-2. **Keyword markup** — wrap it for a sweepable highlight:
-   ```html
-   <span class="kw"><span class="hl"></span><span class="tx">KEYWORD</span></span>
-   ```
-   `.hl` = highlighter bar (`position:absolute; inset:-2px -7px; transform:scaleX(0); transform-origin:left center`, behind the text); `.tx` sits above it.
-3. **Measure** the keyword's real position once (`getBoundingClientRect` → stage-local centre `kx,ky`) — deterministic; no manual bbox math.
-4. **Timeline** (the focus-pull):
-   - article fades in **soft-blurred** (`filter: blur(8px)`);
-   - settles to readable (`blur ≈ 2px`) so the headline reads;
-   - **zoom into the keyword** — `#article` (`transform-origin:0 0`) `scale → S`, `x → stageCx − S·kx`, `y → stageCy − S·ky`, `filter: blur → 0`;
-   - **marker sweep** — `gsap.to('.kw .hl', { scaleX: 1 })`: the highlight is **swept on AFTER the zoom lands — NEVER pre-applied**;
-   - hold (subtle breath).
-5. Optional: an attribution/source card; a key-stat count-up (seek-safe `onUpdate`). Export `mp4` or `alpha-overlay`.
+The keyword highlight is a marker band grown L→R via `background-size` (NOT a `transform:scaleX` bar):
 
-**Reference impl:** `samples/news/article-highlight.html`. **Lineage:** agent-opus `hook/workflow/article-highlight-hook` + `article-highlight-search` (canvas) → HF HTML/CSS (crisper text, exact keyword zoom).
+```css
+.hl {
+  --hlw: 0%;
+  background-image: linear-gradient(var(--hl), var(--hl)); /* --hl: rgba(250,222,99,.6) */
+  background-repeat: no-repeat;
+  background-position: 0 72%;
+  background-size: var(--hlw) 64%;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+```
+
+`box-decoration-break:clone` makes the band **wrap across line breaks** seamlessly — a multi-word keyword spanning 2–3 lines still highlights continuously (the old `scaleX` bar could not). GSAP tweens the CSS var `--hlw` 0%→100%, **swept on AFTER the text settles — never pre-applied**. Optionally scale the duration with keyword length ~0.5–1.5s (agent-opus `getScaledHighlightDuration`).
+
+## Layout A — centered-emphasis (9:16, text-only) — Builder
+
+1. **Lay out the key SENTENCE at a readable size — do NOT zoom.** Paper-light stage; an outlet `#kicker` (e.g. "BBC NEWS · TECHNOLOGY", brand accent) at top; the key sentence centered, serif, **~70–76px / 700 / line-height ~1.4**, `max-width ≈ 900`. The whole sentence stays legible; the keyword is emphasized _within_ it.
+2. Wrap the keyword inline: `… raised <span class="hl" id="kw">$750M</span> at …`.
+3. **Timeline** (seek-safe, paused): kicker fades+slides in → **sentence slides+fades up** (`set{autoAlpha:0,y:52}`→`to{autoAlpha:1,y:0,duration:0.8,ease:"power3.out"}`, no zoom) → **keyword highlight grows** (`--hlw 0→100%`, after the sentence settles) → gentle hold (`scale 1.012`).
+
+**Reference:** `samples/news/_ref-centered-emphasis.html` (+ `news/v2-*`).
+
+## Layout B — full article (16:9, logo + person) — Builder
+
+The editorial article-card layout (logo top-left + date + big serif headline with a multi-line keyword highlight + dek + outlet bottom-left + a background-removed **person cutout** bottom-right). 1920×1080, paper-light gradient stage, Georgia serif.
+
+1. **Logo** top-left (`#logo`, ~64px) — inline the outlet/brand SVG, `fill:currentColor`, set `color` to the mark's own hue (or near-black for a monochrome mark). **Date** below it (`#date`, ~30px, muted).
+2. **Headline** (`#headline`, Georgia **96px / 700**, `width≈1080`, `line-height 1.16`) with the keyword wrapped in `<span class="hl" id="kw">` — the highlight band sweeps across **all wrapped lines** of the phrase.
+3. **Dek** (`#dek`, Helvetica ~38px gray) under the headline; **outlet** (`#outlet`, Georgia bold ~50px) bottom-left.
+4. **Person cutout** (`#subject`, the bg-removed PNG, `height≈860`, `right:40; bottom:0`, `drop-shadow`) — **slides up from bottom-right** as the hero beat.
+5. **Timeline** (seek-safe, paused): logo `back.out` @0.15 → date @0.4 → **subject slides up** (`set{autoAlpha:0,x:90,y:60}`→`to{autoAlpha:1,x:0,y:0,duration:0.85,ease:"power3.out"}`) @0.45 → headline @0.7 → dek @1.5 → outlet @1.9 → **keyword highlight** (`--hlw 0→100%`, `duration:0.8`) @2.2. duration ~6.5s.
+
+**Reference:** `samples/news/_ref-article-layout.html` (a real article rendered with a real outlet logo + a background-removed person + a real story).
 
 ## Critical
 
-Highlight is **swept on, not static**. Article is **real HTML** (so the keyword is a real element → exact zoom). Deterministic; honor `references/builder-contract.md`.
+Highlight is **grown in place, swept on AFTER the text — never pre-applied**. The text **stays readable — do NOT zoom the keyword to fill the frame** (team feedback 2026-06-09: zoom loses context and reads wrong; agent-opus never zooms — it presents the text and highlights the word). For Layout B, the person MUST be a `remove-background` cutout (no rectangular photo box). Deterministic; honor `references/builder-contract.md`.

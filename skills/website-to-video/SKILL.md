@@ -1,18 +1,20 @@
 ---
 name: website-to-video
 description: |
-  Capture a GENERAL website / URL and turn it into a HyperFrames video — when the goal is a video *of / from* an existing site rather than a product launch. Captures the page with headless Chrome (real screenshots + brand assets), then composes the video. Use when the user gives a URL (or says "capture this site", "turn this website into a video", "make a video from my site", "site tour / showcase / social clip from my site") and the intent is general — a site tour, a portfolio / blog / landing-page showcase, or a social clip built from the site's own visuals. NOT for: marketing / launching / promoting a specific product or SaaS — that is /product-launch-video (even from a URL, even "promo for our site"); a topic / concept explainer with no site (-> /faceless-explainer); a GitHub PR (-> /pr-to-video); adding captions to an existing video (-> /embedded-captions); a short, unnarrated, design-led motion graphic that merely highlights / animates a captured page (-> /motion-graphics — a single quick page-highlight shot, not a narrated / multi-scene video of the site). If it's genuinely unclear whether the ask is a product launch or a general-site video, ask one question.
+  Capture a GENERAL website / URL and turn it into a HyperFrames video — when the goal is a video *of / from* an existing site rather than a product launch. Captures the page with headless Chrome (real screenshots + brand assets), then composes the video. Use when the user gives a general-website URL (or says "capture this site", "turn this website into a video", "make a video from my site", "site tour / showcase / social clip from my site") and the intent is general — a site tour, a portfolio / blog / landing-page showcase, or a social clip built from the site's own visuals. NOT for: marketing / launching / promoting a specific product or SaaS — that is /product-launch-video (even from a URL, even "promo for our site"); a topic / concept explainer with no site (-> /faceless-explainer); a GitHub PR (-> /pr-to-video); adding captions to an existing video (-> /embedded-captions); a short, unnarrated, design-led motion graphic that merely highlights / animates a captured page (-> /motion-graphics — a single quick page-highlight shot, not a narrated / multi-scene video of the site). If it's genuinely unclear whether the ask is a product launch or a general-site video, ask one question, or start at /hyperframes-read-first.
 ---
 
 # Website to HyperFrames
 
 Capture a website, then produce a professional video from it.
 
+> **Confirm the route before Step 0.** This skill makes a video _of / from a general site_. If the user is really **marketing / launching / promoting a product** (even from this URL, even "promo for our site") → `/product-launch-video`. A **topic explainer with no site** → `/faceless-explainer`; a **GitHub PR** → `/pr-to-video`; **re-cutting / recoloring / reordering an existing video file** → out of scope. Routed here on a vague "make a video", or unsure launch-vs-general-site? **Read `/hyperframes-read-first` first** (full routing table + § What HyperFrames cannot do).
+
 Users say things like:
 
-- "Capture https://... and make me a 25-second product launch video"
-- "Turn this website into a 15-second social ad for Instagram"
-- "Create a 30-second product tour from https://..."
+- "Turn this website into a 15-second social clip for Instagram"
+- "Make a 30-second site tour / showcase from https://..."
+- "Capture our homepage and build a video from its own visuals"
 
 The workflow has 7 steps. Each produces an artifact that gates the next. By default it's collaborative — gates marked 💬 stop and ask the user. If the user signals autonomous mode ("decide for me", "surprise me"), 💬 user-preference gates are skipped; see step-2-brief.md for how that propagates.
 

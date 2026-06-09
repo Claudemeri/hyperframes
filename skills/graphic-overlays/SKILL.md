@@ -1,6 +1,6 @@
 ---
 name: graphic-overlays
-description: Package an existing talking-head / interview / podcast video by layering timed, designed GRAPHIC OVERLAY cards onto the playing video — titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture — synced to the transcript. The source video plays in full; the agent designs and writes each card's HTML in conversation, then renders to MP4 via hyperframes. Use when the user asks for graphic overlays, on-screen graphics / lower-thirds / data callouts / kinetic titles on a video, "package / 包装 my video", "add overlay cards / 图文卡片", or AI-composed graphic packaging of an existing video. NOT for plain subtitles (→ embedded-captions) or building a video from scratch (→ the creation workflows).
+description: Package an existing talking-head / interview / podcast video by layering timed, designed GRAPHIC OVERLAY cards onto the playing video — titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture — synced to the transcript. The source video plays in full; the agent designs and writes each card's HTML in conversation, then renders to MP4 via hyperframes. Use when the user asks for graphic overlays, on-screen graphics / lower-thirds / data callouts / kinetic titles on a video, "package / 包装 my video", "add overlay cards / 图文卡片", or AI-composed graphic packaging of an existing video. NOT for plain subtitles (→ embedded-captions) or building a video from scratch (→ the creation workflows); when unsure overlays-vs-captions, see /hyperframes-read-first.
 ---
 
 # Graphic Overlays
@@ -13,8 +13,10 @@ conversation**, then assembles a single composition HTML and renders it to MP4 v
 `hyperframes`. There is no fixed archetype list and no prescribed card structure —
 the overlays emerge from what the transcript actually says.
 
-> **Graphic-packaging sibling of `embedded-captions`.** Captions add the *spoken words*
-> as a readable subtitle; this adds *designed graphics* on top of the playing video.
+> **Confirm the route before you build.** This skill packages an **existing talking-head clip** with **designed graphic cards** (titles, lower-thirds, data callouts, quotes, side panels, PiP). If the user wants **plain captions / subtitles** (the spoken words as text) → `/embedded-captions`; a **single short unnarrated** element (one logo sting / lower-third) → `/motion-graphics`. **The clip plays untouched** — re-timing, recoloring, reframing, reordering, or audio is NLE editing and **out of scope**. Building from a URL / topic / PR → the creation workflows. Unsure overlays-vs-captions? **Read `/hyperframes-read-first` first.**
+
+> **Graphic-packaging sibling of `embedded-captions`.** Captions add the _spoken words_
+> as a readable subtitle; this adds _designed graphics_ on top of the playing video.
 > Plain subtitles → `embedded-captions`. Build a video from scratch → the creation
 > workflows (`product-launch-video` / `faceless-explainer` / …).
 
@@ -160,26 +162,26 @@ the composition you author in Step 9:
 
 **Required Card fields:**
 
-| field | type | purpose |
-|---|---|---|
-| `id` | string | stable id used in card HTML & GSAP selectors |
-| `intent` | string | natural-language description; fed to card synthesis |
-| `startSec` / `endSec` | number | times in seconds (endSec > startSec) |
-| `accentIndex` | 0 \| 1 \| 2 \| 3 \| 4 | which of the 5 theme accent colors this card pulls |
-| `zone` | enum (see below) | where on the canvas the card lives |
-| `contentHints` | object | free-form bag; agent puts kicker/title/detail/data/quote here |
-| `archetype` (optional) | string | free-form label you may attach to remember a card's pattern; absent = free-form, which is the default |
-| `transition` (optional) | enum: `cut` \| `fade` \| `slide` \| `wipe` | declarative card-to-card transition |
+| field                   | type                                       | purpose                                                                                               |
+| ----------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `id`                    | string                                     | stable id used in card HTML & GSAP selectors                                                          |
+| `intent`                | string                                     | natural-language description; fed to card synthesis                                                   |
+| `startSec` / `endSec`   | number                                     | times in seconds (endSec > startSec)                                                                  |
+| `accentIndex`           | 0 \| 1 \| 2 \| 3 \| 4                      | which of the 5 theme accent colors this card pulls                                                    |
+| `zone`                  | enum (see below)                           | where on the canvas the card lives                                                                    |
+| `contentHints`          | object                                     | free-form bag; agent puts kicker/title/detail/data/quote here                                         |
+| `archetype` (optional)  | string                                     | free-form label you may attach to remember a card's pattern; absent = free-form, which is the default |
+| `transition` (optional) | enum: `cut` \| `fade` \| `slide` \| `wipe` | declarative card-to-card transition                                                                   |
 
 **Five `zone` values:**
 
-| zone | resolved bounds | when to use |
-|---|---|---|
-| `fullscreen` | covers whole canvas | hero moments, big numbers, mantras |
-| `whiteboard-area` | inset 40px margin (or 45% of portrait height) | dense data / annotated content |
-| `lower-third` | bottom 30% band | annotation over visible video |
-| `side-panel` | right 42% (landscape) or bottom 40% (portrait) | data side, video other side |
-| `video-overlay` | full canvas, expects mostly-transparent card | annotation overlays on full-bleed video |
+| zone              | resolved bounds                                | when to use                             |
+| ----------------- | ---------------------------------------------- | --------------------------------------- |
+| `fullscreen`      | covers whole canvas                            | hero moments, big numbers, mantras      |
+| `whiteboard-area` | inset 40px margin (or 45% of portrait height)  | dense data / annotated content          |
+| `lower-third`     | bottom 30% band                                | annotation over visible video           |
+| `side-panel`      | right 42% (landscape) or bottom 40% (portrait) | data side, video other side             |
+| `video-overlay`   | full canvas, expects mostly-transparent card   | annotation overlays on full-bleed video |
 
 When you assemble the composition in Step 9, resolve each card's `zone`
 into pixel bounds on the card-host wrapper following the table above.
@@ -199,21 +201,21 @@ even short videos have rhythm.
 
 **Step 1 — base pace by duration** (the natural sec/card for medium density):
 
-| video duration | base pace (sec per card) | rationale |
-|---|---|---|
-| < 60s (short reel) | **6–8s** | viewers expect fast cuts in short-form |
-| 60s – 3 min | **8–12s** | normal social pace |
-| 3 – 10 min | **12–20s** | give breathing room; each card carries more |
-| 10 – 30 min | **20–35s** | long-form lecture / interview rhythm |
-| > 30 min | **30–60s** | episodic, near-chapter feel |
+| video duration     | base pace (sec per card) | rationale                                   |
+| ------------------ | ------------------------ | ------------------------------------------- |
+| < 60s (short reel) | **6–8s**                 | viewers expect fast cuts in short-form      |
+| 60s – 3 min        | **8–12s**                | normal social pace                          |
+| 3 – 10 min         | **12–20s**               | give breathing room; each card carries more |
+| 10 – 30 min        | **20–35s**               | long-form lecture / interview rhythm        |
+| > 30 min           | **30–60s**               | episodic, near-chapter feel                 |
 
 **Step 2 — density multiplier** (multiplies the base pace):
 
-| signal in the transcript | multiplier | effect |
-|---|---|---|
-| **High density** — many numbers, distinct claims, staccato pacing, list-like enumeration, every 1–2 sentences is a new idea | **× 0.7** | cuts faster, more cards |
-| **Medium density** — mixed flow with both data and narrative | **× 1.0** | base pace |
-| **Low density** — one extended story, repeated reframing, slow reflective pacing, single argument unfolding | **× 1.5** | cuts slower, fewer cards |
+| signal in the transcript                                                                                                    | multiplier | effect                   |
+| --------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------ |
+| **High density** — many numbers, distinct claims, staccato pacing, list-like enumeration, every 1–2 sentences is a new idea | **× 0.7**  | cuts faster, more cards  |
+| **Medium density** — mixed flow with both data and narrative                                                                | **× 1.0**  | base pace                |
+| **Low density** — one extended story, repeated reframing, slow reflective pacing, single argument unfolding                 | **× 1.5**  | cuts slower, fewer cards |
 
 **Step 3 — compute:**
 
@@ -266,7 +268,7 @@ question, **precompute two things**:
    so the user sees why it's recommended.
 
 2. **`autoCount`** from Step 6 (`max(5, round(videoSec / (basePace ×
-   densityMultiplier)))`) so the "自动" option's label can show the
+densityMultiplier)))`) so the "自动" option's label can show the
    concrete number.
 
 **Environment compatibility — pick the best available question channel.**
@@ -395,8 +397,9 @@ the reply. Bullet-style 1/2/3/4 keeps the reply parseable:
 ```
 
 Parsing the plain-text reply:
+
 - Accept loose formats: `"1A 2C 3B 4A"`, `"A C B A"`, `"16:9 / pip /
-  数据 / 自动"`, full sentences, or `默认`.
+数据 / 自动"`, full sentences, or `默认`.
 - If any answer is ambiguous → re-ask only the ambiguous ones (still
   inside the 2–5 cap).
 - If the user says "默认 / auto / 都用推荐" → skip without re-asking.
@@ -406,11 +409,11 @@ After the user answers (any channel):
 1. **Resolve the output canvas** from the ratio answer — these are the
    exact `storyboard.composition.width / height` values to write:
 
-   | user choice | composition.width × height | storyboard.layout field |
-   |---|---|---|
-   | `16:9` | **1920 × 1080** | `"landscape"` |
-   | `9:16` | **1080 × 1920** | `"portrait"` |
-   | `4:5`  | **1080 × 1350** | `"portrait"` (schema treats 4:5 as portrait — height > width) |
+   | user choice | composition.width × height | storyboard.layout field                                       |
+   | ----------- | -------------------------- | ------------------------------------------------------------- |
+   | `16:9`      | **1920 × 1080**            | `"landscape"`                                                 |
+   | `9:16`      | **1080 × 1920**            | `"portrait"`                                                  |
+   | `4:5`       | **1080 × 1350**            | `"portrait"` (schema treats 4:5 as portrait — height > width) |
 
    For **4:5 bounds inside `references/layouts/*.html`** — those files
    only document landscape (1920×1080) and portrait (1080×1920). For
@@ -429,23 +432,23 @@ After the user answers (any channel):
 
 3. **Resolve final cardCount** from the density answer:
 
-   | user choice | final cardCount |
-   |---|---|
-   | 自动 (推荐) | the `autoCount` you already computed |
-   | 少量 | `max(5, round(autoCount × 0.6))` |
-   | 更多 | `round(autoCount × 1.5)` (no upper clamp) |
-   | Other = "<n>" (integer) | `max(5, parseInt(n))` |
-   | Other = anything else | fall back to `autoCount` |
+   | user choice             | final cardCount                           |
+   | ----------------------- | ----------------------------------------- |
+   | 自动 (推荐)             | the `autoCount` you already computed      |
+   | 少量                    | `max(5, round(autoCount × 0.6))`          |
+   | 更多                    | `round(autoCount × 1.5)` (no upper clamp) |
+   | Other = "<n>" (integer) | `max(5, parseInt(n))`                     |
+   | Other = anything else   | fall back to `autoCount`                  |
 
 4. **Auto-pick the video frame** from this table (frames don't ask the
    user — they follow from layout × style):
 
-   | layout | warm-paper styles (academic / whiteboard / editorial / xhs) | clinical styles (audit / swiss / terminal / minimal) | experimental styles (geom / spotlight) |
-   |---|---|---|---|
-   | `split` | `polaroid` | `hairline` | `clean` |
-   | `stack` | `polaroid` | `hairline` | `clean` |
-   | `pip` | `clean` (pip pill already has chrome) | `clean` | `clean` |
-   | `overlay` | `clean` (full-bleed forbids deco frames) | `clean` | `clean` |
+   | layout    | warm-paper styles (academic / whiteboard / editorial / xhs) | clinical styles (audit / swiss / terminal / minimal) | experimental styles (geom / spotlight) |
+   | --------- | ----------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------- |
+   | `split`   | `polaroid`                                                  | `hairline`                                           | `clean`                                |
+   | `stack`   | `polaroid`                                                  | `hairline`                                           | `clean`                                |
+   | `pip`     | `clean` (pip pill already has chrome)                       | `clean`                                              | `clean`                                |
+   | `overlay` | `clean` (full-bleed forbids deco frames)                    | `clean`                                              | `clean`                                |
 
 5. **Tell the user what you chose** in one sentence — ratio (+ canvas
    size), layout, specific style, frame, and final cardCount — then
@@ -484,14 +487,14 @@ the remaining per-card decisions are:
 Pick from these `themeId` palettes (use them as `--accent-N` /
 `--bg` / `--text` CSS variables in your composition `<style>` block):
 
-| themeId | accent palette (5 colors) | board bg | text |
-|---|---|---|---|
+| themeId | accent palette (5 colors)                 | board bg          | text      |
+| ------- | ----------------------------------------- | ----------------- | --------- |
 | classic | `#1971c2 #e03131 #2f9e44 #e8590c #9c36b5` | `#FFF9E3` (paper) | `#1e1e1e` |
-| noir | `#4cc9f0 #f72585 #4ade80 #fb923c #a78bfa` | `#1a1a1a` | `#f1f1f1` |
-| mint | `#0077b6 #d62828 #2d6a4f #e76f51 #7209b7` | `#e8faf0` | `#1b4332` |
-| craft | `#bf5700 #d62728 #6c757d #e9b54a #3d5a80` | `#f6efe1` | `#2d2d2d` |
-| slate | `#0ea5e9 #ef4444 #22c55e #f97316 #a855f7` | `#1e293b` | `#f1f5f9` |
-| mono | `#000 #555 #888 #aaa #ccc` | `#fff` | `#000` |
+| noir    | `#4cc9f0 #f72585 #4ade80 #fb923c #a78bfa` | `#1a1a1a`         | `#f1f1f1` |
+| mint    | `#0077b6 #d62828 #2d6a4f #e76f51 #7209b7` | `#e8faf0`         | `#1b4332` |
+| craft   | `#bf5700 #d62728 #6c757d #e9b54a #3d5a80` | `#f6efe1`         | `#2d2d2d` |
+| slate   | `#0ea5e9 #ef4444 #22c55e #f97316 #a855f7` | `#1e293b`         | `#f1f5f9` |
+| mono    | `#000 #555 #888 #aaa #ccc`                | `#fff`            | `#000`    |
 
 Available fonts (woff2 in `<SKILL_DIR>/assets/fonts/`, staged to work dir in Step 9): `Caveat` (handwriting),
 `LXGW WenKai TC` (Chinese hand-script), `Inter` (modern sans), `Virgil`
@@ -514,11 +517,11 @@ Style  ×  Layout  ×  VideoFrame
  (10)      (4)         (3)
 ```
 
-| dimension | keys | what it decides |
-|---|---|---|
-| **style** | `academic` `editorial` `minimal` `spotlight` `geom` `whiteboard` `audit` `terminal` `swiss` `xhs` | the card's visual language — fonts, colors, ornament, layout-within-card |
-| **layout** | `split` `stack` `pip` `overlay` | how the source video and the card share the canvas |
-| **frame** | `clean` `hairline` `polaroid` | the decorative chrome around the video element |
+| dimension  | keys                                                                                              | what it decides                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **style**  | `academic` `editorial` `minimal` `spotlight` `geom` `whiteboard` `audit` `terminal` `swiss` `xhs` | the card's visual language — fonts, colors, ornament, layout-within-card |
+| **layout** | `split` `stack` `pip` `overlay`                                                                   | how the source video and the card share the canvas                       |
+| **frame**  | `clean` `hairline` `polaroid`                                                                     | the decorative chrome around the video element                           |
 
 Read `<SKILL_DIR>/references/DESIGN_INDEX.md`
 for the full matrix and a loose decision guide (访谈 / 产品发布 / 数据分析 /
@@ -568,12 +571,12 @@ doc invented one; the real schema only has `card.zone`.
 **4 composition layouts** (from `references/layouts/`) — each is a
 recipe pairing a `zone` with a `#video-wrap` tween target:
 
-| composition layout | recommended `card.zone` | GSAP target for `#video-wrap` (landscape 1920×1080) | GSAP target for `#video-wrap` (portrait 1080×1920) | when to use |
-|---|---|---|---|---|
-| `split` | `side-panel` | `{ left: 960, top: 0, width: 960, height: 1080 }` | `{ left: 0, top: 960, width: 1080, height: 960 }` (bottom half) | speaker + data side-by-side / 50:50 weight |
-| `stack` | `lower-third` | `{ left: 14, top: 14, width: 1892, height: 548 }` (top 52%) | `{ left: 0, top: 0, width: 1080, height: 844 }` (top 44%) | speaker on top + summary card below |
-| `pip` | `fullscreen` | `{ left: 1480, top: 760, width: 400, height: 300 }` + add `.framed` class | `{ left: 690, top: 28, width: 360, height: 203 }` + add `.framed` | content-heavy card + corner pip |
-| `overlay` | `video-overlay` | `{ left: 0, top: 0, width: 1920, height: 1080 }` (full-bleed) | `{ left: 0, top: 0, width: 1080, height: 1920 }` | cinematic / dramatic / glass card on full video |
+| composition layout | recommended `card.zone` | GSAP target for `#video-wrap` (landscape 1920×1080)                       | GSAP target for `#video-wrap` (portrait 1080×1920)                | when to use                                     |
+| ------------------ | ----------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| `split`            | `side-panel`            | `{ left: 960, top: 0, width: 960, height: 1080 }`                         | `{ left: 0, top: 960, width: 1080, height: 960 }` (bottom half)   | speaker + data side-by-side / 50:50 weight      |
+| `stack`            | `lower-third`           | `{ left: 14, top: 14, width: 1892, height: 548 }` (top 52%)               | `{ left: 0, top: 0, width: 1080, height: 844 }` (top 44%)         | speaker on top + summary card below             |
+| `pip`              | `fullscreen`            | `{ left: 1480, top: 760, width: 400, height: 300 }` + add `.framed` class | `{ left: 690, top: 28, width: 360, height: 203 }` + add `.framed` | content-heavy card + corner pip                 |
+| `overlay`          | `video-overlay`         | `{ left: 0, top: 0, width: 1920, height: 1080 }` (full-bleed)             | `{ left: 0, top: 0, width: 1080, height: 1920 }`                  | cinematic / dramatic / glass card on full video |
 
 For 4:5 (1080×1350), scale portrait y/h values by `1350/1920 ≈ 0.703`
 (see Step 7.0 Channel A / Channel B `recommendedRatio` resolution
@@ -582,13 +585,13 @@ table).
 **Other zone values for one-off variants** (still uses `card.zone`; no
 fake "layout" field):
 
-| `zone` | resolved bounds | common use |
-|---|---|---|
-| `fullscreen` | covers whole canvas | hero card, video tweens to hidden/pip |
-| `whiteboard-area` | inset 40px margin (landscape) or bottom 45% (portrait) | dense data card, free margins |
-| `lower-third` | bottom 30% band | talking-head annotation |
-| `side-panel` | right 42% (landscape) or bottom 40% (portrait) | sidebar / "split" recipe |
-| `video-overlay` | full canvas; expect transparent card root | glass overlay on full-bleed video |
+| `zone`            | resolved bounds                                        | common use                            |
+| ----------------- | ------------------------------------------------------ | ------------------------------------- |
+| `fullscreen`      | covers whole canvas                                    | hero card, video tweens to hidden/pip |
+| `whiteboard-area` | inset 40px margin (landscape) or bottom 45% (portrait) | dense data card, free margins         |
+| `lower-third`     | bottom 30% band                                        | talking-head annotation               |
+| `side-panel`      | right 42% (landscape) or bottom 40% (portrait)         | sidebar / "split" recipe              |
+| `video-overlay`   | full canvas; expect transparent card root              | glass overlay on full-bleed video     |
 
 You can mix recipes per card — choose `card.zone` based on what suits
 the moment, then write the GSAP tween for `#video-wrap` between cards.
@@ -624,12 +627,21 @@ otherwise it occludes the video. Two patterns:
 
 ```css
 /* Pattern A: transparent root, page body provides the cream backdrop */
-html, body { background: var(--bg); }
-.card[data-card-id="card-X"] .root { background: transparent; }
+html,
+body {
+  background: var(--bg);
+}
+.card[data-card-id="card-X"] .root {
+  background: transparent;
+}
 
 /* Pattern B: explicit per-card background ONLY for fullscreen cards */
-.card[data-card-id="card-hero"] .root { background: var(--bg); }
-.card[data-card-id="card-overlay"] .root { background: transparent; }
+.card[data-card-id="card-hero"] .root {
+  background: var(--bg);
+}
+.card[data-card-id="card-overlay"] .root {
+  background: transparent;
+}
 ```
 
 For `side-panel`-zone cards (split recipe), the card-host is already
@@ -658,21 +670,25 @@ contains a single rooted HTML fragment that follows this contract:
   </style>
 
   <div class="root">
-    <h1 id="card-01-title"
-        data-anim="kinetic-chars"
-        data-anim-at="0.3"
-        data-anim-duration="0.5"
-        data-anim-stagger="0.04"
-        data-anim-pattern="pop">
+    <h1
+      id="card-01-title"
+      data-anim="kinetic-chars"
+      data-anim-at="0.3"
+      data-anim-duration="0.5"
+      data-anim-stagger="0.04"
+      data-anim-pattern="pop"
+    >
       <span class="char">字</span>
       <span class="char">幕</span>
     </h1>
-    <div id="card-01-line"
-         data-anim="grow-x"
-         data-anim-at="0.65"
-         data-anim-duration="0.5"
-         data-anim-target-w="420"
-         style="width:0;height:8px;background:var(--accent-0);border-radius:4px;"></div>
+    <div
+      id="card-01-line"
+      data-anim="grow-x"
+      data-anim-at="0.65"
+      data-anim-duration="0.5"
+      data-anim-target-w="420"
+      style="width:0;height:8px;background:var(--accent-0);border-radius:4px;"
+    ></div>
   </div>
 </div>
 ```
@@ -699,14 +715,14 @@ case for social / mobile), **scale every visual size up** — phones hold
 the screen close, and the same pixel count reads smaller than on a
 landscape TV-style canvas.
 
-| token | landscape baseline | **portrait target** | scale |
-|---|---|---|---|
-| title (h1/h2 hero) | 64–96px | **88–132px** | ×1.35 |
-| detail / body | 24–30px | **30–40px** | ×1.30 |
-| kicker / chip label | 14–16px | **18–22px** | ×1.30 |
-| timecode / meta | 12–14px | **16–18px** | ×1.30 |
-| data block primary number | 48–60px | **64–88px** | ×1.40 |
-| line-height multiplier | 1.05–1.5 | same | (don't scale) |
+| token                     | landscape baseline | **portrait target** | scale         |
+| ------------------------- | ------------------ | ------------------- | ------------- |
+| title (h1/h2 hero)        | 64–96px            | **88–132px**        | ×1.35         |
+| detail / body             | 24–30px            | **30–40px**         | ×1.30         |
+| kicker / chip label       | 14–16px            | **18–22px**         | ×1.30         |
+| timecode / meta           | 12–14px            | **16–18px**         | ×1.30         |
+| data block primary number | 48–60px            | **64–88px**         | ×1.40         |
+| line-height multiplier    | 1.05–1.5           | same                | (don't scale) |
 
 **Rule of thumb:** `portraitPx = round(landscapePx × 1.3)`, then floor
 to a nearby 4px multiple for visual rhythm. Hero headlines may go up to
@@ -720,9 +736,15 @@ If you're producing a single card that must work in **both** layouts,
 prefer a `@container` query on the card root over hard-coding sizes:
 
 ```css
-.card[data-card-id="X"] .root { container-type: inline-size; }
-.card[data-card-id="X"] .title { font-size: clamp(64px, 8.5cqi, 132px); }
-.card[data-card-id="X"] .detail { font-size: clamp(24px, 3.2cqi, 40px); }
+.card[data-card-id="X"] .root {
+  container-type: inline-size;
+}
+.card[data-card-id="X"] .title {
+  font-size: clamp(64px, 8.5cqi, 132px);
+}
+.card[data-card-id="X"] .detail {
+  font-size: clamp(24px, 3.2cqi, 40px);
+}
 ```
 
 But for most cards, a single layout choice is fine — just pick the size
@@ -730,21 +752,21 @@ table column that matches the storyboard's `layout` field.
 
 #### Available `data-anim` Kinds
 
-| kind | use for | key params |
-|---|---|---|
-| `fade-in` | enter | `at`, `duration`, `ease?` |
-| `fade-out` | exit | `at`, `duration`, `ease?` |
-| `slide-in` | slide enter | `at`, `duration`, `from=left\|right\|top\|bottom`, `distance` |
-| `kinetic-chars` | per-char pop | `at`, `duration`, `stagger`, `pattern=pop\|fade` — element needs `<span class="char">` children |
-| `typewriter` | per-char fade | same as kinetic-chars but slower default stagger |
-| `count-up` | animate number | `at`, `duration`, `from`, `to`, `format=.0f\|.1f\|.2f\|,d` |
-| `draw-path` | SVG path reveal | `at`, `duration` — element should be a `<path>` |
-| `grow-y` | bar height | `at`, `duration`, `target-h` (px) — element starts `height:0` |
-| `grow-x` | bar width | `at`, `duration`, `target-w` (px) — element starts `width:0` |
-| `scale-pop` | pop entrance | `at`, `duration` |
-| `blur-in` | unfocused → focused | `at`, `duration` |
-| `mask-reveal` | clip reveal | `at`, `duration`, `direction=left\|right\|top\|bottom` |
-| `morph-to` | tween any CSS | `at`, `duration`, `props='{...JSON...}'` |
+| kind            | use for             | key params                                                                                      |
+| --------------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| `fade-in`       | enter               | `at`, `duration`, `ease?`                                                                       |
+| `fade-out`      | exit                | `at`, `duration`, `ease?`                                                                       |
+| `slide-in`      | slide enter         | `at`, `duration`, `from=left\|right\|top\|bottom`, `distance`                                   |
+| `kinetic-chars` | per-char pop        | `at`, `duration`, `stagger`, `pattern=pop\|fade` — element needs `<span class="char">` children |
+| `typewriter`    | per-char fade       | same as kinetic-chars but slower default stagger                                                |
+| `count-up`      | animate number      | `at`, `duration`, `from`, `to`, `format=.0f\|.1f\|.2f\|,d`                                      |
+| `draw-path`     | SVG path reveal     | `at`, `duration` — element should be a `<path>`                                                 |
+| `grow-y`        | bar height          | `at`, `duration`, `target-h` (px) — element starts `height:0`                                   |
+| `grow-x`        | bar width           | `at`, `duration`, `target-w` (px) — element starts `width:0`                                    |
+| `scale-pop`     | pop entrance        | `at`, `duration`                                                                                |
+| `blur-in`       | unfocused → focused | `at`, `duration`                                                                                |
+| `mask-reveal`   | clip reveal         | `at`, `duration`, `direction=left\|right\|top\|bottom`                                          |
+| `morph-to`      | tween any CSS       | `at`, `duration`, `props='{...JSON...}'`                                                        |
 
 `data-anim-at` is **seconds relative to the card's startSec** — when you
 compile each declaration into the GSAP timeline in Step 9, add the
@@ -774,170 +796,259 @@ ffmpeg -y -i "$VIDEO_PATH" -c:v libx264 -crf 18 -g 30 -keyint_min 30 \
 ```html
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8" />
-<style>
-@font-face { font-family: 'Caveat'; src: url('fonts/Caveat-400-latin.woff2') format('woff2'); font-weight: 400; font-display: block; }
-@font-face { font-family: 'Caveat'; src: url('fonts/Caveat-700-latin.woff2') format('woff2'); font-weight: 700; font-display: block; }
-@font-face { font-family: 'LXGW WenKai TC'; src: url('fonts/LXGWWenKaiTC-400-latin.woff2') format('woff2'); font-weight: 400; font-display: block; }
-@font-face { font-family: 'Inter'; src: url('fonts/Inter-400-latin.woff2') format('woff2'); font-weight: 400; font-display: block; }
-@font-face { font-family: 'Inter'; src: url('fonts/Inter-700-latin.woff2') format('woff2'); font-weight: 700; font-display: block; }
-@font-face { font-family: 'Virgil'; src: url('fonts/Virgil.woff2') format('woff2'); font-display: block; }
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Caveat";
+        src: url("fonts/Caveat-400-latin.woff2") format("woff2");
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Caveat";
+        src: url("fonts/Caveat-700-latin.woff2") format("woff2");
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "LXGW WenKai TC";
+        src: url("fonts/LXGWWenKaiTC-400-latin.woff2") format("woff2");
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Inter";
+        src: url("fonts/Inter-400-latin.woff2") format("woff2");
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Inter";
+        src: url("fonts/Inter-700-latin.woff2") format("woff2");
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Virgil";
+        src: url("fonts/Virgil.woff2") format("woff2");
+        font-display: block;
+      }
 
-:root {
-  /* Pick from the themeId palette table in Step 7 — example: classic */
-  --bg: #FFF9E3;
-  --text: #1e1e1e;
-  --accent-0: #1971c2;
-  --accent-1: #e03131;
-  --accent-2: #2f9e44;
-  --accent-3: #e8590c;
-  --accent-4: #9c36b5;
-  --font-family: 'Caveat', 'LXGW WenKai TC', serif;
-}
-* { box-sizing: border-box; }
-/* Body font-family MUST list concrete font names (not just var(--font-family)) —
+      :root {
+        /* Pick from the themeId palette table in Step 7 — example: classic */
+        --bg: #fff9e3;
+        --text: #1e1e1e;
+        --accent-0: #1971c2;
+        --accent-1: #e03131;
+        --accent-2: #2f9e44;
+        --accent-3: #e8590c;
+        --accent-4: #9c36b5;
+        --font-family: "Caveat", "LXGW WenKai TC", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      /* Body font-family MUST list concrete font names (not just var(--font-family)) —
    the HyperFrames renderer's static analyzer doesn't expand CSS variables when
    resolving fonts, so a var-only chain triggers `font_family_without_font_face`
    lint and falls back to a generic. Use the concrete chain here; cards that
    want the theme font can still reference var(--font-family) internally. */
-html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000;
-             font-family: 'Inter', 'Caveat', 'LXGW WenKai TC', ui-sans-serif, system-ui, sans-serif; }
-#stage { position: relative; width: 100%; height: 100%; overflow: hidden; }
-
-/* video-wrapper holds the source video. Its position / size are animated
-   over time by the master timeline (one tween per layout transition). */
-.video-wrapper {
-  position: absolute;
-  left: 0; top: 0; width: 1920px; height: 1080px;
-  overflow: hidden;
-  border-radius: 0;
-  box-shadow: none;
-}
-.video-wrapper video { width: 100%; height: 100%; object-fit: cover; }
-
-.card-host { position: absolute; pointer-events: none; overflow: hidden; }
-.card-host .card { position: relative; width: 100%; height: 100%; overflow: hidden; }
-.card-host .char { display: inline-block; visibility: visible; }
-
-/* Subtle drop shadow + rounded corners for non-fullscreen video framings */
-.video-wrapper.framed {
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
-}
-</style>
-</head>
-<body>
-<div
-  id="stage"
-  data-composition-id="graphic-overlays"
-  data-start="0"
-  data-duration="121.2"
-  data-fps="30"
-  data-width="1920"
-  data-height="1080"
->
-  <!-- Layer 1: source video — initial position matches card-01's layout -->
-  <div class="video-wrapper" id="video-wrap">
-    <video id="bg-video"
-           src="input-video.mp4"
-           muted playsinline
-           data-start="0"
-           data-duration="121.2"
-           data-track-index="1"></video>
-  </div>
-
-  <!-- Layer 2: each card-host sits at the bounds dictated by its layout. -->
-  <!-- IMPORTANT: every card-host MUST carry BOTH "card-host" and "clip" classes. -->
-  <!--   - "card-host"  → our positioning + pointer-events styles                 -->
-  <!--   - "clip"       → HyperFrames runtime uses this to enforce visibility     -->
-  <!--                    only during data-start … data-start+data-duration.      -->
-  <!--                    Without "clip" the host stays visible the whole video   -->
-  <!--                    (lint: timed_element_missing_clip_class).               -->
-  <!-- Example: card-01 with zone="fullscreen" → card-host covers (0,0,1920,1080) -->
-  <div class="card-host clip"
-       data-card-id="card-01"
-       data-start="1.0000"
-       data-duration="6.5000"
-       data-track-index="2"
-       style="left:0;top:0;width:1920px;height:1080px;visibility:hidden;opacity:0;">
-    <!-- paste the contents of public/cards/card-01.html here -->
-  </div>
-
-  <!-- Example: card-02 with zone="side-panel" (split composition layout) → card on left half -->
-  <div class="card-host clip"
-       data-card-id="card-02"
-       data-start="8.0000"
-       data-duration="12.0000"
-       data-track-index="2"
-       style="left:0;top:0;width:960px;height:1080px;visibility:hidden;opacity:0;">
-    <!-- card-02 HTML -->
-  </div>
-
-  <!-- ...one "card-host clip" per card with inline bounds matching resolveZoneBounds(card.zone)... -->
-
-  <script src="vendor/gsap.min.js"></script>
-  <script>
-  (function(){
-    // count-up formatter helper
-    window.__fmt = function(v, fmt) {
-      if (typeof fmt === 'string' && /^\.[0-9]+f$/.test(fmt)) {
-        return Number(v).toFixed(Number(fmt.slice(1, -1)));
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        font-family: "Inter", "Caveat", "LXGW WenKai TC", ui-sans-serif, system-ui, sans-serif;
       }
-      if (fmt === ',d') return Math.round(v).toLocaleString();
-      return String(Math.round(v));
-    };
+      #stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
 
-    const tl = window.gsap.timeline({ paused: true });
+      /* video-wrapper holds the source video. Its position / size are animated
+   over time by the master timeline (one tween per layout transition). */
+      .video-wrapper {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .video-wrapper video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
 
-    // ── Card lifecycle (one block per card) ──
-    // Example for card-01 [1.0, 7.5] with kinetic-chars at +0.3, grow-x at +0.65:
+      .card-host {
+        position: absolute;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .card-host .card {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      .card-host .char {
+        display: inline-block;
+        visibility: visible;
+      }
 
-    // Enter (fade in over 0.4s)
-    tl.set('.card-host[data-card-id="card-01"]',  { visibility: 'visible' }, 1.0000);
-    tl.fromTo('.card-host[data-card-id="card-01"]',
-              { opacity: 0 }, { opacity: 1, duration: 0.4000, ease: 'power2.out' }, 1.0000);
+      /* Subtle drop shadow + rounded corners for non-fullscreen video framings */
+      .video-wrapper.framed {
+        border-radius: 16px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="stage"
+      data-composition-id="graphic-overlays"
+      data-start="0"
+      data-duration="121.2"
+      data-fps="30"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- Layer 1: source video — initial position matches card-01's layout -->
+      <div class="video-wrapper" id="video-wrap">
+        <video
+          id="bg-video"
+          src="input-video.mp4"
+          muted
+          playsinline
+          data-start="0"
+          data-duration="121.2"
+          data-track-index="1"
+        ></video>
+      </div>
 
-    // Card-internal anims (compile each data-anim-* declaration here)
-    tl.from('.card[data-card-id="card-01"] #card-01-title .char',
-            { opacity: 0, y: 8, scale: 0.8, duration: 0.5000, ease: 'power2.out', stagger: 0.0400 },
-            1.3000);
-    tl.fromTo('.card[data-card-id="card-01"] #card-01-line',
-              { width: 0 }, { width: 420, duration: 0.5000, ease: 'power2.out' }, 1.6500);
+      <!-- Layer 2: each card-host sits at the bounds dictated by its layout. -->
+      <!-- IMPORTANT: every card-host MUST carry BOTH "card-host" and "clip" classes. -->
+      <!--   - "card-host"  → our positioning + pointer-events styles                 -->
+      <!--   - "clip"       → HyperFrames runtime uses this to enforce visibility     -->
+      <!--                    only during data-start … data-start+data-duration.      -->
+      <!--                    Without "clip" the host stays visible the whole video   -->
+      <!--                    (lint: timed_element_missing_clip_class).               -->
+      <!-- Example: card-01 with zone="fullscreen" → card-host covers (0,0,1920,1080) -->
+      <div
+        class="card-host clip"
+        data-card-id="card-01"
+        data-start="1.0000"
+        data-duration="6.5000"
+        data-track-index="2"
+        style="left:0;top:0;width:1920px;height:1080px;visibility:hidden;opacity:0;"
+      >
+        <!-- paste the contents of public/cards/card-01.html here -->
+      </div>
 
-    // Exit (fade out over 0.35s, ending at endSec)
-    tl.to('.card-host[data-card-id="card-01"]',
-          { opacity: 0, duration: 0.3500, ease: 'power2.in' }, 7.1500);
-    tl.set('.card-host[data-card-id="card-01"]', { visibility: 'hidden' }, 7.5000);
+      <!-- Example: card-02 with zone="side-panel" (split composition layout) → card on left half -->
+      <div
+        class="card-host clip"
+        data-card-id="card-02"
+        data-start="8.0000"
+        data-duration="12.0000"
+        data-track-index="2"
+        style="left:0;top:0;width:960px;height:1080px;visibility:hidden;opacity:0;"
+      >
+        <!-- card-02 HTML -->
+      </div>
 
-    // ── Video framing transitions ──
-    // When the next card uses a different composition layout, animate the
-    // video-wrapper to its new bounds. Example: card-01 = fullscreen
-    // (video hidden behind), card-02 = split composition (zone="side-panel"
-    // → video on right, card on left).
+      <!-- ...one "card-host clip" per card with inline bounds matching resolveZoneBounds(card.zone)... -->
 
-    // Card-02 enters at 8.0s with the split composition. Animate video to
-    // the right half during the card-01 → card-02 gap (between 7.5 and 8.0s).
-    tl.set('#video-wrap', { className: 'video-wrapper framed' }, 7.5);
-    tl.to('#video-wrap',
-          { left: 960, top: 0, width: 960, height: 1080,
-            duration: 0.6, ease: 'power2.inOut' }, 7.5);
+      <script src="vendor/gsap.min.js"></script>
+      <script>
+        (function () {
+          // count-up formatter helper
+          window.__fmt = function (v, fmt) {
+            if (typeof fmt === "string" && /^\.[0-9]+f$/.test(fmt)) {
+              return Number(v).toFixed(Number(fmt.slice(1, -1)));
+            }
+            if (fmt === ",d") return Math.round(v).toLocaleString();
+            return String(Math.round(v));
+          };
 
-    // Card-02 enter — same pattern as card-01
-    tl.set('.card-host[data-card-id="card-02"]', { visibility: 'visible' }, 8.0);
-    tl.fromTo('.card-host[data-card-id="card-02"]',
-              { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'power2.out' }, 8.0);
-    // ...card-02 internal anims...
+          const tl = window.gsap.timeline({ paused: true });
 
-    // ── repeat for each card; if the NEXT card's layout differs,
-    //    insert another tl.to('#video-wrap', ...) tween before its enter ──
+          // ── Card lifecycle (one block per card) ──
+          // Example for card-01 [1.0, 7.5] with kinetic-chars at +0.3, grow-x at +0.65:
 
-    window.__timelines = window.__timelines || {};
-    window.__timelines["graphic-overlays"] = tl;
-  })();
-  </script>
-</div>
-</body>
+          // Enter (fade in over 0.4s)
+          tl.set('.card-host[data-card-id="card-01"]', { visibility: "visible" }, 1.0);
+          tl.fromTo(
+            '.card-host[data-card-id="card-01"]',
+            { opacity: 0 },
+            { opacity: 1, duration: 0.4, ease: "power2.out" },
+            1.0,
+          );
+
+          // Card-internal anims (compile each data-anim-* declaration here)
+          tl.from(
+            '.card[data-card-id="card-01"] #card-01-title .char',
+            { opacity: 0, y: 8, scale: 0.8, duration: 0.5, ease: "power2.out", stagger: 0.04 },
+            1.3,
+          );
+          tl.fromTo(
+            '.card[data-card-id="card-01"] #card-01-line',
+            { width: 0 },
+            { width: 420, duration: 0.5, ease: "power2.out" },
+            1.65,
+          );
+
+          // Exit (fade out over 0.35s, ending at endSec)
+          tl.to(
+            '.card-host[data-card-id="card-01"]',
+            { opacity: 0, duration: 0.35, ease: "power2.in" },
+            7.15,
+          );
+          tl.set('.card-host[data-card-id="card-01"]', { visibility: "hidden" }, 7.5);
+
+          // ── Video framing transitions ──
+          // When the next card uses a different composition layout, animate the
+          // video-wrapper to its new bounds. Example: card-01 = fullscreen
+          // (video hidden behind), card-02 = split composition (zone="side-panel"
+          // → video on right, card on left).
+
+          // Card-02 enters at 8.0s with the split composition. Animate video to
+          // the right half during the card-01 → card-02 gap (between 7.5 and 8.0s).
+          tl.set("#video-wrap", { className: "video-wrapper framed" }, 7.5);
+          tl.to(
+            "#video-wrap",
+            { left: 960, top: 0, width: 960, height: 1080, duration: 0.6, ease: "power2.inOut" },
+            7.5,
+          );
+
+          // Card-02 enter — same pattern as card-01
+          tl.set('.card-host[data-card-id="card-02"]', { visibility: "visible" }, 8.0);
+          tl.fromTo(
+            '.card-host[data-card-id="card-02"]',
+            { opacity: 0 },
+            { opacity: 1, duration: 0.4, ease: "power2.out" },
+            8.0,
+          );
+          // ...card-02 internal anims...
+
+          // ── repeat for each card; if the NEXT card's layout differs,
+          //    insert another tl.to('#video-wrap', ...) tween before its enter ──
+
+          window.__timelines = window.__timelines || {};
+          window.__timelines["graphic-overlays"] = tl;
+        })();
+      </script>
+    </div>
+  </body>
 </html>
 ```
 
@@ -947,18 +1058,18 @@ Compile each `data-anim` attribute into a GSAP statement. Times are
 **absolute seconds** = card.startSec + data-anim-at, quantized to 1/fps.
 Selector is `.card[data-card-id="X"] #elementId`.
 
-| data-anim | GSAP statement template |
-|---|---|
-| `fade-in` | `tl.fromTo(SEL, { opacity: 0 }, { opacity: 1, duration: D, ease: 'power2.out' }, T);` |
-| `fade-out` | `tl.to(SEL, { opacity: 0, duration: D, ease: 'power2.in' }, T);` |
-| `slide-in` (from=left, dist=80) | `tl.fromTo(SEL, { opacity: 0, x: -80 }, { opacity: 1, x: 0, duration: D, ease: 'power2.out' }, T);` |
-| `kinetic-chars` (pop) | `tl.from(SEL + ' .char', { opacity: 0, y: 8, scale: 0.8, duration: D, ease: 'power2.out', stagger: S }, T);` |
-| `count-up` | `(function(){const o={v:FROM};tl.to(o,{v:TO,duration:D,ease:'power2.out',onUpdate:function(){const el=document.querySelector(SEL);if(el)el.textContent=__fmt(o.v,'FMT');}},T);})();` |
-| `draw-path` | `(function(){const el=document.querySelector(SEL);if(el){const L=el.getTotalLength();tl.set(SEL,{strokeDasharray:L,strokeDashoffset:L},T);tl.to(SEL,{strokeDashoffset:0,duration:D,ease:'power2.inOut'},T);}})();` |
-| `grow-x` (target-w=W) | `tl.fromTo(SEL, { width: 0 }, { width: W, duration: D, ease: 'power2.out' }, T);` |
-| `grow-y` (target-h=H) | `tl.fromTo(SEL, { height: 0 }, { height: H, duration: D, ease: 'power2.out' }, T);` |
-| `scale-pop` | `tl.fromTo(SEL, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: D, ease: 'back.out(1.6)' }, T);` |
-| `mask-reveal` (direction=left) | `tl.fromTo(SEL, { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)', duration: D, ease: 'power2.inOut' }, T);` |
+| data-anim                       | GSAP statement template                                                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fade-in`                       | `tl.fromTo(SEL, { opacity: 0 }, { opacity: 1, duration: D, ease: 'power2.out' }, T);`                                                                                                                              |
+| `fade-out`                      | `tl.to(SEL, { opacity: 0, duration: D, ease: 'power2.in' }, T);`                                                                                                                                                   |
+| `slide-in` (from=left, dist=80) | `tl.fromTo(SEL, { opacity: 0, x: -80 }, { opacity: 1, x: 0, duration: D, ease: 'power2.out' }, T);`                                                                                                                |
+| `kinetic-chars` (pop)           | `tl.from(SEL + ' .char', { opacity: 0, y: 8, scale: 0.8, duration: D, ease: 'power2.out', stagger: S }, T);`                                                                                                       |
+| `count-up`                      | `(function(){const o={v:FROM};tl.to(o,{v:TO,duration:D,ease:'power2.out',onUpdate:function(){const el=document.querySelector(SEL);if(el)el.textContent=__fmt(o.v,'FMT');}},T);})();`                               |
+| `draw-path`                     | `(function(){const el=document.querySelector(SEL);if(el){const L=el.getTotalLength();tl.set(SEL,{strokeDasharray:L,strokeDashoffset:L},T);tl.to(SEL,{strokeDashoffset:0,duration:D,ease:'power2.inOut'},T);}})();` |
+| `grow-x` (target-w=W)           | `tl.fromTo(SEL, { width: 0 }, { width: W, duration: D, ease: 'power2.out' }, T);`                                                                                                                                  |
+| `grow-y` (target-h=H)           | `tl.fromTo(SEL, { height: 0 }, { height: H, duration: D, ease: 'power2.out' }, T);`                                                                                                                                |
+| `scale-pop`                     | `tl.fromTo(SEL, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: D, ease: 'back.out(1.6)' }, T);`                                                                                                     |
+| `mask-reveal` (direction=left)  | `tl.fromTo(SEL, { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)', duration: D, ease: 'power2.inOut' }, T);`                                                                                         |
 
 Quantize: `T = Math.round(absSec * fps) / fps`. At 30fps the smallest
 step is `1/30 ≈ 0.0333s`; rounding to 4 decimals (`.toFixed(4)`) is fine
@@ -985,28 +1096,34 @@ top of `split` / `stack`.
 (landscape 1920×1080 — for portrait & 4:5 see `references/layouts/*.html`
 which list all three ratios):
 
-| composition layout | typical card.zone | `#video-wrap` GSAP target | extra css class |
-|---|---|---|---|
-| `split` | `side-panel` | `{ left: 960, top: 0, width: 960, height: 1080 }` | — |
-| `stack` | `lower-third` | `{ left: 14, top: 14, width: 1892, height: 548 }` (top 52%) | — |
-| `pip` (bottom-right) | `fullscreen` | `{ left: 1480, top: 760, width: 400, height: 300 }` | `pip-pill` (border-radius + ring + shadow) |
-| `pip` (top-left) | `fullscreen` | `{ left: 40, top: 40, width: 400, height: 300 }` | `pip-pill` |
-| `overlay` (video full-bleed) | `video-overlay` | `{ left: 0, top: 0, width: 1920, height: 1080 }` (no change from default) | — |
-| **hide video** (pure-graphic moment) | `fullscreen` | `{ opacity: 0 }` (or move off-canvas) | — |
+| composition layout                   | typical card.zone | `#video-wrap` GSAP target                                                 | extra css class                            |
+| ------------------------------------ | ----------------- | ------------------------------------------------------------------------- | ------------------------------------------ |
+| `split`                              | `side-panel`      | `{ left: 960, top: 0, width: 960, height: 1080 }`                         | —                                          |
+| `stack`                              | `lower-third`     | `{ left: 14, top: 14, width: 1892, height: 548 }` (top 52%)               | —                                          |
+| `pip` (bottom-right)                 | `fullscreen`      | `{ left: 1480, top: 760, width: 400, height: 300 }`                       | `pip-pill` (border-radius + ring + shadow) |
+| `pip` (top-left)                     | `fullscreen`      | `{ left: 40, top: 40, width: 400, height: 300 }`                          | `pip-pill`                                 |
+| `overlay` (video full-bleed)         | `video-overlay`   | `{ left: 0, top: 0, width: 1920, height: 1080 }` (no change from default) | —                                          |
+| **hide video** (pure-graphic moment) | `fullscreen`      | `{ opacity: 0 }` (or move off-canvas)                                     | —                                          |
 
 To toggle the pip-pill chrome (border-radius + white ring + drop shadow)
 when entering or leaving a pip moment:
 
 ```js
 // Enter pip — add chrome
-tl.set('#video-wrap', { className: 'video-wrapper pip-pill' }, T);
-tl.to('#video-wrap', { left: 1480, top: 760, width: 400, height: 300,
-                       duration: 0.6, ease: 'power2.inOut' }, T);
+tl.set("#video-wrap", { className: "video-wrapper pip-pill" }, T);
+tl.to(
+  "#video-wrap",
+  { left: 1480, top: 760, width: 400, height: 300, duration: 0.6, ease: "power2.inOut" },
+  T,
+);
 
 // Leave pip — back to clean full-bleed
-tl.set('#video-wrap', { className: 'video-wrapper' }, T_NEXT);
-tl.to('#video-wrap', { left: 0, top: 0, width: 1920, height: 1080,
-                       duration: 0.6, ease: 'power2.inOut' }, T_NEXT);
+tl.set("#video-wrap", { className: "video-wrapper" }, T_NEXT);
+tl.to(
+  "#video-wrap",
+  { left: 0, top: 0, width: 1920, height: 1080, duration: 0.6, ease: "power2.inOut" },
+  T_NEXT,
+);
 ```
 
 **Card-host bounds match the zone**. Resolve the card's `zone` into

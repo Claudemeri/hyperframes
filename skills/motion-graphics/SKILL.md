@@ -10,12 +10,15 @@ description: >
   multi-scene, narrated, or brand-reel pieces (use general-video), narrated
   website videos (website-to-video), topic explainers
   (faceless-explainer), product promos (product-launch-video), PR videos
-  (pr-to-video), or captions on existing footage (embedded-captions).
+  (pr-to-video), or captions on existing footage (embedded-captions). When unsure whether it's a
+  quick motion-first piece or a longer / narrated treatment, see /hyperframes-read-first.
 metadata:
   tags: orchestrator, motion-graphics, kinetic-type, data-viz, logo-reveal, lower-thirds, news, tweet, webpage, asset-fusion, short-form, overlay, no-narration
 ---
 
 # motion-graphics — dispatch entry
+
+> **Confirm the route before Step 0.** This skill makes a **short, design-led, unnarrated motion graphic** (motion is the message; ~under 10s, no voice-over). A **longer, multi-scene, or narrated** treatment → `/general-video`; a **narrated video of a website** → `/website-to-video`; a **topic explainer** → `/faceless-explainer`; a **product promo** → `/product-launch-video`; **captions on existing footage** → `/embedded-captions`. **Out of scope**: live / at-render-time data, or footage it can't capture. Unsure motion-first-vs-narrated? **Read `/hyperframes-read-first` first.**
 
 A short design-led motion graphic. **Asset-first**: decide the asset strategy and source real material _before_ designing the shot, then design the shot around what you have, then compose by reusing catalog capabilities. All artifacts go to `PROJECT_DIR = videos/<project-name>/` (created in Step 0); all paths below are relative to it.
 

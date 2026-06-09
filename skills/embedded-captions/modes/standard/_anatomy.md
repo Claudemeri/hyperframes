@@ -29,7 +29,7 @@ npx hyperframes remove-background subject.mp4 -o person.webm        # u2net_huma
 #    (a still works too:  remove-background portrait.jpg -o person.png)
 
 # 2) The verbatim word timings that drive the flowing caption
-npx hyperframes transcribe subject.mp4 --model small.en            # → transcript.json
+npx hyperframes transcribe subject.mp4 --model small            # → transcript.json
 #    shape: [{ "id":"w0","text":"Hello","start":0.0,"end":0.5 }, …]
 ```
 

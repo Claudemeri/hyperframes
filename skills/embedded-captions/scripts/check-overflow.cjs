@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * check-overflow.js — mode-agnostic frame-overflow WARNING for custom mode.
+ * check-overflow.cjs — mode-agnostic frame-overflow WARNING for custom mode.
  *
  * Template mode has check-occlusion.cjs (which also flags frame-edge overflow),
  * but custom mode runs no gates. This is the cheap safety net: it loads the
@@ -11,7 +11,7 @@
  * WARNING ONLY — never fails the build (custom designs may bleed intentionally).
  * Exit 0 if it ran (with or without findings); exit 3 if it couldn't run.
  *
- * Usage: node check-overflow.js <project-dir>
+ * Usage: node check-overflow.cjs <project-dir>
  */
 const path = require("path");
 const fs = require("fs");
@@ -31,15 +31,16 @@ for (const root of HF_ROOTS) {
       for (const d of fs.readdirSync(bunDir))
         if (d.startsWith("puppeteer@")) cands.push(path.join(bunDir, d, "node_modules", "puppeteer"));
     }
-  } catch { /* ignore */ }
-  for (const p of cands) { try { if (fs.existsSync(p)) { puppeteer = require(p); break; } } catch {} }
+  } catch (e) { /* ignore */ }
+  for (const p of cands) { try { if (fs.existsSync(p)) { puppeteer = require(p); break; } } catch (e) {} }
   if (puppeteer) break;
 }
 if (!puppeteer) { console.error("[overflow] puppeteer not found"); process.exit(3); }
 
 async function main() {
   const projectDir = process.argv[2];
-  const indexPath = path.resolve(projectDir, "index.html");
+  const htmlName = process.argv[3] || "index.html";   // Standard mode passes "rail.html" to gate the rail too
+  const indexPath = path.resolve(projectDir, htmlName);
   if (!fs.existsSync(indexPath)) { console.error(`[overflow] missing ${indexPath}`); process.exit(2); }
 
   const html = fs.readFileSync(indexPath, "utf8");
@@ -81,13 +82,13 @@ async function main() {
       await browser.close();
       process.exit(0);
     }
-    await page.evaluate(async () => { try { await document.fonts.ready; } catch {} });
+    await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
 
     const times = Array.from({ length: 9 }, (_, i) => +(DUR * i / 8).toFixed(2));
     const found = new Map(); // key text → worst offense
 
     for (const t of times) {
-      await page.evaluate((t) => { window.__timelines.main.seek(t); void document.body.offsetHeight; }, t);
+      await page.evaluate((t) => { window.__timelines.main.seek(t); document.body.offsetHeight; }, t);
       await new Promise((r) => setTimeout(r, 25));
       const offenders = await page.evaluate((W, H) => {
         const M = 2; // tolerance px

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* check-occlusion.cjs — pixel-perfect occlusion gate (Node port of check-occlusion-v2.py).
- * Runs measure-layout.js (real Chromium DOM rects), reads the RVM matte alpha via sharp,
+ * Runs measure-layout.cjs (real Chromium DOM rects), reads the RVM matte alpha via sharp,
  * computes per-word / per-cap occlusion. No Python.
  *   node check-occlusion.cjs <project-dir> [--strict] [--word-fail F] [--word-warn F] [--cap-fail F] [--remeasure]
  */
@@ -14,8 +14,8 @@ function hfResolve(pkg) {
   for (const root of roots) {
     const cands = [path.join(root, "node_modules", pkg)];
     const bun = path.join(root, "node_modules", ".bun");
-    try { if (fs.existsSync(bun)) for (const d of fs.readdirSync(bun)) if (d.startsWith(pkg + "@")) cands.push(path.join(bun, d, "node_modules", pkg)); } catch {}
-    for (const c of cands) { try { if (fs.existsSync(c)) return require(c); } catch {} }
+    try { if (fs.existsSync(bun)) for (const d of fs.readdirSync(bun)) if (d.startsWith(pkg + "@")) cands.push(path.join(bun, d, "node_modules", pkg)); } catch (e) {}
+    for (const c of cands) { try { if (fs.existsSync(c)) return require(c); } catch (e) {} }
   }
   console.error(`[v2] cannot find ${pkg} — set HYPERFRAMES_ROOT`); process.exit(3);
 }
@@ -25,7 +25,7 @@ function ensureLayoutMeasured(project, force) {
   const lp = path.join(project, "_layout.json"), idx = path.join(project, "index.html");
   let stale = force || !fs.existsSync(lp);
   if (!stale && fs.existsSync(idx) && fs.statSync(idx).mtimeMs > fs.statSync(lp).mtimeMs) stale = true;
-  if (stale) cp.execFileSync("node", [path.join(__dirname, "measure-layout.js"), project], { stdio: "inherit" });
+  if (stale) cp.execFileSync("node", [path.join(__dirname, "measure-layout.cjs"), project], { stdio: "inherit" });
   return JSON.parse(fs.readFileSync(lp, "utf8"));
 }
 async function loadAlphaMask(png) {
@@ -55,7 +55,12 @@ async function main() {
   const planPath = path.join(project, "plan.json");
   const plan = fs.existsSync(planPath) ? JSON.parse(fs.readFileSync(planPath, "utf8")) : {};
   const planLayer = plan.caption_layer || "bg";
-  const M = 2; // frame-edge tolerance (px) — matches check-overflow.js
+  // Hero groups (the ONE big promoted word) are SUPPOSED to sit ON the subject — for them
+  // occlusion is a TARGET (~30–55%), not "minimize". Collect their ids for the advisory below.
+  const heroIds = new Set();
+  for (const g of (plan.groups || [])) if (g && (g.hero === true || /^(hero|crown)$/i.test(g.plane || ""))) heroIds.add(g.id);
+  if (plan.crown_group && plan.crown_group.id) heroIds.add(plan.crown_group.id);
+  const M = 2; // frame-edge tolerance (px) — matches check-overflow.cjs
   const frameW = layout.width, frameH = layout.height;
 
   const capStats = {};
@@ -110,6 +115,11 @@ async function main() {
     if (oblit.length) s = oblit.slice(0, 5).map(([t, p]) => `${t}(${(p * 100).toFixed(0)}%)`).join(" ") + (oblit.length > 5 ? ` …+${oblit.length - 5}` : "");
     else if (warn.length) s = "[warn] " + warn.slice(0, 3).map(([t, p]) => `${t}(${(p * 100).toFixed(0)}%)`).join(" ");
     console.log(`  ${gid}  ${entry.layer}  avg ${(avgCap * 100).toFixed(0)}%  peak ${(peakCap * 100).toFixed(0)}%  ${status}  ${s}`);
+    // HERO target-occlusion advisory (not a failure): a hero should sit ON the subject
+    // (~30–55%). If it barely grazes, it reads as a small floating word, not an embed.
+    if (heroIds.has(gid) && peakCap < 0.15) {
+      console.log(`  ${gid}  [hero-weak] peak ${(peakCap * 100).toFixed(0)}% — hero barely crosses the subject; it should sit ON the subject (~30–55% = the embed effect). Center it (safe-zones heroAnchor) + make it BIG; don't park it in a clean margin.`);
+    }
   }
   if (failures.length) {
     const uniq = [...new Set(failures)];

@@ -127,7 +127,7 @@ Then check [typography-presets.md § Font-size scales with column width](typogra
 For a new video that's clearly similar to an existing canonical example:
 
 ```bash
-# 1. Scaffold the project  (<project> = videos/<project-name>/, per SKILL.md Pipeline)
+# 1. Scaffold the project
 hyperframes init <project> --non-interactive --video <video.mp4> --skip-skills
 
 # 2. Matte + transcribe

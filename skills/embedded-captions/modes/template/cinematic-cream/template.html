@@ -23,6 +23,49 @@
     - Tone: soft | present (motion curve)
     - scale: optional shortcut for size multiplication
 
+  LAYOUT — FIRST run the safe-zone precompute, THEN compose into PLANES:
+    - Run `node scripts/safe-zones.cjs <project>` and read `safe-zones.json`. From the
+       matte it gives subject coverage%, the clearer side, the largest CLEAN rectangles
+       (left/right/top), and a verdict:
+         · "fg"   → subject fills the frame; NO room to embed behind it. Use
+            `caption_layer:"fg"` (screen-blend on top). Do NOT fight it with bg embeds —
+            that's the 9:16 case that costs many failed occlusion rounds.
+         · "embed"→ NARRATION planes go INSIDE the reported clean zones (prefer the clearer
+            side / top). The HERO is the EXCEPTION — see the next bullet. Don't guess
+            narration positions — use the zones safe-zones gives you.
+    - NARRATION: define 2-4 named planes in plan.json `planes {}`, each inside a clean zone
+       from safe-zones.json. Give each narration group a `plane`; groups STACK within it (a
+       plane is a flex column → lines accumulate, aligned + coherent). Narration must be CLEAR.
+    - THE HERO (the one promoted peak word) is the OPPOSITE of narration — BIG, and ON the
+       subject. It is the scarce, earned PEAK; it must feel like it BURSTS, not a polite label:
+         · BIG + dominant — **~0.22–0.34 × frame height**. Give it a WIDE plane (≈ centered,
+            spanning the subject), NEVER a narrow margin column. (fit-fonts won't enlarge — if
+            the hero's box is narrow it stays small; widen the box.)
+         · CENTERED on the subject (use safe-zones `heroAnchor` = the subject's center),
+            CROSSING it so the head/torso occludes the MIDDLE — **target ~30–55% occlusion**.
+            That occlusion IS the effect. A hero shoved into a clean margin (~10% graze) is
+            WRONG — it reads as a small floating word, not an embed behind the subject.
+         · Exactly ONE hero per clip (scarcity = impact). Mark it `"hero": true` in the plan.
+    - Do NOT hand-position every group with its own scattered absolute `top%` — that
+       produces the unbalanced, occluded layouts the gate rejects (many re-tries). Planes
+       first; per-group `css` only fine-tunes WITHIN a plane. (Position fields above apply
+       per-group only when a group is NOT in a plane — the exception, not the default.)
+
+  READING ORDER — on-screen position follows SPOKEN order; a promoted word appears once:
+    - For groups sharing a column/region, vertical (top→bottom) order MUST match spoken
+       order. A promoted hero must NOT sit below words that come after it.
+       (e.g. "judge us by the [ACTIONS] that we take" → ACTIONS reads BETWEEN "by the" and
+       "that we take", NEVER below "that we take".)
+    - The promoted word is lifted OUT of the narration (appears once, as the hero — never
+       also in a narration line). For the words AFTER it, two options, in order:
+         1. PREFERRED — flow them directly BELOW the hero (in reading order) or merge them
+            into the hero's group, IF that area is clean (check safe-zones). One continuous
+            read, no clearing.
+         2. FALLBACK — if below/merge would land on the subject (occluded), do the Standard
+            hand-off: the pre-hero narration CLEARS, then the post-hero words appear fresh
+            (page-flip); the hero may hold across the flip.
+       Prefer promoting a CLAUSE-FINAL word when you can — then nothing follows to place.
+
   Philosophy:
     - Number of groups = content decides (3? 7? 12? whatever the speech
        warrants)

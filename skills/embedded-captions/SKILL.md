@@ -78,7 +78,7 @@ Read the samples. Refuse if:
 
 - Multiple speakers / hard cuts (split & render each shot, or refuse)
 - No human subject (this skill is for talking-head)
-- Under 3 seconds, no speech, or face never clearly visible
+- Under 3 seconds, **no speech**, or face never clearly visible — `transcribe.cjs` warns when audio is near-silent (Whisper hallucinates words like "Thank you." over silence); **heed it and refuse** rather than caption fabricated words
 - Busy handheld with fast motion (matte flickers)
 
 ### Pre-flight probes (cost nothing, prevent the worst failures)
@@ -92,13 +92,14 @@ Read the samples. Refuse if:
 
 ## Pipeline — 6 steps
 
-**Project directory.** All artifacts live in `PROJECT_DIR = videos/<project-name>/` — the same convention as the other video workflows (`product-launch-video` / `faceless-explainer` / `pr-to-video`). The cwd stays the agent **workspace root** (it should hold only harness state like `.claude/skills/` + `node_modules/`), and every artifact — the project, matte frames, transcript, `index.html` / `rail.html`, `final.mp4` — is written under that one subdirectory. Derive `<project-name>` from the clip (kebab-cased source filename); if the user names a directory (e.g. `videos/acme-cut`), use it. **`<project>` in every step below = this `PROJECT_DIR`.** Don't init at the workspace root, and don't nest another project inside `PROJECT_DIR`.
-
 ```
-1. hyperframes init <project> --non-interactive --video <video.mp4> --skip-skills   # <project> = videos/<project-name>
+1. hyperframes init <project> --non-interactive --video <video.mp4> --skip-skills
 2. node scripts/matte.cjs <project>            # → frames_fg/*.png (RVM matte, onnxruntime-node)
 3. node scripts/transcribe.cjs <project>       # → transcript.json (Whisper, our schema)
+3b. node scripts/safe-zones.cjs <project>      # → safe-zones.json (clean zones + embed-vs-fg verdict, FROM the matte — read before authoring)
 4. [AGENT STEP] mode-dependent — see below
+4b. (Cinematic) node scripts/fill-timings.cjs <project> # group/word times from transcript BY SEQUENCE (kills drift + duplicate-word mismatch)
+4c. (Cinematic) node scripts/fit-fonts.cjs <project>    # shrink any nowrap line that would overflow its box (kills the overflow round)
 5. (Cinematic mode only) node scripts/make-composition.cjs <project>
 6. bash scripts/render-and-composite.sh <project>  # → final.mp4 + history/ snapshot
 ```
@@ -107,10 +108,11 @@ Step 4 differs by mode:
 
 ### Step 4 — Cinematic mode (pure embed)
 
+0. **Read `safe-zones.json` first** (step 3b). If `recommendation:"fg"` → the subject fills the frame; author `caption_layer:"fg"` (don't fight it with bg embeds). If `"embed"` → place your caption **planes inside the reported clean `zones`** (prefer the `clearerSide`) instead of guessing positions — this is what avoids the occlusion-failure re-tries.
 1. Pick a template from the [modes/template/](modes/template/) catalog by scene fit (or the one the user named)
 2. Read its `spec.md` for required layout decisions
 3. Write `<project>/plan.json`: `template`, `duration`, `fps`, `width`, `height`, layout fields per the spec, and `groups[]` (each with `slot` + `tone` + `in/out` + `words`)
-4. Step 5 compiles plan.json → index.html; the gates (`check-timing`, `check-occlusion`) run before render
+4. Run `node scripts/fill-timings.cjs <project>` (fills group/word times from the transcript **by sequence** — you only choose the grouping; duplicates resolve correctly) then `node scripts/fit-fonts.cjs <project>` (shrinks any `nowrap` line that would overflow its box). Then step 5 compiles plan.json → index.html and the gates (`check-timing`, `check-occlusion`) run before render — with safe-zones + fitted sizes + sequenced timings as inputs, they should pass first try.
 
 ### Step 4 — Standard mode (rail + embed)
 
@@ -120,7 +122,7 @@ Step 4 differs by mode:
 2. **Pick the 3 templates** that best fit the content + scene (match each file's `## Triggers`); read those 3 + the 2–3 motion recipes they name in [modes/standard/\_motion.md](modes/standard/_motion.md). Build one (or blend tokens).
 3. Author `<project>/index.html` — source video + the **embed climax** in `#stage` (skeleton + the template's style tokens + a `CLIMAX_IN`/`CLIMAX_OUT`).
 4. Author `<project>/rail.html` — the **verbatim rail** only, transparent (words from `transcript.json`, active word `.act`, a `FLOW_IN`/`FLOW_OUT`).
-5. Render: `bash scripts/render-and-composite.sh <project>` renders both, RVM-mattes the climax behind the subject, alpha-overlays the rail in front. No `plan.json` → template gates skip (`check-overflow.js` still warns); self-check rail timing + embed scarcity per PIPELINE.md.
+5. Render: `bash scripts/render-and-composite.sh <project>` renders both, RVM-mattes the climax behind the subject, alpha-overlays the rail in front. No `plan.json` → template gates skip (`check-overflow.cjs` still warns); self-check rail timing + embed scarcity per PIPELINE.md.
 
 ---
 
@@ -198,9 +200,9 @@ track has its own, much simpler spec → **[references/rail.md](references/rail.
 - **Rail-first for talking-head / explainer.** Don't embed the whole transcript — most text is the rail; embed only peaks. Embedding everything is the default mistake.
 - **Embed is scarce + spaced.** ≤1 embed per sentence/beat, never two adjacent or co-visible, ≥ a beat apart, at most one `apex`. climax = per-beat peak, **not** "the single payoff of the entire clip."
 - **Matte = the subject (RVM person matting).** RVM segments people, not props — a gripped mic/cup is best-effort and may not be fully captured, and bright incidental objects can leak in. Sample `frames_fg/` and sanity-check before relying on tight prop occlusion.
-- **Captions stay on-frame.** Cinematic mode hard-gates frame-overflow; Standard mode runs `check-overflow.js` as a WARNING (intentional bleed is the only exception — read the warning).
+- **Captions stay on-frame.** Cinematic mode hard-gates frame-overflow; Standard mode runs `check-overflow.cjs` as a WARNING (intentional bleed is the only exception — read the warning).
 - **Each caption ≥ 0.5s on screen** — shorter = unreadable.
-- **Word timings must match transcript.json within 80ms** — a caption firing 500ms off-beat destroys the scene illusion. `render-and-composite.sh` runs `check-timing.cjs --strict` before rendering; fix drift before the gate. Never pack multiple transcript words into one entry (e.g. `"FUTURE OF"` or `"IT<br> ALL"` with one start/end) — the second word inherits the first's timestamp and fires early. Split them into separate word entries with their own timings, even if you want them on the same visual line (use CSS `white-space` / natural wrap instead of `<br>`). Creative substitutions where caption text ≠ transcript (e.g. `"15%"` replacing `"fifteen percent"`) are supported — register them in `CREATIVE_SUBS` inside `check-timing.cjs`.
+- **Word timings must match transcript.json within 80ms** — a caption firing 500ms off-beat destroys the scene illusion. `render-and-composite.sh` runs `check-timing.cjs --strict` before rendering; fix drift before the gate. Never pack multiple transcript words into one entry (e.g. `"FUTURE OF"` or `"IT<br>ALL"` with one start/end) — the second word inherits the first's timestamp and fires early. Split them into separate word entries with their own timings, even if you want them on the same visual line (use CSS `white-space` / natural wrap instead of `<br>`). Creative substitutions where caption text ≠ transcript (e.g. `"15%"` replacing `"fifteen percent"`) are supported — register them in `CREATIVE_SUBS` inside `check-timing.cjs`.
 - **Group windows must envelop their words** — `group.in ≤ min(word.start)` and `group.out ≥ max(word.end)` for every group. If `group.in` is later than a word's start, the word is silently delayed until the container mounts (we've shipped 800ms lag bugs from this). The validator enforces this.
 - **No two caption groups may overlap in both time AND screen region** — overlapping-in-time captions create text-on-text pileups. Options: (a) **spatial separation** — place each group in a non-overlapping vertical band so they can coexist (memory-wall cascade style); (b) **handoff** — set the earlier group's `out` ≤ the next group's `in` so only one is on screen; (c) **deliberate layered typography** — add `"allow_overlap": true` on one of the groups to silence the validator. The validator estimates each group's vertical bbox from its CSS and flags collisions. Pick (a) by default — it's what makes cinematic-cream feel like a poem accumulating, not a subtitle track replacing itself.
 - **Screen-blend fails on bright backgrounds (>180 luminance).** **Cinematic** templates are cream + `screen` and that DNA is **locked** (the plan can't recolour them) → on a bright backdrop they wash out, so **switch to Standard mode** (opaque rail) rather than overriding a template. In **Standard**, set `mix-blend-mode: normal` + opaque colour directly in the HTML.

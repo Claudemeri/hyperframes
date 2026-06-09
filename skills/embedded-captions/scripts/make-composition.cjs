@@ -6,9 +6,32 @@
  */
 const path = require("path");
 const fs = require("fs");
+const cp = require("child_process");
 
 const SKILL_ROOT = path.resolve(__dirname, "..");
 const TEMPLATES = path.join(SKILL_ROOT, "modes", "template");
+
+// Source clip duration (seconds) via ffprobe. The COMPOSITION/background length must
+// follow the SOURCE, not the last caption — see the Bug-1 note in main().
+function sourceDurationSec(project) {
+  let cands = ["source.mp4"];
+  try {
+    cands = cands.concat(fs.readdirSync(project).filter(
+      (f) => /\.(mp4|mov|webm|mkv|m4v)$/i.test(f) && !/^(final|bg_plus_caps|fg_caps|rail|index)/.test(f)));
+  } catch (e) {}
+  for (const c of cands) {
+    const p = path.isAbsolute(c) ? c : path.join(project, c);
+    if (!fs.existsSync(p)) continue;
+    try {
+      const out = cp.execFileSync("ffprobe",
+        ["-v", "error", "-show_entries", "format=duration", "-of", "default=nokey=1:noprint_wrappers=1", p],
+        { encoding: "utf8" }).trim();
+      const d = parseFloat(out);
+      if (d > 0) return d;
+    } catch (e) {}
+  }
+  return null;
+}
 
 function hexLum(hex) {
   let h = String(hex).replace("#", "");
@@ -52,7 +75,10 @@ function buildGroupsHtml(groups, planes) {
 function buildPlanesCss(planes) {
   if (!planes) return "";
   return Object.entries(planes).map(([pid, p]) => {
-    let css = ((p || {}).css || "").trim(); if (!css) return null; if (!css.endsWith(";")) css += ";";
+    // Accept BOTH plane shapes: { body: { css: "..." } } and the bare-string
+    // { body: "..." } (matches how groups write css). Reading only p.css silently
+    // dropped the string form → empty CSS → planes collapsed to (0,0).
+    let css = (typeof p === "string" ? p : (p || {}).css || "").trim(); if (!css) return null; if (!css.endsWith(";")) css += ";";
     return `      .plane-${pid} { ${css} }`;
   }).filter(Boolean).join("\n");
 }
@@ -80,6 +106,14 @@ function main() {
     console.error("[compile] mode=custom — skip this script and hand-write index.html."); process.exit(1);
   }
   let src = fs.readFileSync(findTemplate(plan.template), "utf8");
+  // Bug-1: the canvas/background length = SOURCE clip length, NOT the last-caption time.
+  // If plan.duration < source, the bg video ends before the matte → the tail shows only
+  // the foreground subject on black. Caption groups keep their own in/out (they may end
+  // earlier); only the composition duration follows the source.
+  const srcDur = sourceDurationSec(project);
+  const renderDur = srcDur && srcDur > 0 ? srcDur : plan.duration;
+  if (srcDur && Math.abs(srcDur - (plan.duration || 0)) > 0.2)
+    console.log(`[compile] canvas duration → source length ${renderDur.toFixed(2)}s (plan.duration=${plan.duration}); captions keep their own times.`);
   const plane = plan.plane || {}, header = plan.header || {}, crown = plan.crown || {};
   // LOCKED DNA — Cinematic mode does NOT let the plan override colour / blend / shadow /
   // filter. Picking a template commits to its visual identity; only layout + per-group
@@ -89,7 +123,7 @@ function main() {
   const capColor = "#fff5df";
   const g = (o, k, d) => (o && o[k] != null ? o[k] : d);
   const subs = {
-    DURATION: `${plan.duration}`, FPS: `${plan.fps ?? 24}`, WIDTH: `${plan.width}`, HEIGHT: `${plan.height}`,
+    DURATION: `${renderDur}`, FPS: `${plan.fps ?? 24}`, WIDTH: `${plan.width}`, HEIGHT: `${plan.height}`,
     FONT_SCALE: `${plan.font_scale ?? 1.0}`,
     PLANE_TOP: `${g(plane, "top", 0)}`, PLANE_LEFT: `${g(plane, "left", "")}`, PLANE_RIGHT: `${g(plane, "right", "")}`,
     PLANE_WIDTH: `${g(plane, "width", 0)}`, PLANE_HEIGHT: `${g(plane, "height", 0)}`,

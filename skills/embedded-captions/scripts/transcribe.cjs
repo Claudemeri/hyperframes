@@ -30,14 +30,33 @@ function ensureSource(project) {
       && !EXCL.has(path.basename(f, path.extname(f))) && !f.startsWith("index"))
     .map((f) => path.join(project, f));
   let found = cands.sort((a, b) => fs.statSync(b).size - fs.statSync(a).size)[0];
-  if (found) { try { fs.symlinkSync(path.basename(found), src); } catch { fs.copyFileSync(found, src); } }
+  if (found) { try { fs.symlinkSync(path.basename(found), src); } catch (e) { fs.copyFileSync(found, src); } }
   return src;
+}
+function usableWords(d) {
+  return d && Array.isArray(d.words) && d.words.some((w) => w && "start" in w && "end" in w);
+}
+// Mean loudness of the audio, for the no-speech guard below. Silence → whisper
+// hallucinates (famously "Thank you."), and the decision gate refuses "no speech".
+function meanVolumeDb(audio) {
+  try {
+    // ffmpeg writes volumedetect stats to STDERR — capture it (spawnSync, no throw).
+    const r = cp.spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", audio, "-af", "volumedetect", "-f", "null", "-"],
+      { encoding: "utf8" });
+    const out = (r.stderr || "") + (r.stdout || "");
+    const m = out.match(/mean_volume:\s*(-?[\d.]+) dB/);
+    return m ? parseFloat(m[1]) : null;
+  } catch (e) { return null; }
 }
 
 function main() {
   const project = path.resolve(process.argv[2] || "");
   if (!process.argv[2]) { console.error("usage: transcribe.cjs <project-dir> [model] [language]"); process.exit(1); }
-  const model = process.argv[3] || process.env.WHISPER_MODEL || "small.en";
+  // Default = multilingual `small`, NOT `small.en`. Per hyperframes-media: ".en models
+  // mistranslate non-English and mis-handle accented speech; default to small (auto-detects
+  // language)." We hardcoded small.en before — it hallucinated a wrong transcript on an
+  // accented speaker. Pass `small.en` only for known-clean-English; tough accents → a larger model.
+  const model = process.argv[3] || process.env.WHISPER_MODEL || "small";
   const language = process.argv[4] || process.env.WHISPER_LANG || "";
   const out = path.join(project, "transcript.json");
 
@@ -46,7 +65,7 @@ function main() {
     try {
       const d = JSON.parse(fs.readFileSync(out, "utf8"));
       if (d && d.words && d.language_code) { console.log("[transcribe] already normalized, skipping"); return; }
-    } catch {}
+    } catch (e) {}
   }
 
   const src = ensureSource(project);
@@ -79,5 +98,16 @@ function main() {
   fs.writeFileSync(out, JSON.stringify({ text, language_code: language || "en", words }, null, 2));
   console.log(`[transcribe] whisper(${model}) ${words.length} words → ${out}`);
   console.log(`[transcribe] text: ${text.slice(0, 160)}${text.length > 160 ? "…" : ""}`);
+
+  // No-speech guard: whisper returns confident hallucinations over silence (e.g. the
+  // whole clip as "Thank you."). The decision gate REFUSES "no speech" — operationalize
+  // it so an agent trusting the transcript can't sail past the gate.
+  const meanDb = meanVolumeDb(audio);
+  if (meanDb != null && meanDb < -45) {
+    console.error(`\n[transcribe] ⚠ NEAR-SILENT AUDIO — mean ${meanDb.toFixed(1)} dB (real speech ≈ -16..-26 dB).`);
+    console.error(`  This transcript is almost certainly a Whisper hallucination, NOT real speech.`);
+    console.error(`  Per the decision gate, REFUSE "no speech" — confirm with \`ffmpeg -i <src> -af silencedetect\`;`);
+    console.error(`  do NOT author captions from fabricated words.`);
+  }
 }
 main();

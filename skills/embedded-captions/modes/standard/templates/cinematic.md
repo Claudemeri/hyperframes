@@ -47,7 +47,7 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 ```bash
 npx hyperframes remove-background subject.mp4 -o person.webm
-npx hyperframes transcribe   subject.mp4 --model small.en      # -> transcript.json
+npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
 Build the `_anatomy.md` scene with class `stage s-cine bg-dark`, feed the transcript to the flow, set `CLIMAX_IN=grandrise` / `CLIMAX_OUT=rise-off` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.
 

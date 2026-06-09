@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * measure-layout.js — pixel-perfect bbox measurement using headless Chromium.
+ * measure-layout.cjs — pixel-perfect bbox measurement using headless Chromium.
  *
  * Loads the compiled index.html, seeks the GSAP timeline to specified sample
  * times, queries every .cap container + every .w word span via
@@ -11,7 +11,7 @@
  * sharp) — pixel accurate, no char_ratio guessing.
  *
  * Usage:
- *   node measure-layout.js <project-dir> [times...]
+ *   node measure-layout.cjs <project-dir> [times...]
  * If no times given, samples groups['in', 'out'] midpoints.
  */
 const path = require("path");
@@ -36,9 +36,9 @@ for (const root of HF_ROOTS) {
         if (d.startsWith("puppeteer@")) cands.push(path.join(bunDir, d, "node_modules", "puppeteer"));
       }
     }
-  } catch { /* ignore */ }
+  } catch (e) { /* ignore */ }
   for (const p of cands) {
-    try { if (fs.existsSync(p)) { puppeteer = require(p); break; } } catch { /* try next */ }
+    try { if (fs.existsSync(p)) { puppeteer = require(p); break; } } catch (e) { /* try next */ }
   }
   if (puppeteer) break;
 }
@@ -64,9 +64,9 @@ for (const root of HF_ROOTS) {
         if (d.startsWith("gsap@")) cands.push(path.join(bunDir, d, "node_modules", "gsap", "dist", "gsap.min.js"));
       }
     }
-  } catch { /* ignore */ }
+  } catch (e) { /* ignore */ }
   for (const p of cands) {
-    try { if (fs.existsSync(p)) { gsapSource = fs.readFileSync(p, "utf8"); break; } } catch { /* try next */ }
+    try { if (fs.existsSync(p)) { gsapSource = fs.readFileSync(p, "utf8"); break; } } catch (e) { /* try next */ }
   }
   if (gsapSource) break;
 }
@@ -74,7 +74,7 @@ for (const root of HF_ROOTS) {
 async function main() {
   const projectDir = process.argv[2];
   if (!projectDir) {
-    console.error("usage: measure-layout.js <project-dir> [t1 t2 ...]");
+    console.error("usage: measure-layout.cjs <project-dir> [t1 t2 ...]");
     process.exit(1);
   }
   const indexPath = path.resolve(projectDir, "index.html");
@@ -146,7 +146,7 @@ async function main() {
     }
     if (!ready) { console.error("[measure] GSAP timeline never registered"); process.exit(4); }
     // let webfonts settle so measured glyph metrics match the render
-    await page.evaluate(async () => { try { await document.fonts.ready; } catch {} });
+    await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
 
     const samples = [];
     for (const t of sampleTimes) {
@@ -155,7 +155,7 @@ async function main() {
         const tl = window.__timelines.main;
         tl.seek(t);
         // Force layout flush
-        void document.body.offsetHeight;
+        document.body.offsetHeight;
       }, t);
       // Tiny settle for animations / fonts
       await new Promise((r) => setTimeout(r, 30));
@@ -219,8 +219,13 @@ async function main() {
     fs.writeFileSync(outPath, JSON.stringify(layout, null, 2));
     console.log(`[measure] wrote ${outPath} (${sampleTimes.length} sample frames, ${samples.reduce((a,s)=>a+s.caps.length,0)} cap measurements)`);
   } finally {
-    await browser.close();
+    // Chromium occasionally hangs on shutdown. This script runs synchronously
+    // inside check-occlusion.cjs, which the render gate blocks on — a hung close
+    // would wedge the whole render. Cap the close, then force-exit below.
+    await Promise.race([browser.close().catch(() => {}), new Promise((r) => setTimeout(r, 8000))]);
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Force a hard exit so a lingering Chromium/libuv handle can't keep the process
+// (and the render gate that spawned it) alive indefinitely.
+main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

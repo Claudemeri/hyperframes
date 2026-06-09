@@ -1,0 +1,19 @@
+# RVM matting weights (~14 MB) — auto-downloaded on first matte run by
+# scripts/matte.cjs from the upstream RobustVideoMatting release.
+assets/*.onnx
+
+# Stray render/test artifacts — a project's outputs must never live inside the skill.
+*.mp4
+*.webm
+*.log
+_*.png
+frames_bg/
+frames_fg/
+history/
+*_shadow/
+transcript.json
+plan.json
+matte.fps
+safe-zones.json
+
+.DS_Store

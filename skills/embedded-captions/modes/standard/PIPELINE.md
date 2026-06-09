@@ -27,8 +27,6 @@ the rail stays clean + active-word accent).
 
 ## Pipeline (Standard)
 
-`<project> = videos/<project-name>/` (the workspace-root convention shared with the other video workflows — derive the name from the clip, or use the directory the user named; the cwd stays the workspace root).
-
 ```
 1. hyperframes init <project> --non-interactive --video <video.mp4> --skip-skills
 2. node scripts/matte.cjs <project>          # RVM → frames_fg/*.png  (KEEP RVM)
@@ -49,9 +47,9 @@ the rail stays clean + active-word accent).
   #a-roll{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 12%;z-index:1}
   #stage{position:absolute;inset:0;z-index:2;container-type:size;pointer-events:none}   /* cqh works off this */
   /* CLIMAX — big, behind the subject (RVM matte occludes it in post). _anatomy §3 base + the template's tokens.
-     ⚠ font-family MUST be the template's LITERAL name (hyperframes maps it to a bundled OFFLINE font). A CSS
-     var (var(--ff)) is NOT resolved by the font compiler → it silently falls back to a generic sans and the
-     whole look dies. Use a name from hyperframes' mapped list (oswald, inter, poppins, playfair display, …). */
+     ⚠ font-family MUST be the template's LITERAL name (e.g. 'Anton', 'Bangers', 'Oswald'). The render pipeline
+     scans for literal family names and auto-embeds the matching @font-face — a CSS var (var(--ff)) is NOT seen,
+     so it silently falls back to a generic sans and the whole look dies. Always write the literal name. */
   .climax{position:absolute;left:50%;top:37%;transform:translate(-50%,-50%);white-space:nowrap;
     font-family:'Oswald',sans-serif;          /* ← the template's font, LITERAL (never var()) */
     line-height:1.18;font-weight:900;font-size:44cqh;text-transform:uppercase;
@@ -142,19 +140,59 @@ vignette. Words injected from `transcript.json`, revealed at each word's `start`
 </body></html>
 ```
 
+## Rail ↔ climax hand-off (the promoted word appears exactly once)
+
+The embed climax is a **promoted** word — lifted OUT of the rail into the hero layer. It must therefore
+**never also be revealed in the rail.** The same word showing big behind the subject AND in the lower-third at
+once reads as a bug. Author rail + climax as a page-flip that **pivots on the promoted word**, with the climax as
+the sentence's persistent anchor.
+
+Worked example — *"She said she **LOVES** being treated like a girl."* (LOVES = climax):
+
+| when | rail (lower-third) | climax (behind subject) |
+|---|---|---|
+| "She said she" spoken | reveals `She said she` (karaoke) | — |
+| **"LOVES" spoken** | **freezes** — holds `She said she`, does **NOT** reveal LOVES | **`LOVES` enters** (big) |
+| "being…" spoken | clears `She said she`, starts a fresh line `being treated like a girl` | `LOVES` **keeps holding** |
+| "…girl" (thought ends) | (clears / next sentence) | **`LOVES` exits** |
+
+The promoted word is the **visual anchor of the whole thought**: it enters on its own beat and **holds across the
+rail's page-flip**, exiting only when the sentence completes. The rail pages through the *non-peak* words beneath
+it. `LOVES` appears once (in the climax), never in the rail.
+
+Authoring contract:
+- **`rail.html`** splits the sentence at the promoted word into segment A (pre-climax words) + segment B
+  (post-climax words). A reveals normally, then **holds** (no further reveal) from the climax's entrance until
+  B's first word; at that word A **clears** and B reveals. **Neither segment ever contains the promoted word.**
+- **`index.html`**: climax `in` = the promoted word's spoken `start`; climax `out` = the **end of the thought**
+  (after segment B's last word) — *not* the promoted word's own end. So `HOLD` spans the page-flip, not just the word.
+- Gate: `scripts/check-rail-climax.cjs` fails the render if the promoted word is visible in the rail during the
+  climax's on-screen window. Override with `RAIL_CLIMAX_SKIP=1` only for a deliberate exception.
+
 ## Notes
 
-- **No `plan.json` in Standard mode** → the template-mode gates (`check-timing`, `check-occlusion`) don't run.
-  Self-check: rail words verbatim & on the beat (≤80ms), one embed per beat, climax holds ≥1s, exit ends at
-  `opacity:0`. `check-overflow.js` still runs as a warning.
+- **Media `src`:** reference the video as `src="source.mp4"` — the skill guarantees that name. (The render harness also links the project's media into the render shadow under their real names, so the `hyperframes init` scaffold's original filename resolves too; `source.mp4` is just the portable choice. Don't edit the scaffold in place expecting its raw filename — author from this skeleton.)
+- **No `plan.json` in Standard mode** → the template-mode gates (`check-timing`, `check-occlusion`) don't run; `render-and-composite.sh` runs `check-overflow.cjs` on **both** `index.html` and `rail.html` (warning-only).
+  Self-check: rail words verbatim & on the beat (≤80ms); one embed per beat; the promoted word is **handed off**
+  (never shown in the rail — see *Rail ↔ climax hand-off*); climax holds to the end of its thought and exits at
+  `opacity:0`. `check-overflow.cjs` (warning) + `check-rail-climax.cjs` (fails on a duplicated promoted word) run automatically.
 - **Rail legibility** is glyph-local only — a soft shadow or a text-box scrim. **Never grade/recolor the video**
   and never lay a full-frame bar (this skill's hard rule).
-- **One embed at a time**, spaced ≥ a beat apart; the rail can briefly dim/clear under the embed if they'd collide.
-- **⚠ Fonts are deterministic + must be LITERAL.** hyperframes ships the template fonts as OFFLINE fonts, but
-  only applies one when `font-family` is a literal mapped name (`'Oswald'`, `'Inter'`, `'Poppins'`,
-  `'Playfair Display'`, `'Anton'`, …). A CSS `var(--ff)` logs `No deterministic font mapping` and silently
-  falls back to a generic sans — **the single biggest way a Standard render ends up looking nothing like the
-  template.** Never put the font in a var; never rely on a Google-Fonts `<link>` (it's a flaky network dep).
+- **One embed at a time**, spaced ≥ a beat apart. The promoted word is **handed off, never duplicated** in the
+  rail (see *Rail ↔ climax hand-off* above); if the embed and rail boxes would overlap *spatially*, the rail can
+  briefly dim/clear under the embed.
+- **⚠ Fonts are deterministic + must be LITERAL.** Every template font renders OFFLINE — but via two different
+  mechanisms. hyperframes auto-supplies its ~18 canonical fonts (`'Inter'`, `'Oswald'`, `'Poppins'`,
+  `'Playfair Display'`, `'Archivo Black'`, `'JetBrains Mono'`, …). The other 21 template faces (`'Anton'`,
+  `'Bangers'`, `'Creepster'`, `'Monoton'`, `'VT323'`, `'Press Start 2P'`, `'Teko'`, `'Cinzel'`, `'Caveat'`, …)
+  are bundled in this skill (`modes/standard/fonts/fonts.css`, base64 woff2) and `scripts/inject-fonts.cjs`
+  inlines the `@font-face` for whichever families your HTML uses — automatically, before the gates + render.
+  **For this to fire, `font-family` must be the LITERAL family name.** A CSS `var(--ff)` is invisible to both the
+  hyperframes resolver AND the injector → it silently falls back to a generic sans, **the single biggest way a
+  Standard render ends up looking nothing like the template.** Never put the font in a var; never rely on a
+  Google-Fonts `<link>` (flaky network dep, and it fails in offline/CI renders). Just write the literal name —
+  the pipeline handles the rest. (To add a NEW font: drop its `-latin-<wt>-normal.woff2` into
+  `modes/standard/fonts/files/` and re-run `node modes/standard/fonts/build-fonts-css.cjs`.)
 - **Carry the template's design — don't sanitise it into generic defaults.** A small white Inter rail with a
   plain fade is NOT the template; next to the standalone it looks broken. The rail uses the **template's** font,
   size, palette (`--cfill`/`--cacc`) and `FLOW_IN`, and keeps the **`.grade`** vignette. Swap the rail font to a

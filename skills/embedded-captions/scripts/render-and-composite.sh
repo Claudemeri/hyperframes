@@ -25,7 +25,7 @@ if [[ -z "$HF" ]]; then
   echo "         checkout (needs packages/cli/dist/cli.js — 'bun install && bun run build')." >&2
   exit 1
 fi
-export HYPERFRAMES_ROOT="$HF"   # so the occlusion gate's measure-layout.js finds puppeteer too
+export HYPERFRAMES_ROOT="$HF"   # so the occlusion gate's measure-layout.cjs finds puppeteer too
 HF_CLI="$HF/packages/cli/dist/cli.js"
 if [[ ! -d "$PROJECT/frames_fg" ]]; then
   echo "[render] missing matte frames at $PROJECT/frames_fg — run matte.cjs first" >&2
@@ -44,6 +44,17 @@ elif [[ -f "$PROJECT/plan.json" && "$PROJECT/plan.json" -nt "$PROJECT/index.html
   node "$(dirname "$0")/make-composition.cjs" "$PROJECT"
 fi
 
+# Embed template fonts BEFORE the gates + render. hyperframes only auto-supplies
+# its ~18 canonical fonts; every other template family (Anton, Bangers, VT323,
+# Press Start 2P, …) silently falls back to a generic font on a clean/offline/CI
+# machine — it only "looks right" locally when that font happens to be installed
+# as a system font. inject-fonts inlines the @font-face (base64 woff2, from
+# modes/standard/fonts/fonts.css) for whatever non-canonical families each HTML
+# actually uses, so measure-layout AND the capture see the true glyph metrics.
+# Idempotent; a no-op when every font is canonical/system or already declared.
+node "$(dirname "$0")/inject-fonts.cjs" "$PROJECT" \
+  || echo "[render] (font embed skipped — inject-fonts.cjs/fonts.css unavailable)" >&2
+
 # Gate: plan.json word timings must align with transcript.json within 80ms.
 # A caption whose animation fires 500ms before or after the word is spoken
 # breaks the "belongs to the scene" illusion — hard fail, not a warning.
@@ -56,10 +67,32 @@ if [[ -f "$PROJECT/plan.json" && -f "$PROJECT/transcript.json" ]]; then
 fi
 
 # Gate: subject occlusion + frame-edge overflow — pixel-perfect via Chromium DOM
-# rects (measure-layout.js) × the RVM matte alpha (sharp). Template mode only
-# (skipped when plan.json is absent; custom mode uses check-overflow.js below).
+# rects (measure-layout.cjs) × the RVM matte alpha (sharp). Template mode only
+# (skipped when plan.json is absent; custom mode uses check-overflow.cjs below).
 if [[ -f "$PROJECT/plan.json" && -d "$PROJECT/frames_fg" ]]; then
-  if ! node "$(dirname "$0")/check-occlusion.cjs" "$PROJECT" --strict; then
+  # check-occlusion prints its verdict, then can intermittently hang on native
+  # (sharp/libvips) teardown — which would wedge the whole render. Run it under a
+  # watchdog: once the verdict is printed, a stuck exit can't block us. We read the
+  # pass/fail from its OUTPUT, not its exit code, so the hang is harmless.
+  OCC_LOG="$PROJECT/_occlusion.log"
+  node "$(dirname "$0")/check-occlusion.cjs" "$PROJECT" --strict > "$OCC_LOG" 2>&1 &
+  OCC_PID=$!; occ_t0=$SECONDS; OCC_RC=""; verdict_at=""
+  while kill -0 "$OCC_PID" 2>/dev/null; do
+    # mark when the verdict header is printed (analysis done)
+    [[ -z "$verdict_at" ]] && grep -qE '\[v2\].*word-fail' "$OCC_LOG" && verdict_at=$SECONDS
+    # verdict printed but still alive 8s later → native (sharp) teardown hang; or no
+    # verdict after 150s → measure/analysis stuck. Either way: kill + read verdict.
+    if { [[ -n "$verdict_at" ]] && (( SECONDS - verdict_at > 8 )); } || (( SECONDS - occ_t0 > 150 )); then
+      kill -9 "$OCC_PID" 2>/dev/null
+      if grep -q 'cap(s) FAIL' "$OCC_LOG"; then OCC_RC=2; else OCC_RC=0; fi
+      echo "[render] occlusion gate hung after verdict (sharp teardown) — killed zombie; verdict rc=$OCC_RC" >&2
+      break
+    fi
+    sleep 2
+  done
+  [[ -z "$OCC_RC" ]] && { wait "$OCC_PID" 2>/dev/null; OCC_RC=$?; }
+  cat "$OCC_LOG"
+  if (( OCC_RC != 0 )); then
     echo "[render] ABORTED — fix plan.json layout to reduce subject occlusion / frame-edge overflow, then re-run." >&2
     echo "         Override: OCCLUSION_SKIP=1 bash render-and-composite.sh <project>" >&2
     if [[ "${OCCLUSION_SKIP:-0}" != "1" ]]; then
@@ -73,9 +106,30 @@ fi
 # mode-agnostic frame-overflow check as a WARNING only — custom designs may bleed
 # off-frame intentionally, so it never aborts, but it surfaces captions that fall
 # off the canvas (the failure we otherwise only catch by eye).
-if [[ ! -f "$PROJECT/plan.json" && -f "$PROJECT/index.html" && -f "$(dirname "$0")/check-overflow.js" ]]; then
-  node "$(dirname "$0")/check-overflow.js" "$PROJECT" \
+if [[ ! -f "$PROJECT/plan.json" && -f "$PROJECT/index.html" && -f "$(dirname "$0")/check-overflow.cjs" ]]; then
+  node "$(dirname "$0")/check-overflow.cjs" "$PROJECT" \
     || echo "[render] (overflow check skipped — Chromium/puppeteer unavailable)" >&2
+  # Standard mode: also gate rail.html — the only automated coverage the rail gets.
+  if [[ -f "$PROJECT/rail.html" ]]; then
+    node "$(dirname "$0")/check-overflow.cjs" "$PROJECT" rail.html \
+      || echo "[render] (rail overflow check skipped)" >&2
+  fi
+fi
+
+# Standard hand-off gate: the PROMOTED climax word must NOT also be revealed in the
+# rail during the climax's on-screen window (PIPELINE.md "Rail ↔ climax hand-off").
+# Hard-fails on a CONFIRMED duplicate; infra issues (no puppeteer, etc.) exit 0 and
+# never block. Override with RAIL_CLIMAX_SKIP=1 for a deliberate exception.
+if [[ -f "$PROJECT/rail.html" && -f "$PROJECT/index.html" && -f "$(dirname "$0")/check-rail-climax.cjs" ]]; then
+  if ! node "$(dirname "$0")/check-rail-climax.cjs" "$PROJECT"; then
+    echo "[render] ABORTED — the promoted climax word is duplicated in the rail." >&2
+    echo "         Apply the rail↔climax hand-off (PIPELINE.md), then re-run." >&2
+    echo "         Override: RAIL_CLIMAX_SKIP=1 bash render-and-composite.sh <project>" >&2
+    if [[ "${RAIL_CLIMAX_SKIP:-0}" != "1" ]]; then
+      exit 2
+    fi
+    echo "[render] RAIL_CLIMAX_SKIP=1 — continuing despite the rail/climax duplicate." >&2
+  fi
 fi
 
 # FPS: matte.fps (written by matte-rvm at the source's NATIVE rate) is authoritative
@@ -178,6 +232,23 @@ hf_render_dir() {
   [[ -f "$out" ]]
 }
 
+# Link a project's assets into a shadow render dir EXCEPT the files we manage
+# (the HTML we override + render outputs/intermediates). Links every other entry by
+# its real name, so the shadow resolves whatever media the HTML references — including
+# the ORIGINAL video filename `hyperframes init` scaffolds (e.g. clip.mp4), not just a
+# fixed allow-list. Prevents the shadow-render 404 → silent/frozen output → abort.
+link_assets() {  # <project> <shadow>
+  local proj="$1" sh="$2" b
+  for p in "$proj"/*; do
+    [[ -e "$p" ]] || continue
+    b="$(basename "$p")"
+    case "$b" in
+      index.html|rail.html|index_fg.html|final.mp4|bg_plus_caps.mp4|fg_caps.mp4|rail.webm|history|_*) continue;;
+    esac
+    ln -sf "$p" "$sh/$b"
+  done
+}
+
 # Hybrid renders need 2 independent hyperframes passes. They share no state, so
 # we run them in parallel (one in the main PROJECT, one in a shadow dir with
 # index_fg.html renamed to index.html). Saves ~half of the Chromium cost.
@@ -185,10 +256,8 @@ FG_SHADOW=""
 if [[ -f "$PROJECT/index_fg.html" ]]; then
   FG_SHADOW="$PROJECT/_fg_shadow"
   rm -rf "$FG_SHADOW" && mkdir -p "$FG_SHADOW"
-  # Link shared assets; copy index_fg.html into shadow as index.html.
-  for item in source.mp4 audio.mp3 transcript.json hyperframes.json frames_bg frames_fg; do
-    [[ -e "$PROJECT/$item" ]] && ln -sf "$PROJECT/$item" "$FG_SHADOW/$item"
-  done
+  # Link shared assets (any media filename); copy index_fg.html into shadow as index.html.
+  link_assets "$PROJECT" "$FG_SHADOW"
   cp "$PROJECT/index_fg.html" "$FG_SHADOW/index.html"
 
   FG_CAPS="$PROJECT/fg_caps.mp4"
@@ -208,9 +277,7 @@ elif [[ -f "$PROJECT/rail.html" ]]; then
   # discovered as a root composition (the multiple-root ambiguity — otherwise the
   # renderer might pick rail.html as the entry). The rail renders separately below.
   BASE_SHADOW="$PROJECT/_base_shadow"; rm -rf "$BASE_SHADOW"; mkdir -p "$BASE_SHADOW"
-  for item in source.mp4 audio.mp3 transcript.json hyperframes.json package.json frames_bg frames_fg; do
-    [[ -e "$PROJECT/$item" ]] && ln -sf "$PROJECT/$item" "$BASE_SHADOW/$item"
-  done
+  link_assets "$PROJECT" "$BASE_SHADOW"
   cp "$PROJECT/index.html" "$BASE_SHADOW/index.html"
   hf_render_dir "$BG" "bg_plus_caps" "$BASE_SHADOW" || { echo "[render] bg render failed" >&2; rm -rf "$BASE_SHADOW"; exit 1; }
   rm -rf "$BASE_SHADOW"
@@ -222,6 +289,32 @@ fi
 # Probe render dims for ffmpeg scale
 W="$(ffprobe -v error -select_streams v:0 -show_entries stream=width  -of default=nw=1:nk=1 "$BG")"
 H="$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=nw=1:nk=1 "$BG")"
+
+# Clamp every composite to the matte (= source-video) length. The render uses
+# plan.duration / data-duration, which can exceed the source (e.g. Whisper word
+# timestamps overrun the clip). Past the source the a-roll is gone (black) but the
+# matte overlay repeats its last frame → the tail shows the subject floating on
+# black. frames_fg is extracted at the source's native rate, so its count/fps IS
+# the true source length; cap output there.
+MATTE_DUR="$(awk "BEGIN{printf \"%.3f\", $(ls "$PROJECT/frames_fg" | wc -l)/$FPS}")"
+echo "[render] clamp output to source/matte length: ${MATTE_DUR}s"
+
+# Bug-1 guard: the background plate ($BG) must be at least the matte/source length,
+# else the tail (where the bg ran out but the matte continues) shows ONLY the
+# foreground subject on black. Cinematic auto-fixes this (make-composition sets the
+# canvas = source length); this catches a hand-authored Standard duration set to the
+# last-caption time instead of the clip length. Clamp to the bg length so we never
+# ship the only-foreground tail, and tell the author the real fix.
+if [[ -f "$BG" ]]; then
+  BG_DUR="$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$BG" 2>/dev/null | tr -dc '0-9.')"
+  if [[ -n "$BG_DUR" ]] && awk "BEGIN{exit !($BG_DUR < $MATTE_DUR - 0.3)}"; then
+    echo "[render] ⚠ background plate is ${BG_DUR}s but the clip is ${MATTE_DUR}s — the composition is shorter than the footage." >&2
+    echo "         The tail would show ONLY the foreground subject on black. FIX: set the composition" >&2
+    echo "         duration to the SOURCE clip length (data-duration on #root/#a-roll); captions may still" >&2
+    echo "         end earlier. Clamping output to ${BG_DUR}s for now to avoid the broken tail." >&2
+    MATTE_DUR="$BG_DUR"
+  fi
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STANDARD mode (rail + embed) — detected by rail.html.
@@ -236,13 +329,11 @@ if [[ -f "$PROJECT/rail.html" ]]; then
   ffmpeg -y -i "$BG" \
     -framerate "$FPS" -i "$PROJECT/frames_fg/f_%04d.png" \
     -filter_complex "[1:v]scale=${W}:${H},format=yuva420p[m];[0:v][m]overlay=format=auto[v]" \
-    -map "[v]" -map 0:a -r "$FPS" -c:v libx264 -crf 16 -preset medium -c:a copy "$MATTED"
+    -map "[v]" -map 0:a -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 16 -preset medium -c:a copy "$MATTED"
 
   # render rail.html (transparent) via a shadow dir (same trick as the fg hybrid)
   RAIL_SHADOW="$PROJECT/_rail_shadow"; rm -rf "$RAIL_SHADOW"; mkdir -p "$RAIL_SHADOW"
-  for item in source.mp4 audio.mp3 transcript.json hyperframes.json package.json frames_bg frames_fg; do
-    [[ -e "$PROJECT/$item" ]] && ln -sf "$PROJECT/$item" "$RAIL_SHADOW/$item"
-  done
+  link_assets "$PROJECT" "$RAIL_SHADOW"
   cp "$PROJECT/rail.html" "$RAIL_SHADOW/index.html"
   RAIL_WEBM="$PROJECT/rail.webm"
   hf_render_dir "$RAIL_WEBM" "rail" "$RAIL_SHADOW" "webm" || { echo "[render] rail render failed" >&2; rm -rf "$RAIL_SHADOW"; exit 1; }
@@ -252,7 +343,7 @@ if [[ -f "$PROJECT/rail.html" ]]; then
   # decode so the WebM alpha plane is honoured by overlay)
   ffmpeg -y -i "$MATTED" -c:v libvpx-vp9 -i "$RAIL_WEBM" \
     -filter_complex "[0:v][1:v]overlay=format=auto[v]" \
-    -map "[v]" -map 0:a -r "$FPS" -c:v libx264 -crf 16 -preset medium -c:a copy "$FINAL"
+    -map "[v]" -map 0:a -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 16 -preset medium -c:a copy "$FINAL"
   rm -f "$MATTED"
   echo "[render] done → $FINAL"
   exit 0
@@ -277,14 +368,14 @@ if [[ -f "$PROJECT/index_fg.html" ]]; then
     -i "$FG_CAPS" \
     -filter_complex "[1:v]scale=${W}:${H},format=yuva420p[matte];[0:v][matte]overlay=format=auto,format=gbrp[matted];[2:v]format=gbrp[fg];[matted][fg]blend=all_mode=screen,format=yuv420p[v]" \
     -map "[v]" -map 0:a \
-    -r "$FPS" -c:v libx264 -crf 18 -preset medium -c:a copy \
+    -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 18 -preset medium -c:a copy \
     "$FINAL"
 elif [[ "$CAPTION_LAYER" == "fg" ]]; then
   # Global FG mode: skip matte overlay entirely. bg_plus_caps.mp4 already
   # has captions on top of a-roll. Re-encode for consistency.
   echo "[render] fg mode (global) — skipping matte, re-encoding ${W}x${H}"
   ffmpeg -y -i "$BG" \
-    -r "$FPS" -c:v libx264 -crf 18 -preset medium -c:a copy \
+    -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 18 -preset medium -c:a copy \
     "$FINAL"
 else
   echo "[render] bg mode — overlay matte (${W}x${H})"
@@ -292,7 +383,7 @@ else
     -framerate "$FPS" -i "$PROJECT/frames_fg/f_%04d.png" \
     -filter_complex "[1:v]scale=${W}:${H},format=yuva420p[fg];[0:v][fg]overlay=format=auto[v]" \
     -map "[v]" -map 0:a \
-    -r "$FPS" -c:v libx264 -crf 18 -preset medium -c:a copy \
+    -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 18 -preset medium -c:a copy \
     "$FINAL"
 fi
 

@@ -11,11 +11,11 @@ CLI commands that create assets (`tts`, `bgm`, `transcribe`, `remove-background`
 
 **TTS** — `npx hyperframes tts "..."` picks the first available provider:
 
-| Order | Provider                      | Detected when             | Word timestamps                                                  |
-| ----- | ----------------------------- | ------------------------- | ---------------------------------------------------------------- |
-| 1     | HeyGen (Starfish)             | `$HEYGEN_API_KEY` set     | **Yes, native** — pass `--words narration.words.json` to capture |
-| 2     | ElevenLabs                    | `$ELEVENLABS_API_KEY` set | No — chain `transcribe` after                                    |
-| 3     | Kokoro-82M (local, 54 voices) | always (no key required)  | No — chain `transcribe` after                                    |
+| Order | Provider                      | Detected when                                | Word timestamps                                                  |
+| ----- | ----------------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| 1     | HeyGen (Starfish)             | `$HEYGEN_API_KEY` / `hyperframes auth login` | **Yes, native** — pass `--words narration.words.json` to capture |
+| 2     | ElevenLabs                    | `$ELEVENLABS_API_KEY` set                    | No — chain `transcribe` after                                    |
+| 3     | Kokoro-82M (local, 54 voices) | always (no key required)                     | No — chain `transcribe` after                                    |
 
 > If the installed `hyperframes tts` is the local-only build (its `--help` says "Kokoro-82M" and has no `--provider`/`--words` flags), it silently falls back to Kokoro even with `$HEYGEN_API_KEY` set. To force HeyGen regardless of CLI version, use the self-contained `scripts/heygen-tts.mjs` (see `references/tts.md`).
 

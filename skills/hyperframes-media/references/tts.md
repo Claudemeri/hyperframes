@@ -4,11 +4,11 @@
 
 ## Provider chain
 
-| Order | Provider          | Env trigger             | Voice IDs                                   | Word timestamps                           | Audio format         |
-| ----- | ----------------- | ----------------------- | ------------------------------------------- | ----------------------------------------- | -------------------- |
-| 1     | HeyGen (Starfish) | `$HEYGEN_API_KEY`       | UUIDs from `GET /v3/voices?engine=starfish` | **Yes** (`word_timestamps[]` in response) | mp3 → wav via ffmpeg |
-| 2     | ElevenLabs        | `$ELEVENLABS_API_KEY`   | UUIDs from elevenlabs.io dashboard          | No                                        | mp3 → wav via ffmpeg |
-| 3     | Kokoro-82M        | always (local fallback) | `am_michael`, `af_heart`, … (54 voices)     | No                                        | wav direct           |
+| Order | Provider          | Env trigger                                 | Voice IDs                                   | Word timestamps                           | Audio format         |
+| ----- | ----------------- | ------------------------------------------- | ------------------------------------------- | ----------------------------------------- | -------------------- |
+| 1     | HeyGen (Starfish) | `$HEYGEN_API_KEY` / `~/.heygen/credentials` | UUIDs from `GET /v3/voices?engine=starfish` | **Yes** (`word_timestamps[]` in response) | mp3 → wav via ffmpeg |
+| 2     | ElevenLabs        | `$ELEVENLABS_API_KEY`                       | UUIDs from elevenlabs.io dashboard          | No                                        | mp3 → wav via ffmpeg |
+| 3     | Kokoro-82M        | always (local fallback)                     | `am_michael`, `af_heart`, … (54 voices)     | No                                        | wav direct           |
 
 ```bash
 # Auto-detect (HeyGen if key set, else ElevenLabs, else Kokoro)
@@ -30,8 +30,16 @@ want HeyGen specifically — best quality **plus** word timestamps in one call �
 the skill's bundled script, which calls the HeyGen v3 REST API directly and needs
 no CLI provider plumbing:
 
+The script resolves a HeyGen credential the same way the CLI does — first source
+wins: `$HEYGEN_API_KEY` → `$HYPERFRAMES_API_KEY` → a project `.env` (auto-loaded,
+walks up ≤5 dirs) → `~/.heygen/credentials` (shared with heygen-cli;
+`$HEYGEN_CONFIG_DIR` overrides the dir). An OAuth login is sent as
+`Authorization: Bearer`; an API key as `X-Api-Key`. If the only credential is an
+expired OAuth token it stops with a hint to run `hyperframes auth refresh`.
+
 ```bash
-export HEYGEN_API_KEY=...   # or a .env in the project (auto-loaded, walks up ≤5 dirs)
+# Only needed if you haven't run `hyperframes auth login`:
+export HEYGEN_API_KEY=...   # or put it in a project .env
 
 # Synthesize + capture word timestamps in one call (skips a Whisper pass)
 node skills/hyperframes-media/scripts/heygen-tts.mjs \

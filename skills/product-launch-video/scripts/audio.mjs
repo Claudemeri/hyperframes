@@ -47,7 +47,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // ---------- argv ----------
@@ -117,6 +117,50 @@ function loadEnvFromDir(startDir) {
   }
 }
 loadEnvFromDir(hyperframesDir);
+
+// ---------- resolve HeyGen credential ----------
+// Mirrors the hyperframes CLI (packages/cli/src/auth: resolver.ts + store.ts +
+// client.ts#buildAuthHeaders). First usable source wins:
+//   1. $HEYGEN_API_KEY        → X-Api-Key
+//   2. $HYPERFRAMES_API_KEY   → X-Api-Key  (alias)
+//   3. ~/.heygen/credentials  (shared with heygen-cli / `hyperframes auth login`;
+//                              $HEYGEN_CONFIG_DIR overrides the dir):
+//        oauth (unexpired) → Authorization: Bearer  ·  else api_key → X-Api-Key
+//        ·  legacy single-line plaintext key → X-Api-Key
+// Pure resolution (never throws); returns { headers } | { expired: true } | null.
+function heygenCredential() {
+  const envKey = process.env.HEYGEN_API_KEY || process.env.HYPERFRAMES_API_KEY;
+  if (envKey) return { headers: { "X-Api-Key": envKey } };
+
+  const file = join(process.env.HEYGEN_CONFIG_DIR || join(homedir(), ".heygen"), "credentials");
+  if (!existsSync(file)) return null;
+  const raw = readFileSync(file, "utf8").trim();
+  if (!raw) return null;
+  if (!raw.startsWith("{")) return { headers: { "X-Api-Key": raw } };
+
+  const cred = JSON.parse(raw);
+  const oauth = cred.oauth;
+  if (oauth?.access_token) {
+    const expired = oauth.expires_at && new Date(oauth.expires_at).getTime() - 60_000 < Date.now();
+    if (!expired) return { headers: { Authorization: `Bearer ${oauth.access_token}` } };
+    if (!cred.api_key) return { expired: true };
+  }
+  if (cred.api_key) return { headers: { "X-Api-Key": cred.api_key } };
+  return null;
+}
+
+// Headers for the HeyGen REST calls, or a clear error pointing at the fix.
+function heygenAuthHeaders() {
+  const cred = heygenCredential();
+  if (cred?.headers) return cred.headers;
+  if (cred?.expired)
+    die(
+      "HeyGen OAuth token expired — run `hyperframes auth refresh` (or `hyperframes auth login`)",
+    );
+  die(
+    "no HeyGen credentials — set $HEYGEN_API_KEY, or run `hyperframes auth login` (writes ~/.heygen/credentials)",
+  );
+}
 
 // ---------- Step 1: bootstrap HyperFrames project root ----------
 if (!existsSync(hyperframesDir)) {
@@ -193,11 +237,12 @@ const bgmInferenceBlob = (() => {
 
 // ---------- Step 3: provider detection ----------
 // Self-contained selection (no dependency on CLI provider plumbing):
-//   heygen     ← $HEYGEN_API_KEY        (cloud REST, returns word timestamps; see synthesizeHeygen)
+//   heygen     ← $HEYGEN_API_KEY / $HYPERFRAMES_API_KEY / ~/.heygen/credentials
+//                (cloud REST, returns word timestamps; see synthesizeHeygen / heygenCredential)
 //   elevenlabs ← $ELEVENLABS_API_KEY + `pip install elevenlabs` (inline python)
 //   kokoro     ← always (local, no key; via published `hyperframes tts`)
 function heygenAvailable() {
-  return !!process.env.HEYGEN_API_KEY;
+  return heygenCredential() !== null;
 }
 function elevenlabsAvailable() {
   if (!process.env.ELEVENLABS_API_KEY) return false;
@@ -217,8 +262,10 @@ if (!provider) {
 }
 if (!["heygen", "elevenlabs", "kokoro"].includes(provider))
   die(`invalid --provider "${provider}" (must be heygen | elevenlabs | kokoro)`);
-if (provider === "heygen" && !process.env.HEYGEN_API_KEY)
-  die("provider=heygen but $HEYGEN_API_KEY is not set");
+if (provider === "heygen" && !heygenAvailable())
+  die(
+    "provider=heygen but no HeyGen credentials — set $HEYGEN_API_KEY or run `hyperframes auth login`",
+  );
 if (provider === "elevenlabs" && !process.env.ELEVENLABS_API_KEY)
   die("provider=elevenlabs but $ELEVENLABS_API_KEY is not set");
 
@@ -238,9 +285,12 @@ let voiceId =
 // (the old hardcoded default 1bd001e7…) is rejected with HTTP 400. With no
 // --voice, auto-pick the first English public starfish voice.
 if (provider === "heygen" && !voiceId) {
-  const vres = await fetch("https://api.heygen.com/v3/voices?engine=starfish&type=public&limit=50", {
-    headers: { "X-Api-Key": process.env.HEYGEN_API_KEY },
-  });
+  const vres = await fetch(
+    "https://api.heygen.com/v3/voices?engine=starfish&type=public&limit=50",
+    {
+      headers: heygenAuthHeaders(),
+    },
+  );
   if (!vres.ok) die(`heygen voice list failed (HTTP ${vres.status})`);
   const list = (await vres.json()).data ?? [];
   const pick = list.find((v) => v.language === "English") ?? list[0];
@@ -392,7 +442,7 @@ async function synthesizeHeygen(s) {
     if (lang !== "en") reqBody.language = lang;
     const res = await fetch(HEYGEN_ENDPOINT, {
       method: "POST",
-      headers: { "X-Api-Key": process.env.HEYGEN_API_KEY, "Content-Type": "application/json" },
+      headers: { ...heygenAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify(reqBody),
     });
     if (!res.ok) return { status: -1 };

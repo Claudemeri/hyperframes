@@ -52,14 +52,18 @@ npx hyperframes doctor                                  # One-time check that Ch
 
 Optional API keys (if unset, the workflow uses local fallbacks). Injection is described in Step 0.5. `GEMINI_API_KEY` and `GOOGLE_API_KEY` are equivalent aliases.
 
-| Key                                      | Used for                                       | Default voice / fallback                                                                      |
-| ---------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `HEYGEN_API_KEY`                         | TTS (cloud, with word-level timestamps)        | voice: auto (first English starfish voice; override `--voice`)                                |
-| `ELEVENLABS_API_KEY`                     | TTS (cloud; requires `pip install elevenlabs`) | voice `21m00Tcm4TlvDq8ikWAM` (Rachel)                                                         |
-| Neither set                              | TTS                                            | local Kokoro, voice `am_michael` (for non-English, pass `--voice`)                            |
-| `GEMINI_API_KEY` (one key for both uses) | Capture vision caption + Lyria BGM             | unset -> captions use DOM context only; BGM uses local MusicGen (first run downloads ~300 MB) |
+| Key                                            | Used for                                       | Default voice / fallback                                                                      |
+| ---------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `HEYGEN_API_KEY` (or `hyperframes auth login`) | TTS (cloud, with word-level timestamps)        | voice: auto (first English starfish voice; override `--voice`)                                |
+| `ELEVENLABS_API_KEY`                           | TTS (cloud; requires `pip install elevenlabs`) | voice `21m00Tcm4TlvDq8ikWAM` (Rachel)                                                         |
+| Neither, and not logged in                     | TTS                                            | local Kokoro, voice `am_michael` (for non-English, pass `--voice`)                            |
+| `GEMINI_API_KEY` (one key for both uses)       | Capture vision caption + Lyria BGM             | unset -> captions use DOM context only; BGM uses local MusicGen (first run downloads ~300 MB) |
 
 ## Flow
+
+### Step 0.0 - Confirm the brief (one round, then build)
+
+Before Step 0, in **one** message confirm only what materially shapes the launch video and you can't infer — lead with a recommended default, skip anything the user already gave: the **angle / focus** (what the launch centers on — the product overall, a headline feature, an offer / CTA), **length** (default ~30-90s; up to ~3 min), and — if `/hyperframes-read-first` did not already set them — **aspect** (default 16:9; 9:16 for vertical / social) and **language**. The preset is derived from brand capture, not asked. For a fully specified request, skip this and build.
 
 ### Step 0 - Initialize the video project
 
@@ -92,13 +96,18 @@ The complete directory shape is in "Design notes / Directory shape" at the end. 
 
 ### Step 0.5 - API key guidance
 
-**Skip condition**: `$PROJECT_DIR/.env` already exists, or `context.log` is non-empty (= not the first run). Otherwise tell the user:
+**Skip condition**: `$PROJECT_DIR/.env` already exists, or `context.log` is non-empty (= not the first run). Otherwise **first detect what's already available**, then **always pause and present the menu below — wait for the user; do not proceed on your own, even when a workable config is detected** (the user may want to add a key, e.g. Gemini for Lyria BGM + vision captions):
 
-> This workflow can optionally use cloud keys (see the prerequisite table above). It also runs without them by using local fallbacks. Reply with:
+- HeyGen TTS is on if `$HEYGEN_API_KEY` / `$HYPERFRAMES_API_KEY` is set, **or** `~/.heygen/credentials` exists (from `hyperframes auth login`, shared with heygen-cli).
+- ElevenLabs / Gemini are on only if their env keys are set.
+
+State what was detected (and what each missing key would add), then ask:
+
+> Detected: <summary>. Cloud keys are optional — without them, unconfigured providers fall back locally (TTS -> Kokoro unless HeyGen is configured; BGM -> MusicGen). Reply with:
 >
 > - paste keys -> I will write them to `$PROJECT_DIR/.env`
-> - "go" -> I will assume they are already configured (shell `export` or `.env`)
-> - "skip" -> use local fallbacks for everything
+> - "go" -> proceed with what is configured now (shell `export`, `.env`, or `hyperframes auth login`)
+> - "skip" -> proceed with local fallbacks for anything unconfigured
 
 **Response handling**:
 

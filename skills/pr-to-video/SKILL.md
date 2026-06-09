@@ -32,13 +32,13 @@ All artifacts go to `PROJECT_DIR = videos/<project-name>/` (created in Step 0); 
 
 macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node ffmpeg` (use Homebrew Python, **not** `/usr/bin/python3`, or `pip install` is blocked by PEP 668); then `npx hyperframes doctor` once (downloads Chrome — needed for snapshot/render, not for ingest). For a final/shipping render also install Puppeteer (`npm i puppeteer`) so the Tier-1 perception gate (collision / contrast / cramped / panel-bleed) actually runs — without it the gate soft-skips and only the finalize eye-check remains; set `PLV_REQUIRE_PERCEPTION=1` (or pass `--require-perception`) to make a skipped gate fail preflight instead of soft-passing. CLIs: **`gh`** (GitHub CLI, authenticated — `gh auth status` must pass) and `hyperframes`. Optional cloud keys (else local fallbacks) — inject in Step 0.5:
 
-| Key / requirement                             | Used for                                    | Default / fallback                                             |
-| --------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
-| `gh auth status` OK                           | Reading the PR (public or private)          | **required** — fail fast with the auth hint                    |
-| `HEYGEN_API_KEY`                              | TTS (cloud, word-level timestamps)          | voice: auto (first English starfish voice; override `--voice`) |
-| `ELEVENLABS_API_KEY`                          | TTS (cloud; needs `pip install elevenlabs`) | voice `21m00Tcm4TlvDq8ikWAM` (Rachel)                          |
-| neither set                                   | TTS                                         | local Kokoro, voice `am_michael` (non-English: pass `--voice`) |
-| `GEMINI_API_KEY` / `GOOGLE_API_KEY` (aliases) | Lyria BGM                                   | unset -> local MusicGen (first run downloads ~300 MB)          |
+| Key / requirement                              | Used for                                    | Default / fallback                                             |
+| ---------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
+| `gh auth status` OK                            | Reading the PR (public or private)          | **required** — fail fast with the auth hint                    |
+| `HEYGEN_API_KEY` (or `hyperframes auth login`) | TTS (cloud, word-level timestamps)          | voice: auto (first English starfish voice; override `--voice`) |
+| `ELEVENLABS_API_KEY`                           | TTS (cloud; needs `pip install elevenlabs`) | voice `21m00Tcm4TlvDq8ikWAM` (Rachel)                          |
+| neither, and not logged in                     | TTS                                         | local Kokoro, voice `am_michael` (non-English: pass `--voice`) |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` (aliases)  | Lyria BGM                                   | unset -> local MusicGen (first run downloads ~300 MB)          |
 
 ## Flow
 
@@ -66,7 +66,7 @@ npx hyperframes init "$PROJECT_DIR" --non-interactive --skip-skills --example=bl
 
 ### Step 0.5 - API key guidance
 
-Skip if `$PROJECT_DIR/.env` exists or `context.log` is non-empty (= not the first run). Otherwise tell the user: paste keys (→ Write `$PROJECT_DIR/.env`, one `KEY=value` per line, overwrite same-name) / "go" (already configured) / "skip" (local fallbacks). Then proceed to Step 1.
+Skip if `$PROJECT_DIR/.env` exists or `context.log` is non-empty (= not the first run). Otherwise **first detect what's available** (HeyGen TTS on if `$HEYGEN_API_KEY` / `$HYPERFRAMES_API_KEY` set or `~/.heygen/credentials` exists from `hyperframes auth login`; ElevenLabs / Gemini only if their env keys set), then **always pause and offer the menu — wait for the user; do not proceed on your own even when a workable config is detected** (the user may want to add a key like Gemini). State what's detected, then: paste keys (→ Write `$PROJECT_DIR/.env`, one `KEY=value` per line, overwrite same-name) / "go" (proceed with what's configured — env, `.env`, or `hyperframes auth login`) / "skip" (proceed with local fallbacks for anything unconfigured). Then proceed to Step 1.
 
 ### Step 1 - Ingest (Bash, NO agent, NO scrape)
 

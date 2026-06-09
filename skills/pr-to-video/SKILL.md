@@ -58,10 +58,9 @@ Only when `$PROJECT_DIR/hyperframes.json` is absent:
 PROJECT_DIR="${PR_VIDEO_DIR:-videos/<project-name>}"
 mkdir -p "$(dirname "$PROJECT_DIR")"
 npx hyperframes init "$PROJECT_DIR" --non-interactive --skip-skills --example=blank
-rm -f "$PROJECT_DIR/CLAUDE.md"   # Claude Code auto-loads CLAUDE.md from the project subtree; its generic `/hyperframes` guidance competes with this skill. (AGENTS.md is never auto-loaded — leave it as scaffolding.)
 ```
 
-> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`. **Remove `CLAUDE.md`** (done above): Claude Code auto-loads it on-demand the moment the agent touches a file under `$PROJECT_DIR`, and its generic guidance competes with this skill (the source of truth). **Leave `AGENTS.md`**: Claude Code never auto-loads it, so it stays inert during the build and remains as scaffolding for whoever opens the finished project later.
+> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`; **leave them in place** — they are agent scaffolding for whoever opens the finished project later.
 
 **Constraints:** never run `hyperframes init` / generate `AGENTS.md` / `CLAUDE.md` in the workspace root; never nest another `hyperframes/` inside `PROJECT_DIR`; every Bash command (master + subagents) is a `(cd "$PROJECT_DIR" && ...)` subshell — never bare `cd`.
 

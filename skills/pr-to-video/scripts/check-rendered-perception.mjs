@@ -19,6 +19,13 @@
 //   3b. cross-text-collision      — two DIFFERENT display-tier texts (≥40px) with
 //                                    overlapping bboxes (unannotated headline clash
 //                                    / depth-stack spilling into a neighbour)
+//   3c. object-overlap            — two non-decorative foreground BOXES (cards,
+//                                    panels, stats, media, icons, small-text) that
+//                                    are position:absolute|fixed and whose bboxes
+//                                    intersect ≥15% of the smaller — object-level
+//                                    occlusion that 3a/3b miss. Opt out of an
+//                                    intentional layered composition with
+//                                    data-layout-allow-overlap="true".
 //   4. primary-offscreen          — display-tier text 15–85% clipped by the 1920×1080
 //                                    canvas (camera/zoom centering error); checked
 //                                    EVEN under data-layout-allow-overflow
@@ -120,6 +127,9 @@ const CFG = {
   panelBleedMaxFrac: 0.5, // …but <50% (≥50% = text sitting fully ON the panel = content placed there, not an edge-bleed)
   panelMinSidePx: 200, // a "panel" is a substantial opaque surface (≥200px on both sides)
   panelMinBgAlpha: 0.8, // …with an effectively opaque background-color
+  overlapMinFrac: 0.15, // object-overlap (3c): intersection ≥15% of the smaller box = occlusion
+  overlapMinSidePx: 24, // …and both boxes ≥24px on the shorter side (skip hairlines / thin accents)
+  overlapMaxCanvasFrac: 0.85, // …and skip near-full-bleed boxes (≥85% of canvas): they're LAYERS (bg / connector-lines / overlay / diagram), not discrete colliding objects
 };
 
 // ─────────────────────────────────────────── browser bootstrap ───
@@ -331,6 +341,17 @@ const PROBE = function probe(sid, compRel, cfg, CANVAS_W, CANVAS_H) {
           p.getAttribute("data-layout-ignore") === "true")
       )
         return true;
+      p = p.parentElement;
+    }
+    return false;
+  };
+  // Inherited escape hatch for INTENTIONAL layered composition: any element (or
+  // ancestor) marked data-layout-allow-overlap="true" is exempt from Check 3c, so
+  // a deliberately layered design opts out of the no-overlap contract.
+  const hasAllowOverlap = (el) => {
+    let p = el;
+    while (p) {
+      if (p.getAttribute && p.getAttribute("data-layout-allow-overlap") === "true") return true;
       p = p.parentElement;
     }
     return false;
@@ -641,6 +662,94 @@ const PROBE = function probe(sid, compRel, cfg, CANVAS_W, CANVAS_H) {
         },
         principle: `Two display-tier text elements with different content overlap by IoU=${(iou * 100).toFixed(1)}% (${(overlapOfSmaller * 100).toFixed(0)}% of the smaller bbox). Likely a layout bug where one headline / depth-stack is spilling into another.`,
         suggestion: `Pull the two text elements apart vertically (increase line-height or add margin between them) OR reduce the depth-stack height on one OR demote one to a smaller supporting role. If the smaller one is positioned inside the other's depth-stack container, give the depth-stack wrapper an explicit \`position: relative\` and a height that confines its absolute back-layers.`,
+        fix_kind: "manual",
+      });
+    }
+  }
+
+  // ── Check 3c: object-overlap (general foreground occlusion) ──
+  // 3a/3b only see annotated primaries and ≥40px text-vs-text. The dominant real
+  // overlap here is object-level: two BOXES (cards, panels, stats, media, icons,
+  // small-text blocks) sharing a screen region. In normal flow sibling boxes can't
+  // overlap — overlap requires an element taken OUT of flow — so we only test
+  // position:absolute|fixed foreground boxes (that's exactly where authored overlap
+  // comes from, and it skips ±3% breathing/drift on in-flow elements). Under the
+  // no-overlap layout contract ANY such intersection is a bug; a deliberately
+  // layered composition opts out with data-layout-allow-overlap="true".
+  const overlapLabel = (el) => {
+    const t = (el.textContent || "").trim();
+    if (t) return t.length > 24 ? t.slice(0, 21) + "…" : t;
+    return el.classList && el.classList[0] ? "." + el.classList[0] : el.tagName.toLowerCase();
+  };
+  const isBoxObject = (el) => {
+    // Honors data-layout-allow-overflow on purpose. Dropping it (to collision-check a
+    // continue-group primary panel) was measured and floods FPs: intentional layering —
+    // node-diagram nodes sitting on their connector-edges SVG, plus morph-seam coexistence
+    // of the diagram and the panel — all read as ≥15% overlap (0→17 on a real project).
+    // allow-overflow is the blunt signal that those elements live in an intentional-overflow
+    // context. Intentional layering opts out explicitly via data-layout-allow-overlap; a
+    // genuinely buggy overlap ON an allow-overflow primary is the known residual gap.
+    if (isInDecor(el) || hasAriaHidden(el) || hasAllowOverflow(el) || hasAllowOverlap(el))
+      return false;
+    if (!isVisible(el)) return false;
+    const cs = getComputedStyle(el);
+    if (cs.position !== "absolute" && cs.position !== "fixed") return false; // flow can't overlap
+    const r = el.getBoundingClientRect();
+    if (Math.min(r.width, r.height) < cfg.overlapMinSidePx) return false; // hairlines / dividers
+    if (r.width * r.height >= cfg.overlapMaxCanvasFrac * CANVAS_W * CANVAS_H) return false; // full-bleed = a layer, not a discrete object
+    const tag = el.tagName.toLowerCase();
+    if (isTextEl(el)) return true;
+    if (["img", "svg", "video", "canvas", "picture"].includes(tag)) return true;
+    if (cs.backgroundImage && cs.backgroundImage !== "none") return true;
+    const bg = cs.backgroundColor || "";
+    const opaqueBg = bg && bg !== "transparent" && !/,\s*0\)\s*$/.test(bg); // skip rgba(…,0)
+    const hasBorder =
+      parseFloat(cs.borderTopWidth) > 0 ||
+      parseFloat(cs.borderRightWidth) > 0 ||
+      parseFloat(cs.borderBottomWidth) > 0 ||
+      parseFloat(cs.borderLeftWidth) > 0;
+    const hasShadow = cs.boxShadow && cs.boxShadow !== "none";
+    return opaqueBg || hasBorder || hasShadow;
+  };
+  const boxes = all.filter(isBoxObject);
+  const reportedOverlap = new Set();
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const A = boxes[i],
+        B = boxes[j];
+      if (isAncestor(A, B) || isAncestor(B, A)) continue; // nesting ≠ collision
+      const ra = A.getBoundingClientRect(),
+        rb = B.getBoundingClientRect();
+      const ix = Math.max(0, Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left));
+      const iy = Math.max(0, Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top));
+      const inter = ix * iy;
+      if (inter <= 0) continue;
+      const minArea = Math.min(ra.width * ra.height, rb.width * rb.height);
+      const overlapOfSmaller = minArea > 0 ? inter / minArea : 0;
+      if (overlapOfSmaller < cfg.overlapMinFrac) continue;
+      // Display-tier text↔text is Check 3b's job — don't double-report it here.
+      const aBigText = isTextEl(A) && fontSize(A) >= cfg.collisionMinFontPx;
+      const bBigText = isTextEl(B) && fontSize(B) >= cfg.collisionMinFontPx;
+      if (aBigText && bBigText) continue;
+      const selA = selectorFor(A),
+        selB = selectorFor(B);
+      const key = [selA, selB].sort().join("|");
+      if (reportedOverlap.has(key)) continue;
+      reportedOverlap.add(key);
+      v.push({
+        type: "object-overlap",
+        scene_id: sid,
+        file: compRel,
+        selector: selA + " ↔ " + selB,
+        text: `[${overlapLabel(A)}] / [${overlapLabel(B)}]`,
+        metric: {
+          a_bbox: `(${Math.round(ra.left)},${Math.round(ra.top)}) ${Math.round(ra.width)}x${Math.round(ra.height)}`,
+          b_bbox: `(${Math.round(rb.left)},${Math.round(rb.top)}) ${Math.round(rb.width)}x${Math.round(rb.height)}`,
+          intersection_px2: Math.round(inter),
+          overlap_of_smaller: Math.round(overlapOfSmaller * 1000) / 1000,
+        },
+        principle: `Two foreground objects overlap by ${(overlapOfSmaller * 100).toFixed(0)}% of the smaller box (object-level occlusion). At least one is position:absolute|fixed; in normal flow these boxes would not intersect.`,
+        suggestion: `Lay the two objects out so their boxes don't intersect: put them in a flow (flex/grid) container, OR move/shrink the absolutely-positioned one until the bboxes clear. If the overlap is a deliberate layered composition, mark the shared wrapper data-layout-allow-overlap="true" to opt out (you then own that it reads as intentional).`,
         fix_kind: "manual",
       });
     }
@@ -1244,6 +1353,7 @@ ${innerHtml}
           if (x.type === "primary-collision") return x.metric?.iou || 0;
           if (x.type === "primary-offscreen") return x.metric?.clipped_pct || 0;
           if (x.type === "font-too-small") return -(x.metric?.font_size_px || 999);
+          if (x.type === "object-overlap") return x.metric?.overlap_of_smaller || 0;
           return 0;
         };
         if (sevOf(v) > sevOf(prev)) seen.set(key, v);

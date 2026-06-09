@@ -77,10 +77,9 @@ cwd is the agent workspace root (for example `/tmp/launch-video-202347`) and sho
 PROJECT_DIR="${LAUNCH_VIDEO_DIR:-videos/<project-name>}"
 mkdir -p "$(dirname "$PROJECT_DIR")"
 npx hyperframes init "$PROJECT_DIR" --non-interactive --skip-skills --example=blank
-rm -f "$PROJECT_DIR/CLAUDE.md"   # Claude Code auto-loads CLAUDE.md from the project subtree; its generic `/hyperframes` guidance competes with this skill. (AGENTS.md is never auto-loaded — leave it as scaffolding.)
 ```
 
-> Only `CLAUDE.md` is removed: Claude Code auto-loads it on-demand the moment the agent touches a file under `$PROJECT_DIR`, injecting generic guidance that competes with this skill (the source of truth). `AGENTS.md` is **left in place** — Claude Code never auto-loads it, so it stays inert during the build and remains as scaffolding for whoever opens the finished project later. `CLAUDE.md` is generated only once during `hyperframes init`; **later capture / build-design / any phase will not regenerate the root `CLAUDE.md`**, so do not repeat `rm` in later Bash blocks.
+> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`; **leave them in place** — they are agent scaffolding for whoever opens the finished project later. This skill (not those files) is the source of truth for the workflow, so do not treat their generic guidance as run-time constraints.
 
 **Constraints** (violating any one of these makes later phases unable to find artifacts or triggers lint errors):
 

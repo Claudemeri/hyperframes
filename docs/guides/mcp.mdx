@@ -1,9 +1,9 @@
 ---
 title: HyperFrames MCP
-description: "Author, preview, and render HyperFrames videos directly inside Claude.ai and ChatGPT — no local install required."
+description: "Author, preview, and render HyperFrames videos directly inside Claude.ai, ChatGPT, and Grok — no local install required."
 ---
 
-The HyperFrames MCP is a hosted [Model Context Protocol](https://modelcontextprotocol.io) server that lets you create, edit, preview, and render HyperFrames video compositions from inside Claude.ai or ChatGPT.
+The HyperFrames MCP is a hosted [Model Context Protocol](https://modelcontextprotocol.io) server that lets you create, edit, preview, and render HyperFrames video compositions from inside Claude.ai, ChatGPT, or Grok.
 
 <Note>
   **In beta.** Features and pricing may change. Found a bug or have feedback? [File an issue on GitHub](https://github.com/heygen-com/hyperframes/issues).
@@ -18,7 +18,7 @@ The HyperFrames MCP is a hosted [Model Context Protocol](https://modelcontextpro
 - Revisit compositions you've created previously
 - Check your render credits
 
-The agent behind `compose` has 25+ HyperFrames-specific skills baked in — typography, color palettes, motion principles, GSAP effects, audio-reactive animation, captions, voice generation. You don't have to specify any of this directly; describe the video you want and the agent picks the right tools.
+The agent behind `compose` has 25+ HyperFrames-specific skills baked in — typography, color palettes, motion principles, GSAP effects, audio-reactive animation, and captions. You don't have to specify any of this directly; describe the video you want and the agent picks the right tools.
 
 <Note>
   Looking for the open-source CLI? See the [Quickstart](/quickstart). The MCP is a hosted product for zero-install authoring inside an LLM chat. The CLI gives you full control of rendering and runtime; the MCP gives you instant authoring with cloud rendering.
@@ -36,10 +36,12 @@ The MCP requires a HeyGen account for authentication and credits. Sign up at [he
   <Tab title="Claude.ai">
     <Steps>
       <Step title="Open Settings → Connectors">
-        In Claude.ai web or desktop: **Settings → Connectors → Add custom connector**.
+        In Claude.ai web or desktop: **Settings → Connectors**.
       </Step>
-      <Step title="Enter the URL">
-        Paste:
+      <Step title="Find HyperFrames">
+        Search the connector catalog for **HyperFrames** and click **Connect**.
+
+        Don't see it in the catalog? Add it manually: **Add custom connector**, then paste:
         ```
         https://mcp.heygen.com/mcp/hyperframes
         ```
@@ -73,6 +75,27 @@ The MCP requires a HeyGen account for authentication and credits. Sign up at [he
       </Step>
     </Steps>
   </Tab>
+  <Tab title="Grok">
+    <Steps>
+      <Step title="Open Settings → Connectors">
+        In Grok: **Settings → Connectors**.
+      </Step>
+      <Step title="Find HyperFrames">
+        Search the connector catalog for **HyperFrames** and click **Connect**.
+
+        Don't see it in the catalog? Add it manually: **Add custom connector**, then paste:
+        ```
+        https://mcp.heygen.com/mcp/hyperframes
+        ```
+      </Step>
+      <Step title="Sign in to HeyGen">
+        Authorize via OAuth.
+      </Step>
+      <Step title="Start a new chat">
+        Open a new chat. Same prompts work as in Claude.ai.
+      </Step>
+    </Steps>
+  </Tab>
 </Tabs>
 
 ## Available tools
@@ -90,7 +113,7 @@ The MCP exposes six tools to the LLM. You don't call them directly — the model
 
 ### compose
 
-Authors a new composition or applies an edit to an existing one. The HyperFrames agent handles voice selection, captions, blocks, layout, transitions, color, and timing internally based on your natural-language prompt.
+Authors a new composition or applies an edit to an existing one. The HyperFrames agent handles captions, blocks, layout, transitions, color, and timing internally based on your natural-language prompt.
 
 **Triggered by prompts like:**
 
@@ -98,7 +121,7 @@ Authors a new composition or applies an edit to an existing one. The HyperFrames
 - "Change the title font to a bold serif" → edits the most recent composition
 - "Add a flash transition before the call-to-action" → applies a structured edit
 
-**Returns:** A composition reference (id, title, thumbnail) plus an inline player widget. Progress notifications stream during the run so you can see what the agent is doing — *"Drafting outline...", "Selecting voice and style...", "Generating HTML...", "Rendering preview frame..."*
+**Returns:** A composition reference (id, title, thumbnail) plus an inline player widget. Progress notifications stream during the run so you can see what the agent is doing — *"Drafting outline...", "Selecting style...", "Generating HTML...", "Rendering preview frame..."*
 
 ### list_compositions
 
@@ -170,7 +193,7 @@ Agent:  [render-progress widget, then player widget with download link]
 
 ### Reference your existing HeyGen assets
 
-If you've uploaded logos, brand voices, fonts, or other assets to your HeyGen account, the agent can use them. Just say *"use my logo"* or *"use my Sarah brand voice."* The agent resolves the asset by name and recency.
+If you've uploaded logos, fonts, or other assets to your HeyGen account, the agent can use them. Just say *"use my logo"* or *"use my brand font."* The agent resolves the asset by name and recency.
 
 ### Pick the right format up front
 
@@ -194,13 +217,13 @@ Complete the OAuth flow in the inspector's browser tab. Once authenticated, you 
 
 ### Watch progress notifications
 
-The MCP emits MCP `notifications/progress` events during long-running `compose` and `render_video` calls. The host (Claude.ai or ChatGPT) displays them inline:
+The MCP emits MCP `notifications/progress` events during long-running `compose` and `render_video` calls. The host (Claude.ai, ChatGPT, or Grok) displays them inline:
 
 ```
 You:    "make me a 30-second product intro"
 Agent:  [calls compose]
   ↳ "Drafting outline..."           ← progress notification
-  ↳ "Selecting voice and style..."  ← progress notification
+  ↳ "Selecting style..."            ← progress notification
   ↳ "Generating HTML..."            ← progress notification
   ↳ "Rendering preview frame..."    ← progress notification
   ↳ [composition + player widget]
@@ -263,7 +286,7 @@ For bugs or feature requests, file an issue at [github.com/heygen-com/hyperframe
 - The prompt you used
 - The `composition_id` and `job_id` (if applicable) — these are visible in the tool response details
 - A description of what you expected vs. what happened
-- The host (Claude.ai web/desktop, ChatGPT, etc.)
+- The host (Claude.ai web/desktop, ChatGPT, Grok, etc.)
 
 ## Limitations
 
@@ -272,7 +295,7 @@ For bugs or feature requests, file an issue at [github.com/heygen-com/hyperframe
 - **No binary uploads from chat.** You can reference assets you've already uploaded to HeyGen via the web UI, but the MCP does not currently accept new file uploads through chat. Upload via [app.heygen.com](https://app.heygen.com) first, then reference the asset by name.
 - **Aspect ratios:** `16:9`, `9:16`, `1:1`, `4:5`. Other ratios fall back to the closest match.
 - **No fine-grained editing tools.** Edits go through the agent. For pixel-precise control, use the [CLI](/quickstart) and a coding agent like Claude Code or Cursor.
-- **Widget rendering requires a host that supports MCP widgets.** Claude.ai web/desktop and ChatGPT (Apps SDK) support widgets today. Text-only MCP clients (Claude Code CLI, Cursor, Windsurf) will see a clickable preview URL instead — full text-mode support is on the roadmap.
+- **Widget rendering requires a host that supports MCP widgets.** Claude.ai web/desktop, ChatGPT (Apps SDK), and Grok support widgets today. Text-only MCP clients (Claude Code CLI, Cursor, Windsurf) will see a clickable preview URL instead — full text-mode support is on the roadmap.
 
 ## How this relates to the open-source framework
 
@@ -282,7 +305,7 @@ The MCP is a HeyGen-hosted product that wraps:
 
 - The HyperFrames composition agent (the LLM that authors compositions)
 - HeyGen's cloud rendering pipeline
-- HeyGen's voice / TTS / asset libraries
+- HeyGen's asset libraries
 - OAuth, credits, and tier management
 
 | You want… | Use… |

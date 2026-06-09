@@ -74,6 +74,7 @@
           {
             "group": "Guides",
             "pages": [
+              "guides/mcp",
               "guides/pipeline",
               "guides/html-in-canvas",
               "guides/website-to-video",
@@ -226,6 +227,7 @@
             "pages": [
               "catalog/components/grain-overlay",
               "catalog/components/grid-pixelate-wipe",
+              "catalog/components/motion-blur",
               "catalog/components/parallax-unzoom",
               "catalog/components/parallax-zoom",
               "catalog/components/shimmer-sweep",

@@ -61,7 +61,15 @@ const round3 = (n) => Number(n.toFixed(3));
 
 const sectionPlanPath = resolve(flag("section-plan", "./section_plan.md"));
 const narratorScriptsPath = resolve(flag("narrator-scripts", "./narrator_scripts.json"));
-const audioMetaPath = flag("audio-meta") ? resolve(flag("audio-meta")) : null;
+// Default to the conventional project-root location. With NO default (the old
+// behavior), a forgotten --audio-meta flag silently dropped ALL voice / words /
+// bgm / caption paths → a voiceless, captionless render with every gate green.
+// The guard after the scene loop also shouts if audio_meta lists voiced scenes
+// but none get wired. Pass --no-audio-meta to force the no-audio path on purpose.
+const audioMetaPath =
+  flag("no-audio-meta") === true
+    ? null
+    : resolve(typeof flag("audio-meta") === "string" ? flag("audio-meta") : "./audio_meta.json");
 const rulesDirArg = flag("rules-dir");
 if (!rulesDirArg) die("Missing required --rules-dir");
 const rulesDir = resolve(rulesDirArg);
@@ -483,7 +491,10 @@ if (audioMetaPath) {
   if (existsSync(audioMetaPath)) {
     audioMeta = JSON.parse(readFileSync(audioMetaPath, "utf8"));
   } else {
-    console.log(`audio-meta path given but file missing — proceeding without audio`);
+    console.log(
+      `audio_meta.json not found at ${audioMetaPath} — proceeding without audio ` +
+        `(VOICELESS render). If Phase 2.5 audio ran, pass --audio-meta <path>.`,
+    );
   }
 }
 
@@ -619,6 +630,26 @@ for (const s of scenes) {
     }
   }
   s.assetCandidates = candidates;
+}
+
+// ---------- Guard: audio_meta lists voiced scenes but none got wired ----------
+// The #1 silent-failure mode: prep runs without audio_meta (forgotten flag, or
+// the wav paths don't resolve against --hyperframes), so every voicePath drops
+// to "" and the pipeline renders a SILENT video while every gate stays green.
+// audio_meta is the source of truth for "voice exists"; if it lists voiced
+// scenes yet we wired zero, shout loudly so it's caught before assemble/render.
+if (audioMeta) {
+  const metaVoiced = Object.values(audioMeta.scenes || {}).filter((v) => v && v.voicePath).length;
+  const wiredVoiced = scenes.filter((s) => s.voicePath).length;
+  if (metaVoiced > 0 && wiredVoiced === 0) {
+    const banner =
+      `audio_meta.json lists ${metaVoiced} voiced scene(s) but NONE were wired into group_spec ` +
+      `(every voicePath dropped). The render will be SILENT. Likely causes: the wav files are not ` +
+      `under --hyperframes "${hyperframesDir}", or scene ids in audio_meta don't match section_plan. ` +
+      `Fix before assembling.`;
+    anomalies.push(banner);
+    console.error(`\n${"!".repeat(80)}\n⚠ prep.mjs CRITICAL: ${banner}\n${"!".repeat(80)}\n`);
+  }
 }
 
 // ---------- Step 6: group by continuity, cap=N ----------

@@ -236,9 +236,12 @@ let voiceId =
 // (the old hardcoded default 1bd001e7…) is rejected with HTTP 400. With no
 // --voice, auto-pick the first English public starfish voice.
 if (provider === "heygen" && !voiceId) {
-  const vres = await fetch("https://api.heygen.com/v3/voices?engine=starfish&type=public&limit=50", {
-    headers: { "X-Api-Key": process.env.HEYGEN_API_KEY },
-  });
+  const vres = await fetch(
+    "https://api.heygen.com/v3/voices?engine=starfish&type=public&limit=50",
+    {
+      headers: { "X-Api-Key": process.env.HEYGEN_API_KEY },
+    },
+  );
   if (!vres.ok) die(`heygen voice list failed (HTTP ${vres.status})`);
   const list = (await vres.json()).data ?? [];
   const pick = list.find((v) => v.language === "English") ?? list[0];
@@ -252,29 +255,54 @@ for (const s of scenes) {
 }
 
 // ---------- Step 4b: pre-flight BGM-deps install (parallel with TTS) ----------
-// MusicGen via HuggingFace transformers (no audiocraft / xformers / PyAV — those
-// don't build cleanly on Apple Silicon). If Lyria won't be used and deps are
-// missing, kick off pip install now so it runs in the background while TTS is
-// generating. We await the result in Step 5b before deciding whether to spawn BGM.
+// Two backends: local MusicGen via HuggingFace transformers (free, no key; no
+// audiocraft / xformers / PyAV — those don't build cleanly on Apple Silicon) and
+// cloud Lyria via google-genai (needs a key). We may need to install either
+// backend's python deps; do it in the background, parallel with TTS, so BGM is
+// ready to spawn by Step 5b. Probes (bgmPyDepsAvailable / lyriaPyDepsAvailable)
+// are hoisted `function`s defined in Step 5 below.
 const BGM_PY_DEPS = ["transformers", "torch", "soundfile", "numpy"];
 const BGM_PY_PROBE =
   "import transformers, soundfile, torch, numpy; from transformers import MusicgenForConditionalGeneration";
-let bgmDepsInstallPromise = null;
-if (!noBgm && !(lyriaKey() && lyriaRecipe && existsSync(lyriaRecipe))) {
-  const probe = spawnSync("python3", ["-c", BGM_PY_PROBE], { stdio: "ignore" });
-  if (probe.status !== 0) {
-    console.log(
-      `BGM: deps missing → pip install ${BGM_PY_DEPS.join(" ")} (background, parallel with TTS)…`,
-    );
-    bgmDepsInstallPromise = new Promise((resolve) => {
-      const proc = spawn("pip", ["install", "-q", ...BGM_PY_DEPS], { stdio: "ignore" });
-      proc.on("exit", (code) => {
-        if (code === 0) console.log("BGM: deps install complete ✓");
-        else console.log(`BGM: deps install failed (exit ${code}) — BGM will be skipped`);
-        resolve(code === 0);
-      });
-      proc.on("error", () => resolve(false));
+const LYRIA_PY_DEPS = ["google-genai", "python-dotenv"];
+const LYRIA_PY_PROBE = "import google.genai";
+
+// Background `pip install`; resolves true on exit 0. Used for both backends.
+function pipInstallBg(deps, label) {
+  console.log(
+    `BGM: ${label} deps missing → pip install ${deps.join(" ")} (background, parallel with TTS)…`,
+  );
+  return new Promise((resolveInstall) => {
+    const proc = spawn("pip", ["install", "-q", ...deps], { stdio: "ignore" });
+    proc.on("exit", (code) => {
+      console.log(
+        code === 0
+          ? `BGM: ${label} deps install complete ✓`
+          : `BGM: ${label} deps install failed (exit ${code})`,
+      );
+      resolveInstall(code === 0);
     });
+    proc.on("error", () => resolveInstall(false));
+  });
+}
+
+// Lyria is "configured" when a key + the recipe file are both present; it is
+// only actually RUNNABLE once `import google.genai` succeeds. Selecting Lyria on
+// configuration alone (the old behavior) launched a doomed detached process when
+// the package was missing and never fell back — leaving the video with NO BGM.
+// Now: if configured-but-not-importable, try to install google-genai on demand;
+// otherwise prepare the local MusicGen fallback so we never ship silent BGM.
+const lyriaConfigured = !noBgm && !!lyriaKey() && !!lyriaRecipe && existsSync(lyriaRecipe);
+let lyriaDepsInstallPromise = null;
+let bgmDepsInstallPromise = null;
+if (!noBgm) {
+  if (lyriaConfigured && !lyriaPyDepsAvailable()) {
+    // Honor the cloud key: try to make Lyria runnable (the recipe's documented
+    // "installed on demand" contract). If this fails, Step 5b falls back to local.
+    lyriaDepsInstallPromise = pipInstallBg(LYRIA_PY_DEPS, "Lyria (google-genai)");
+  } else if (!lyriaConfigured && !bgmPyDepsAvailable()) {
+    // No usable cloud BGM → prepare the local MusicGen fallback up front.
+    bgmDepsInstallPromise = pipInstallBg(BGM_PY_DEPS, "MusicGen");
   }
 }
 
@@ -288,6 +316,10 @@ let bgmMeta = null;
 
 function bgmPyDepsAvailable() {
   const r = spawnSync("python3", ["-c", BGM_PY_PROBE], { stdio: "ignore" });
+  return r.status === 0;
+}
+function lyriaPyDepsAvailable() {
+  const r = spawnSync("python3", ["-c", LYRIA_PY_PROBE], { stdio: "ignore" });
   return r.status === 0;
 }
 
@@ -576,15 +608,36 @@ if (Object.keys(scenesMap).length === 0) {
 const bgmTargetDurationS = Math.max(1, totalDuration);
 
 // ---------- Step 5b: spawn BGM (after TTS — deps install may now be done) ----------
+if (lyriaDepsInstallPromise) {
+  console.log("BGM: waiting for Lyria deps install to finish…");
+  await lyriaDepsInstallPromise;
+}
 if (bgmDepsInstallPromise) {
-  console.log("BGM: waiting for deps install to finish…");
+  console.log("BGM: waiting for MusicGen deps install to finish…");
   await bgmDepsInstallPromise;
+}
+
+// Prefer Lyria only when it can actually run; otherwise fall back to local
+// MusicGen so we never ship a silent video. If the Lyria install path was the
+// one attempted (so MusicGen deps were never pre-fetched) and Lyria still isn't
+// runnable, install MusicGen synchronously now as the last-resort fallback.
+const useLyria = lyriaConfigured && lyriaPyDepsAvailable();
+if (!noBgm && !useLyria && !bgmPyDepsAvailable()) {
+  console.log(
+    `BGM: Lyria unavailable → installing local MusicGen fallback (${BGM_PY_DEPS.join(" ")})…`,
+  );
+  const r = spawnSync("pip", ["install", "-q", ...BGM_PY_DEPS], { stdio: "ignore" });
+  console.log(
+    r.status === 0
+      ? "BGM: MusicGen fallback deps installed ✓"
+      : `BGM: MusicGen fallback deps install failed (exit ${r.status})`,
+  );
 }
 
 if (noBgm) {
   bgmReason = "disabled by --no-bgm";
-} else if (lyriaKey() && lyriaRecipe && existsSync(lyriaRecipe)) {
-  // Path A: Lyria (cloud)
+} else if (useLyria) {
+  // Path A: Lyria (cloud) — google.genai verified importable
   const totalS = bgmTargetDurationS;
   const prompt = inferBgmPrompt();
   const log = `/tmp/bgm-${Date.now()}.log`;
@@ -748,10 +801,12 @@ except Exception:
     loop_count: loops,
   };
 } else {
+  // Reached only when neither cloud Lyria nor local MusicGen could be made to
+  // run (e.g. no network for pip, or the install failed). Voice + SFX still render.
   const depsHint = `pip install ${BGM_PY_DEPS.join(" ")}`;
-  bgmReason = !lyriaKey()
-    ? `$GEMINI_API_KEY/$GOOGLE_API_KEY not set; BGM deps not installed (${depsHint})`
-    : `--lyria-recipe not provided; BGM deps not installed (${depsHint})`;
+  bgmReason = lyriaConfigured
+    ? `Lyria configured but google-genai could not be installed, and local MusicGen fallback unavailable (${depsHint})`
+    : `no Lyria key/recipe and local MusicGen deps unavailable (${depsHint})`;
 }
 
 // ---------- Step 7: assemble audio_meta.json ----------
@@ -782,10 +837,9 @@ const transcribed = Object.values(scenesMap).filter((s) => s.wordsPath).length;
 console.log(`  scenes transcribed: ${transcribed}/${Object.keys(scenesMap).length}`);
 console.log(`  total voice duration: ${audioMeta.total_duration_s}s`);
 if (bgmEnabled) {
-  const bgmBackend =
-    lyriaKey() && lyriaRecipe && existsSync(lyriaRecipe)
-      ? "Lyria"
-      : `MusicGen via transformers (local, ${bgmMeta?.seed_duration_s || "?"}s seed ${bgmMeta?.mode === "detached-seed-loop" ? `→ crossfade-loop ×${bgmMeta?.loop_count || "?"}` : "→ trim"})`;
+  const bgmBackend = useLyria
+    ? "Lyria"
+    : `MusicGen via transformers (local, ${bgmMeta?.seed_duration_s || "?"}s seed ${bgmMeta?.mode === "detached-seed-loop" ? `→ crossfade-loop ×${bgmMeta?.loop_count || "?"}` : "→ trim"})`;
   console.log(`  bgm: launched via ${bgmBackend} pid=${bgmPid} (detached, → ${bgmRelPath})`);
   if (bgmMeta?.log) console.log(`       log: ${bgmMeta.log}`);
   if (audioMeta.bgm_pending) {

@@ -43,7 +43,7 @@
 //          DUR_EPSILON (voice/SFX/captions global timing assume group_spec —
 //          re-dispatch the worker to honor estimatedDuration_s, or re-run prep).
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 // ---------- argv ----------
@@ -410,6 +410,30 @@ let captionOverridesCreated = false;
 if (!existsSync(captionOverridesPath)) {
   writeFileSync(captionOverridesPath, "[]\n");
   captionOverridesCreated = true;
+}
+
+// ---------- Guard: voice files exist on disk but none were wired ----------
+// Final chokepoint against a SILENT render: if assets/voice/ holds scene wavs
+// (Phase 2.5 produced narration) but group_spec carried zero usable voicePaths
+// so we emitted no track-10 audio, the upstream audio_meta→group_spec wiring
+// broke (see prep.mjs --audio-meta). Shout — every downstream gate stays green.
+if (voiceCount === 0) {
+  let wavsOnDisk = 0;
+  try {
+    wavsOnDisk = readdirSync(join(hyperframesDir, "assets", "voice")).filter((f) =>
+      f.toLowerCase().endsWith(".wav"),
+    ).length;
+  } catch {}
+  if (wavsOnDisk > 0) {
+    const banner =
+      `${wavsOnDisk} voice wav(s) in assets/voice/ but 0 were wired into index.html (track 10). ` +
+      `The render will be SILENT. group_spec voicePaths are empty/unresolved — re-run prep.mjs ` +
+      `with --audio-meta ./audio_meta.json (or fix the wav paths), then reassemble.`;
+    anomalies.push(banner);
+    console.error(
+      `\n${"!".repeat(80)}\n⚠ assemble-index.mjs CRITICAL: ${banner}\n${"!".repeat(80)}\n`,
+    );
+  }
 }
 
 // ---------- summary ----------

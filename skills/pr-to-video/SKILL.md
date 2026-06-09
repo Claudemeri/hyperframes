@@ -159,7 +159,7 @@ After `narrator_scripts.json` exists:
   --lyria-recipe <SKILL_DIR>/phases/audio/lyria-recipe.py)
 ```
 
-BGM generation runs detached in the background when keys/deps allow, otherwise is silently skipped. Flags + BGM mechanics: top of `audio.mjs`.
+BGM generation runs detached in the background. Backend selection (audio.mjs Step 5b): **cloud Lyria** is used only when a `GEMINI_API_KEY`/`GOOGLE_API_KEY` is set, the `--lyria-recipe` exists, AND `import google.genai` actually succeeds — if the key is set but the package is missing, audio.mjs tries to `pip install google-genai` on demand. When Lyria can't run, it **falls back to local MusicGen** (`facebook/musicgen-small` via transformers, no key; deps auto-installed in the background, parallel with TTS). BGM is only skipped entirely when neither backend can be made to run (e.g. no network for pip). It never blocks the render. Flags + BGM mechanics: top of `audio.mjs`.
 
 - exit 0 -> voice + transcribe complete (BGM may still be rendering; `audio_meta.json` records `bgm_log` / `bgm_pid`), continue.
 - exit 1 -> zero scenes produced voice; report and stop.
@@ -207,7 +207,7 @@ After `section_plan.md` exists:
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/prep.mjs \
   --section-plan ./section_plan.md \
   --narrator-scripts ./narrator_scripts.json \
-  $( [ -f audio_meta.json ] && echo "--audio-meta ./audio_meta.json" ) \
+  --audio-meta ./audio_meta.json \
   --rules-dir <SKILL_DIR>/../hyperframes-animation/rules \
   --capture ./capture \
   --design-system ./design-system \
@@ -217,6 +217,8 @@ After `section_plan.md` exists:
 ```
 
 Merges all upstream artifacts into `group_spec.json` (parse `section_plan` anchors, validate effect/component ids, group by `Continuity` with cap=3, build `visual_clips[]` where a multi-scene continue worker becomes one `group_wN.html`, compute Tier-B `transitions[]` between different visual clips, copy assets/fonts/SFX). `capture/assets/` is empty, so asset-copy is a no-op (faceless). Internal logic: header of `prep.mjs`.
+
+> **`--audio-meta ./audio_meta.json` is what carries each scene's `voicePath` / `wordsPath` and the `bgm_path` into `group_spec` — and therefore into the assembled `index.html`.** Omitting it (or pointing it at a path whose wavs don't resolve under `--hyperframes`) silently blanks every voice / caption / BGM track and renders a **SILENT, caption-less** video while every gate stays green. prep now defaults this flag to `./audio_meta.json` and prints a `CRITICAL` banner when `audio_meta` lists voiced scenes but none get wired; `assemble-index.mjs` re-asserts the same guard before render. Keep passing the flag explicitly anyway.
 
 - exit 0 -> read stdout (scenes / groups / total duration / per-group) and append to `context.log`.
 - exit 1 -> stderr names the failing scene + anchor (usually a malformed anchor or unknown effect/transition id); return to Step 4 and re-dispatch visual-design.

@@ -30,10 +30,10 @@ function ensureSource(project) {
       && !EXCL.has(path.basename(f, path.extname(f))) && !f.startsWith("index"))
     .map((f) => path.join(project, f));
   let found = cands.sort((a, b) => fs.statSync(b).size - fs.statSync(a).size)[0];
-  if (found) { try { fs.symlinkSync(path.basename(found), src); } catch (e) { fs.copyFileSync(found, src); } }
+  if (found) { try { fs.symlinkSync(path.basename(found), src); } catch { fs.copyFileSync(found, src); } }
   return src;
 }
-function usableWords(d) {
+function _usableWords(d) {
   return d && Array.isArray(d.words) && d.words.some((w) => w && "start" in w && "end" in w);
 }
 // Mean loudness of the audio, for the no-speech guard below. Silence → whisper
@@ -46,7 +46,7 @@ function meanVolumeDb(audio) {
     const out = (r.stderr || "") + (r.stdout || "");
     const m = out.match(/mean_volume:\s*(-?[\d.]+) dB/);
     return m ? parseFloat(m[1]) : null;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 // Where does AUDIBLE content end? Whisper hallucinates trailing words over a silent
@@ -68,7 +68,7 @@ function audibleEnd(audio) {
     const lastStart = starts[starts.length - 1];
     const closed = ends.some((e) => e > lastStart);  // silence re-broken before EOF?
     return { speechEnd: closed ? total : lastStart, total };
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 function main() {
@@ -87,7 +87,7 @@ function main() {
     try {
       const d = JSON.parse(fs.readFileSync(out, "utf8"));
       if (d && d.words && d.language_code) { console.log("[transcribe] already normalized, skipping"); return; }
-    } catch (e) {}
+    } catch {}
   }
 
   const src = ensureSource(project);

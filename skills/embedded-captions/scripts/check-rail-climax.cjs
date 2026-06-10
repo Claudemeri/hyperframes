@@ -32,14 +32,14 @@ function findInBun(root, pkg, sub) {
     if (fs.existsSync(bunDir))
       for (const d of fs.readdirSync(bunDir))
         if (d.startsWith(pkg + "@")) cands.push(path.join(bunDir, d, "node_modules", pkg));
-  } catch (e) { /* ignore */ }
+  } catch { /* ignore */ }
   for (const c of cands) { const p = sub ? path.join(c, sub) : c; if (fs.existsSync(p)) return p; }
   return null;
 }
 
 let puppeteer = null, gsapSource = null;
 for (const root of HF_ROOTS) {
-  if (!puppeteer) { const p = findInBun(root, "puppeteer"); if (p) { try { puppeteer = require(p); } catch (e) {} } }
+  if (!puppeteer) { const p = findInBun(root, "puppeteer"); if (p) { try { puppeteer = require(p); } catch {} } }
   if (!gsapSource) { const g = findInBun(root, "gsap", path.join("dist", "gsap.min.js")); if (g) gsapSource = fs.readFileSync(g, "utf8"); }
 }
 
@@ -68,7 +68,7 @@ async function load(page, file) {
   const start = Date.now();
   while (Date.now() - start < 12000) {
     if (await page.evaluate(() => !!(window.__timelines && window.__timelines.main))) {
-      try { await page.evaluate(async () => { await document.fonts.ready; }); } catch (e) {}
+      try { await page.evaluate(async () => { await document.fonts.ready; }); } catch {}
       return true;
     }
     await new Promise((r) => setTimeout(r, 150));
@@ -81,7 +81,7 @@ async function load(page, file) {
 // span's own style false-positives on text that is actually invisible.
 async function visibleAt(page, t, selector, childSel) {
   return page.evaluate((t, selector, childSel) => {
-    const tl = window.__timelines.main; tl.seek(t); document.body.offsetHeight;
+    const tl = window.__timelines.main; tl.seek(t); void document.body.offsetHeight;
     const eff = (el) => {
       let o = 1, n = el;
       while (n && n.nodeType === 1) {

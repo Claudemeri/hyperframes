@@ -45,8 +45,8 @@ function hfResolve(pkg) {
       if (fs.existsSync(bun))
         for (const d of fs.readdirSync(bun))
           if (d.startsWith(pkg + "@")) cands.push(path.join(bun, d, "node_modules", pkg));
-    } catch (e) { /* ignore */ }
-    for (const c of cands) { try { if (fs.existsSync(c)) return require(c); } catch (e) {} }
+    } catch { /* ignore */ }
+    for (const c of cands) { try { if (fs.existsSync(c)) return require(c); } catch {} }
   }
   console.error(`[matte] cannot find ${pkg} — set HYPERFRAMES_ROOT to a built hyperframes checkout`);
   process.exit(3);
@@ -88,11 +88,11 @@ function ensureSource(project) {
   if (!found) {
     const hj = path.join(project, "hyperframes.json");
     if (fs.existsSync(hj)) {
-      try { const v = (JSON.parse(fs.readFileSync(hj, "utf8")).video) || ""; if (v && fs.existsSync(path.join(project, v))) found = path.join(project, v); } catch (e) {}
+      try { const v = (JSON.parse(fs.readFileSync(hj, "utf8")).video) || ""; if (v && fs.existsSync(path.join(project, v))) found = path.join(project, v); } catch {}
     }
   }
   if (found) {
-    try { fs.symlinkSync(path.basename(found), src); } catch (e) { fs.copyFileSync(found, src); }
+    try { fs.symlinkSync(path.basename(found), src); } catch { fs.copyFileSync(found, src); }
     console.log(`[matte] resolved source.mp4 -> ${path.basename(found)}`);
   }
   return src;
@@ -105,7 +105,7 @@ function probeFps(src) {
     const [n, d] = out.split("/");
     const f = parseFloat(n) / parseFloat(d || "1");
     return f > 0 ? Math.max(1, Math.round(f)) : 24;
-  } catch (e) { return 24; }
+  } catch { return 24; }
 }
 
 function extractFrames(src, dst, fps) {

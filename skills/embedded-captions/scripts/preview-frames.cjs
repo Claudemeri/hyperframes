@@ -28,14 +28,14 @@ const HF_ROOTS = [process.env.HYPERFRAMES_ROOT, path.resolve(__dirname, "../../.
 function findInBun(root, pkg, sub) {
   const cands = [path.join(root, "node_modules", pkg)];
   const bunDir = path.join(root, "node_modules", ".bun");
-  try { if (fs.existsSync(bunDir)) for (const d of fs.readdirSync(bunDir)) if (d.startsWith(pkg + "@")) cands.push(path.join(bunDir, d, "node_modules", pkg)); } catch (e) {}
+  try { if (fs.existsSync(bunDir)) for (const d of fs.readdirSync(bunDir)) if (d.startsWith(pkg + "@")) cands.push(path.join(bunDir, d, "node_modules", pkg)); } catch {}
   for (const c of cands) { const p = sub ? path.join(c, sub) : c; if (fs.existsSync(p)) return p; }
   return null;
 }
 let puppeteer = null, sharp = null, gsapSource = null;
 for (const r of HF_ROOTS) {
-  if (!puppeteer) { const p = findInBun(r, "puppeteer"); if (p) try { puppeteer = require(p); } catch (e) {} }
-  if (!sharp) { const p = findInBun(r, "sharp"); if (p) try { sharp = require(p); } catch (e) {} }
+  if (!puppeteer) { const p = findInBun(r, "puppeteer"); if (p) try { puppeteer = require(p); } catch {} }
+  if (!sharp) { const p = findInBun(r, "sharp"); if (p) try { sharp = require(p); } catch {} }
   if (!gsapSource) { const g = findInBun(r, "gsap", path.join("dist", "gsap.min.js")); if (g) gsapSource = fs.readFileSync(g, "utf8"); }
 }
 if (!puppeteer || !sharp) { console.error("[preview] need puppeteer+sharp — set HYPERFRAMES_ROOT"); process.exit(0); }
@@ -60,12 +60,12 @@ async function shotAt(browser, file, W, H, t) {
       if (await page.evaluate(() => !!(window.__timelines && window.__timelines.main))) break;
       await new Promise((r) => setTimeout(r, 120));
     }
-    await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
+    await page.evaluate(async () => { try { await document.fonts.ready; } catch {} });
     await page.evaluate((t) => {
       const v = document.getElementById("a-roll"); if (v) v.style.display = "none"; // transparent hole for the bg frame
       document.body.style.background = "transparent";
       document.documentElement.style.background = "transparent";
-      window.__timelines.main.seek(t); document.body.offsetHeight;
+      window.__timelines.main.seek(t); void document.body.offsetHeight;
     }, t);
     await new Promise((r) => setTimeout(r, 60));
     return await page.screenshot({ omitBackground: true }); // RGBA png of caption layer only
@@ -81,11 +81,11 @@ async function main() {
   const hasRail = fs.existsSync(railP);
 
   let fps = 24;
-  try { const f = parseFloat(String(fs.readFileSync(path.join(project, "matte.fps"), "utf8")).replace(/[^\d.]/g, "")); if (f > 0) fps = f; } catch (e) {}
+  try { const f = parseFloat(String(fs.readFileSync(path.join(project, "matte.fps"), "utf8")).replace(/[^\d.]/g, "")); if (f > 0) fps = f; } catch {}
 
   // sample times: explicit > climax window + line midpoints > thirds
   let globalFg=false;
-  try { globalFg = JSON.parse(fs.readFileSync(path.join(project,"plan.json"),"utf8")).caption_layer === "fg"; } catch(e){}
+  try { globalFg = JSON.parse(fs.readFileSync(path.join(project,"plan.json"),"utf8")).caption_layer === "fg"; } catch{}
   let times = process.argv.slice(3).map(Number).filter(Number.isFinite);
   if (!times.length) {
     try {
@@ -96,7 +96,7 @@ async function main() {
         const span = g.out - g.in;
         times.push(+(g.in + span * 0.25).toFixed(2), +(g.in + span * 0.7).toFixed(2));
       }
-    } catch (e) {}
+    } catch {}
   }
   if (!times.length) {
     const n = fs.existsSync(path.join(project, "frames_bg")) ? fs.readdirSync(path.join(project, "frames_bg")).length : 0;

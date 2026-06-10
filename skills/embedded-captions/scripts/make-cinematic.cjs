@@ -61,7 +61,7 @@ function main() {
 
   // safe-zones: fg verdict + heroAnchor default
   let sz = null;
-  try { sz = JSON.parse(fs.readFileSync(path.join(project, "safe-zones.json"), "utf8")); } catch (e) {}
+  try { sz = JSON.parse(fs.readFileSync(path.join(project, "safe-zones.json"), "utf8")); } catch {}
   // author override first (borderline scenes: coverage near the line, agitated subject),
   // else the safe-zones verdict.
   // narration legibility follows the verdict; the HERO is judged separately — it WANTS
@@ -106,7 +106,7 @@ function main() {
       const d = parseFloat(cp.execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=nokey=1:noprint_wrappers=1", fp], { encoding: "utf8" }));
       if (d > 0) { srcDur = d; break; }
     }
-  } catch (e) {}
+  } catch {}
   const DUR = +(srcDur || bw[bw.length - 1].last + 0.6).toFixed(3);
   // ── SLOT layout + paging. Lines get FIXED absolute positions (no flex reflow — the
   // "lower line jumps up when the upper one clears" bug is impossible by construction).
@@ -217,7 +217,7 @@ function main() {
     });
   }
   if (heroRef) {
-    const { b, bi, ln } = heroRef;
+    const { bi, ln } = heroRef;
     const w0 = ln._w[0];
     groups.push({
       id: `h-${bi}`, hero: true, plane: heroPlaneName, layer: ln.layer || (heroFeasible ? "bg" : "fg"),
@@ -275,7 +275,7 @@ function main() {
     if (times.length) {
       cp2.spawnSync("node", [path.join(__dirname, "measure-layout.cjs"), project, ...times.map(String)], { stdio: "ignore", timeout: 120000 });
       let lay = null;
-      try { lay = JSON.parse(fs.readFileSync(path.join(project, "_layout.json"), "utf8")); } catch (e) {}
+      try { lay = JSON.parse(fs.readFileSync(path.join(project, "_layout.json"), "utf8")); } catch {}
       if (lay && lay.samples) {
         let changes = 0;
         for (const pg of Object.values(pagesByKey)) {
@@ -298,7 +298,7 @@ function main() {
           console.log(`[make-cinematic] re-slot: ${changes} line(s) re-stacked from MEASURED heights (wrapped lines accounted)`);
           fs.writeFileSync(path.join(project, "plan.json"), JSON.stringify(plan, null, 2));
           cp2.spawnSync("node", [path.join(__dirname, "make-composition.cjs"), project], { stdio: "ignore" });
-          try { fs.unlinkSync(path.join(project, "_layout.json")); } catch (e) {}
+          try { fs.unlinkSync(path.join(project, "_layout.json")); } catch {}
         }
       }
     }
@@ -317,7 +317,7 @@ function main() {
       const midT = ((heroG.in + Math.min(heroG.out, heroG.in + 1.0)) / 2).toFixed(2);
       cp2.spawnSync("node", [path.join(__dirname, "measure-layout.cjs"), project, String(midT)], { stdio: "ignore", timeout: 60000 });
       try { return JSON.parse(fs.readFileSync(path.join(project, "_layout.json"), "utf8")).samples[0].caps || []; }
-      catch (e) { return null; }
+      catch { return null; }
     };
     const fracOf = (css) => { const m = (css || "").match(/font-size\s*:\s*calc\(\s*([\d.]+)\s*\*\s*var\(--h\)/); return m ? +m[1] : null; };
     const setFrac = (css, f) => (css || "").replace(/font-size\s*:\s*[^;]+/, "font-size: calc(" + f.toFixed(3) + " * var(--h))");
@@ -381,7 +381,7 @@ function main() {
       if (!changed) break;
       fs.writeFileSync(path.join(project, "plan.json"), JSON.stringify(plan, null, 2));
       r = cp2.spawnSync("node", [path.join(__dirname, "make-composition.cjs"), project], { stdio: "ignore" });
-      try { fs.unlinkSync(path.join(project, "_layout.json")); } catch (e) {}
+      try { fs.unlinkSync(path.join(project, "_layout.json")); } catch {}
     }
   }
   process.exit(0);

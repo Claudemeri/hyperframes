@@ -36,9 +36,9 @@ for (const root of HF_ROOTS) {
         if (d.startsWith("puppeteer@")) cands.push(path.join(bunDir, d, "node_modules", "puppeteer"));
       }
     }
-  } catch (e) { /* ignore */ }
+  } catch { /* ignore */ }
   for (const p of cands) {
-    try { if (fs.existsSync(p)) { puppeteer = require(p); break; } } catch (e) { /* try next */ }
+    try { if (fs.existsSync(p)) { puppeteer = require(p); break; } } catch { /* try next */ }
   }
   if (puppeteer) break;
 }
@@ -64,9 +64,9 @@ for (const root of HF_ROOTS) {
         if (d.startsWith("gsap@")) cands.push(path.join(bunDir, d, "node_modules", "gsap", "dist", "gsap.min.js"));
       }
     }
-  } catch (e) { /* ignore */ }
+  } catch { /* ignore */ }
   for (const p of cands) {
-    try { if (fs.existsSync(p)) { gsapSource = fs.readFileSync(p, "utf8"); break; } } catch (e) { /* try next */ }
+    try { if (fs.existsSync(p)) { gsapSource = fs.readFileSync(p, "utf8"); break; } } catch { /* try next */ }
   }
   if (gsapSource) break;
 }
@@ -146,7 +146,7 @@ async function main() {
     }
     if (!ready) { console.error("[measure] GSAP timeline never registered"); process.exit(4); }
     // let webfonts settle so measured glyph metrics match the render
-    await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
+    await page.evaluate(async () => { try { await document.fonts.ready; } catch {} });
 
     const samples = [];
     for (const t of sampleTimes) {
@@ -155,7 +155,7 @@ async function main() {
         const tl = window.__timelines.main;
         tl.seek(t);
         // Force layout flush
-        document.body.offsetHeight;
+        void document.body.offsetHeight;
       }, t);
       // Tiny settle for animations / fonts
       await new Promise((r) => setTimeout(r, 30));

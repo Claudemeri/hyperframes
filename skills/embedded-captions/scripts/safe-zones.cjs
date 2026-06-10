@@ -189,7 +189,7 @@ function sentenceWindows(project) {
   const tp = path.join(project, "transcript.json");
   if (!fs.existsSync(tp)) return [];
   let words;
-  try { words = (JSON.parse(fs.readFileSync(tp, "utf8")).words || []).filter((w) => w && "start" in w); } catch (e) { return []; }
+  try { words = (JSON.parse(fs.readFileSync(tp, "utf8")).words || []).filter((w) => w && "start" in w); } catch { return []; }
   const out = []; let cur = [];
   for (let i = 0; i < words.length; i++) {
     cur.push(words[i]);

@@ -64,7 +64,7 @@ function sourceDurationSec(project) {
       const d = parseFloat(cp.execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration",
         "-of", "default=nokey=1:noprint_wrappers=1", p], { encoding: "utf8" }).trim());
       if (d > 0) return d;
-    } catch (e) {}
+    } catch {}
   }
   return null;
 }
@@ -192,7 +192,7 @@ function main() {
     heroBandsS = sz.heroBands || null;
     const bl = sz.heroAnchor && sz.heroAnchor.bandLuma;
     if (bl != null && bl > 160) heroBright = true;
-  } catch (e) { /* no safe-zones — behave as before */ }
+  } catch { /* no safe-zones — behave as before */ }
   // The hero WANTS occlusion (~30–55% IS the embed). fg is the LAST resort: only when no
   // height band achieves ≤62% predicted occlusion. A frame-filling subject usually still
   // has a feasible band over the hairline — keep the cinematic feel.
@@ -347,9 +347,9 @@ ${railJs}      tl.add(function(){},${DUR});
         climax.cqh = newCqh;
         indexHtml = buildIndexHtml();
         fs.writeFileSync(path.join(project, "index.html"), indexHtml);
-        try { fs.unlinkSync(path.join(project, "_layout.json")); } catch (e) {}
+        try { fs.unlinkSync(path.join(project, "_layout.json")); } catch {}
       }
-    } catch (e) { /* measurement unavailable — estimate already applied */ }
+    } catch { /* measurement unavailable — estimate already applied */ }
   }
   console.log(`[make-standard] ${segsT.length} rail line(s)${promo ? `, climax "${climax.text}" [${climax.in.toFixed(2)}–${climax.out.toFixed(2)}s] (hand-off generated)` : " (no climax)"}, canvas ${DUR}s`);
   console.log(`[make-standard] → index.html + rail.html + plan.json (gates will check timing/occlusion/hand-off)`);

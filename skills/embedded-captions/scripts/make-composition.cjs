@@ -18,7 +18,7 @@ function sourceDurationSec(project) {
   try {
     cands = cands.concat(fs.readdirSync(project).filter(
       (f) => /\.(mp4|mov|webm|mkv|m4v)$/i.test(f) && !/^(final|bg_plus_caps|fg_caps|rail|index)/.test(f)));
-  } catch (e) {}
+  } catch {}
   for (const c of cands) {
     const p = path.isAbsolute(c) ? c : path.join(project, c);
     if (!fs.existsSync(p)) continue;
@@ -28,7 +28,7 @@ function sourceDurationSec(project) {
         { encoding: "utf8" }).trim();
       const d = parseFloat(out);
       if (d > 0) return d;
-    } catch (e) {}
+    } catch {}
   }
   return null;
 }

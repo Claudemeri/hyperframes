@@ -7,6 +7,10 @@
 // a better model writes better captions and reranks better, no code change.
 //
 // Usage: MEDIA_USE_SEARCH_CMD=... node select-rerank.mjs --workspace <ws> --query "OpenAI logo" [--num 6]
+//
+// --describe-only (agent-first mode): search + caption (cached) + build a numbered montage, but make NO
+// pick — the MAIN agent reads the descriptions / views the montage and decides. The inline rerank pick
+// below is the headless fallback only.
 import { execFileSync } from "node:child_process";
 import { writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -35,6 +39,7 @@ const query = a.query && a.query !== true ? a.query : a.intent;
 if (!query || query === true) { console.error("--query required"); process.exit(1); }
 const media = a.media && a.media !== true ? a.media : "image";
 const num = a.num && a.num !== true ? Math.min(6, Number(a.num)) : 6;
+const describeOnly = !!a["describe-only"];
 const cmd = process.env.MEDIA_USE_SEARCH_CMD;
 if (!cmd) { console.error("MEDIA_USE_SEARCH_CMD not set"); process.exit(1); }
 
@@ -58,28 +63,71 @@ const dir = join(ws, ".media-use/sheets", `rerank_${slug(query)}`);
 rmSync(dir, { recursive: true, force: true });
 mkdirSync(dir, { recursive: true });
 for (const c of cands) {
-  if (capCache[c.url]) {
+  const cached = !!capCache[c.url];
+  // download the thumb when we need it: for captioning (cache miss) or for the montage (describe-only)
+  if (!cached || describeOnly) {
+    try {
+      const f = join(dir, `cand-${String(c.index).padStart(2, "0")}.${extOf(c.thumbnail)}`);
+      writeFileSync(f, await dl(c.thumbnail));
+      c.file = f;
+    } catch {
+      c.preview = false;
+    }
+  }
+  if (cached) {
     c.description = capCache[c.url]; // already text-ified — reuse the stored caption, no re-vision
     c.cached = true;
     continue;
   }
-  try {
-    const f = join(dir, `cand-${String(c.index).padStart(2, "0")}.${extOf(c.thumbnail)}`);
-    writeFileSync(f, await dl(c.thumbnail));
-    const out = claude(
-      `Read the image at ${f}. In <=40 words describe it as an asset candidate for the intent "${query}": what it depicts, its TYPE (clean logo / product photo / portrait / screenshot / chart / illustration / article-thumbnail), the background, and any quality issue (watermark, busy collage, low-res, off-topic). Reply with ONLY the description sentence.`,
-      ["--allowedTools", "Read", "--max-turns", "3"],
-    );
-    c.description = out.trim().split("\n").filter(Boolean).pop() || "(no description)";
-    capCache[c.url] = c.description; // store the text-ified image info for all future reranks
-    cacheDirty = true;
-  } catch {
+  if (!c.file) {
     c.description = "(no preview — host blocked download)";
-    c.preview = false;
+    continue;
   }
+  const out = claude(
+    `Read the image at ${c.file}. In <=40 words describe it as an asset candidate for the intent "${query}": what it depicts, its TYPE (clean logo / product photo / portrait / screenshot / chart / illustration / article-thumbnail), the background, and any quality issue (watermark, busy collage, low-res, off-topic). Reply with ONLY the description sentence.`,
+    ["--allowedTools", "Read", "--max-turns", "3"],
+  );
+  c.description = out.trim().split("\n").filter(Boolean).pop() || "(no description)";
+  capCache[c.url] = c.description; // store the text-ified image info for all future reranks
+  cacheDirty = true;
 }
 if (cacheDirty) {
   try { mkdirSync(dirname(CACHE_PATH), { recursive: true }); writeFileSync(CACHE_PATH, JSON.stringify(capCache, null, 2)); } catch {}
+}
+
+// AGENT-FIRST exit: emit descriptions + a numbered montage, make NO pick (the main agent decides).
+if (describeOnly) {
+  const FONT = "/System/Library/Fonts/Supplemental/Arial.ttf";
+  const CELL = 440;
+  let montage = null;
+  try {
+    for (const c of cands) {
+      const cell = join(dir, `cell-${String(c.index).padStart(2, "0")}.png`);
+      const stamp = `drawtext=fontfile=${FONT}:text='${c.index}':x=16:y=12:fontsize=58:fontcolor=white:box=1:boxcolor=0x000000@0.7:boxborderw=14`;
+      if (c.file) {
+        run("ffmpeg", ["-y", "-loglevel", "error", "-i", c.file,
+          "-vf", `scale=${CELL}:${CELL}:force_original_aspect_ratio=decrease,pad=${CELL}:${CELL}:(ow-iw)/2:(oh-ih)/2:color=0x1b1812,${stamp}`,
+          "-frames:v", "1", cell]);
+      } else {
+        run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", `color=c=0x332f26:s=${CELL}x${CELL}`,
+          "-vf", `${stamp},drawtext=fontfile=${FONT}:text='no preview':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=30:fontcolor=0x9a9282`,
+          "-frames:v", "1", cell]);
+      }
+    }
+    const n = cands.length;
+    const [cols, rows] = n <= 3 ? [n, 1] : n === 4 ? [2, 2] : [3, 2];
+    montage = join(dir, `montage_${slug(query)}.png`);
+    run("ffmpeg", ["-y", "-loglevel", "error", "-framerate", "1", "-start_number", "1", "-i", join(dir, "cell-%02d.png"),
+      "-frames:v", "1", "-vf", `tile=${cols}x${rows}:padding=10:color=0x111111`, montage]);
+  } catch {
+    montage = null; // montage is a bonus affordance; descriptions alone are enough to decide
+  }
+  console.log(JSON.stringify({
+    ok: true, query, method: "describe-only", montage,
+    candidates: cands.map((c) => ({ index: c.index, host: c.host, dims: c.width && c.height ? `${c.width}x${c.height}` : "?", description: c.description, url: c.url, cached: !!c.cached, preview: c.preview !== false })),
+    hint: "MAIN AGENT decides: read the descriptions (and/or view the montage), then put the chosen url in a decisions file for resolve-scenes --apply-decisions",
+  }, null, 2));
+  process.exit(0);
 }
 
 // 3) text-layer rerank (no image): pick best-fit from descriptions + intent

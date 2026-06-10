@@ -1,81 +1,117 @@
 ---
 name: media-use
 description: >
-  Root-level, on-demand media operations for any task (HyperFrames or not). Use when
-  the user or another skill needs to find, obtain (search / generate), process
-  (background removal, upscale, trim, transcribe), organize, reuse, or prepare an
-  image / audio / video / BGM / SFX / voice asset. Turns a media need into a stable
-  workspace asset plus a readable asset index. Do NOT use for video story planning,
-  workflow routing, full-video review, or timeline editing — those belong to
-  /video-workflows and the workflows it routes to.
+  Root-level, on-demand media operations for any task (HyperFrames or not). Use FIRST
+  when a scene or task needs a REAL asset that a model cannot invent — a real person's
+  photo (a founder, a CEO, an athlete), a real brand logo, a real product shot or UI
+  screenshot, a recognizable real place — instead of web-searching ad hoc or generating
+  a look-alike. Also use to find, obtain, process (background removal, transcribe),
+  organize, or reuse any image / audio / BGM / voice asset. media-use searches real
+  assets, lets the MODEL select the best candidate (never blind top-1), freezes it into
+  the workspace, and reuses it across projects (same entity, fetched once). Do NOT use
+  for video story planning, workflow routing, full-video review, or timeline editing —
+  those belong to /video-workflows. Do NOT use to invent or generate visuals — abstract
+  scenes stay with the host workflow.
 metadata:
-  tags: media, assets, workspace, manifest, resolve, organize, reuse, bgm, sfx, tts, background-removal
+  tags: media, assets, real-photos, logos, search, selection, reuse, workspace, manifest, bgm, tts, background-removal
 ---
 
 # media-use
 
-Agent Media OS. Turns an **explicit media need** into a stable workspace asset, a readable asset index, the necessary processing / generation calls, and (optionally) a declarative HyperFrames snippet. It does not own narrative, scene design, review, or composition layout.
+Agent Media OS. Turns an **explicit media need** into a frozen, selected, reusable workspace asset plus a readable asset index. It does not own narrative, scene design, review, or composition layout.
 
-media-use is a thin **orchestration + ledger** layer. It does not re-implement capabilities — it **routes** to existing tools:
+The wedge: **real-entity search**. A code-based video agent invents every visual — it cannot show the real Sam Altman, the real Nike swoosh, or the real iPhone. media-use closes that gap, and owns the parts that are actually hard: **selection** (which candidate), **freeze** (deterministic local copy), **provenance + reuse** (same entity, fetched once, used everywhere).
 
-- `/hyperframes-media` — local / free CLI tools: `npx hyperframes tts | transcribe | remove-background`, captions.
-- `heygen` CLI — account-backed: `heygen audio sounds list` (BGM catalog search — **shipped** v0.1.0), `heygen voice speech create` (TTS), `heygen asset create` (upload). SFX endpoint still pending.
+media-use is a thin **orchestration + ledger** layer. It does not re-implement capabilities — it **routes**:
+
+- search backend — `MEDIA_USE_SEARCH_CMD` (env var; query in, JSON candidates out). Current dev backend is the asset_scout CLI (**eval-only: licensing unresolved on open-web images**); the shipped path is `heygen` CLI search over HeyGen-licensed assets (pending).
+- `heygen` CLI — account-backed: `heygen audio sounds list` (BGM catalog, shipped), `heygen voice speech create` (TTS), `heygen asset create` (upload).
+- `/hyperframes-media` — local / free: `npx hyperframes tts | transcribe | remove-background`.
 - `/hyperframes-core` — placing a resolved asset into a composition (placement is not media-use's job).
 
-> Status: **v0.0 draft skeleton** (branch `feat/media-use-skill`). Scoped to the MVP agreed in the 2026-06-04 review — see `references/roadmap.md`.
+> Status: **v0.3** (branch `feat/media-use-skill`). Verified end-to-end on 9 rendered videos: image/icon search + selection + cross-project reuse + the faceless-explainer bridge, plus BGM / TTS / remove-bg / transcribe. SFX and upscale/crop/trim not wired. Evidence: HeyGenverse app `8ee3f9b6`.
 
 ## When to use — and when to stay silent
 
-Use on an **explicit media need**: locate / obtain / transform / reuse / prepare a specific asset ("find a CTA click sound", "remove this image's background", "add background music", "reuse the previous logo").
+Use on an **explicit media need**: a real person / brand / product / place must appear ("show the founder", "put the real logo on screen", "find a CTA click sound", "remove this background", "reuse the previous logo").
 
-**Stay silent otherwise.** Root-level reach means this skill can trigger anywhere — default conservative, on-demand only. Better to miss than to nag. Never run a media operation the user did not ask for. (Triggering discipline is a required eval — see `references/roadmap.md`.)
+**Stay silent otherwise.** Root-level reach means this skill can trigger anywhere — default conservative. Abstract or conceptual scenes get nothing from media-use; the host invents those. Never run a media operation the user did not ask for.
+
+## Decisions belong to the MAIN agent (agent-first)
+
+media-use is the **hands and the memory; the model is the brain**. The skill never makes a creative judgment with a baked heuristic — it lays out candidates and lets the calling agent decide, through two affordances:
+
+- **Look:** `select-sheet.mjs` / the bridge's montage — candidates tiled 1x3 / 2x2 / 3x2, index stamped top-left; the agent views and picks.
+- **Read:** every searched image is captioned to text **once** (cached per URL in `$MEDIA_USE_HOME/.captions.json`, written into the manifest `description`); reranking and reuse compare only the stored text. Same image is never re-visioned.
+
+Inline `claude -p` judgments exist only as the **headless fallback** (`--auto`) for runs with no main agent in the loop.
 
 ## The six verbs
 
-Each verb is a **skill procedure** executed over the real underlying commands — not (yet) a shipped `hyperframes media <verb>` CLI command. Whether to promote them to CLI subcommands is an open item with James (see `references/provider-routing.md`).
+| Verb           | What it does                                                                    | Runnable                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| setup          | lazy-init workspace; probe provider / auth status                               | `setup.mjs` (journey + `--self-test`), `init-workspace.mjs`                                                   |
+| organize       | register assets → AssetRecords → manifest → regenerate index                    | `register-asset.mjs`, `render-index.mjs`                                                                      |
+| find / preview | read the workspace ("grep for media") / visual gallery                          | `find-asset.mjs`, `gallery.mjs`                                                                               |
+| resolve        | reuse → search → **select** → freeze → register (one procedure)                 | `resolve.mjs --type bgm\|tts\|image\|icon` · `--url` freezes the agent's pick · `--entity` tags the reuse key |
+| process        | transform an asset; output registered with `provenance.derived_from`            | `process.mjs --asset <id> --action remove-bg\|transcribe`                                                     |
+| prepare ◇      | declarative snippet — embedded answer: **speak the host's format** (see bridge) | not built standalone; the bridge injects `assetCandidates`                                                    |
 
-| Verb           | What it does                                                         | Reference                                                 |
-| -------------- | -------------------------------------------------------------------- | --------------------------------------------------------- |
-| setup          | lazy-init the media workspace; read provider / auth status           | `references/setup.md`                                     |
-| organize       | register assets → AssetRecords → manifest → regenerate index         | `references/workspace.md`                                 |
-| find / preview | read the workspace ("grep for media"); v0.1 = find                   | `references/find.md`                                      |
-| resolve        | one procedure over search / generate / fetch                         | `references/resolve.md` · `references/search-strategy.md` |
-| process        | transform an asset (remove-bg, upscale, trim, transcribe, normalize) | `references/process.md`                                   |
-| prepare ◇      | (open) emit a declarative HyperFrames snippet for an asset           | `references/prepare.md`                                   |
+Resolve order: project assets → personal reusable (by canonical **entity**) → provider search → select → freeze → register. Generation of visuals is **deliberately out** (2026-06-08): search = real assets only; invention stays with the host.
 
-**Runnable layer (v0.1):** zero-dependency node helpers under `scripts/` make the verbs **executable and reproducible** (manifest = SSOT, index regenerated after every write):
+## Embedded in a host workflow — the bridge (`resolve-scenes.mjs`)
 
-- **setup / organize / find** — `init-workspace`, `register-asset`, `render-index`, `find-asset`.
-- **resolve** — `resolve.mjs --type bgm` (heygen audio: search hands candidates back, `--pick <id>` / `--auto` then downloads + **freezes** the signed URL into the workspace) · `--type tts` (hyperframes Kokoro, free).
-- **process** — `process.mjs --asset <id> --action remove-bg | transcribe` (hyperframes, local; output lands in `processed/`, registered with `provenance.derived_from`).
+For scene-based hosts (e.g. faceless-explainer), the bridge sits between scriptwriting and the build and rides the host's own asset path (`assetCandidates` + `public/`) — zero host changes. **Agent-first contract** (a host playbook step):
 
-The four wedge capabilities — **BGM, TTS, background-removal, transcribe** — are verified end-to-end. Image search and SFX are not wired yet (see `references/roadmap.md`).
+```
+1  resolve-scenes --project <dir> --plan
+       → scenes + the personal reusable ledger (stored captions included). 0 model calls.
+2  YOU decide which scenes depict a real entity; write needs.json
+       {"needs":[{"scene":2,"entity":"Elon Musk","query":"Elon Musk portrait","media":"image"}]}
+       entity = bare canonical name (the reuse key). A real brand logo is media:"image", never "icon".
+       Entities already in `reusable` skip straight to step 5 with a reuse decision.
+3  resolve-scenes --project <dir> --search-needs needs.json [--out cands.json]
+       → per need: candidates with cached text captions + a numbered montage. NO pick is made.
+       Exact-entity reuse matches are surfaced and search is skipped (--force-search to override).
+4  YOU decide per need (read the captions and/or view the montage); write decisions.json
+       {"decisions":[{"scene":2,"entity":"Elon Musk","action":{"type":"reuse","asset_id":"img_001"}},
+                     {"scene":3,"entity":"Gigafactory","query":"...","action":{"type":"fetch","url":"https://...","description":"..."}}]}
+5  resolve-scenes --project <dir> --apply-decisions decisions.json
+       → freeze into personal scope, copy ONE consumed copy into <project>/public/, append the thin
+         project ledger, bump used_in, inject assetCandidates. Mechanical; exits non-zero on failures.
+```
+
+Headless fallback: `resolve-scenes --auto [--apply]` (inline judge + rerank + reuse via `claude -p`) — batch runs only.
+
+When a real asset is injected, it **is** the scene's hero: workers must build around it, never overlay invented placeholders on top of it.
 
 ## Workspace contract
 
-- `<workspace>/assets/manifest.jsonl` is the **source of truth** — one AssetRecord per line; only the skill's helpers / the CLI write it.
-- `<workspace>/assets/index.md` is a **generated, agent-readable view** — read it, never hand-edit it.
-- Central object = **AssetRecord** (`references/asset-record.md`). media-use is root-level and often runs with no composition, so the unit is an asset, not a video binding.
-- Compositions reference **project-local paths / asset ids**, never prompts or remote URLs — keeps the HyperFrames render deterministic.
-- **Lazy:** if no workspace exists on first use, create one (`references/setup.md`).
+Two scopes (embedded):
+
+- **Project**: `<project>/public/<file>` = the single consumed copy the composition references. `<project>/.media-use/manifest.jsonl` = thin SSOT (path **==** the composition path) + generated `index.md` + `reports/` (selection traces).
+- **Personal** (`$MEDIA_USE_HOME`, default `~/.media-use`): the durable reusable originals + manifest (fields: `entity`, `reusable`, `used_in[]`, `usage_count`) + the caption cache. Cross-project reuse lives here.
+
+Standalone (no host): the skill's own workspace layout (`assets/` + manifest + index) per `references/workspace.md`.
+
+Always: manifest = SSOT, `index.md` = generated view (never hand-edit), compositions reference **frozen project-local files only** — never prompts or remote URLs. Lazy init on first use.
 
 ## Provider routing (free-first)
 
-Routing (local / HeyGen / ElevenLabs) is decided by the **CLI from environment**, never by this prompt. See `references/provider-routing.md`.
-
-- **Default = free / local first** (Bin, 2026-06-04): lead with `npx hyperframes` tools + royalty-free fallbacks so users get value before any paywall.
-- `HEYGEN_API_KEY` / OAuth → `heygen` CLI · `ELEVENLABS_API_KEY` → ElevenLabs · neither → free / local.
+Default = free / local first (Bin, 2026-06-04): `npx hyperframes` tools before any paywall. `HEYGEN_API_KEY` / OAuth → `heygen` CLI; neither → free / local. Long-term, provider/model status is the CLI's job; the skill reads it (debt: today the skill probes for itself).
 
 ## Relationship to other skills
 
-- `/video-workflows` and its workflows **call media-use on demand** — after extraction, when an asset is missing, when review finds an asset inadequate, on edit. media-use never routes workflows or reviews the whole video. (Redundant asset preferences in a workflow are fine — Bin: "I don't mind redundancy.")
-- `/hyperframes-media` owns the **local tool docs** (tts / transcribe / remove-background / captions). media-use **invokes** those commands and records the outputs; it does not duplicate their reference material.
-- `/hyperframes-core` owns **placement** of a resolved asset into a composition.
+- `/video-workflows` workflows **call media-use on demand** — the bridge is the explicit handshake for scene-based hosts. media-use never routes workflows or reviews the whole video.
+- `/hyperframes-media` owns the local tool docs; media-use invokes and records.
+- `/hyperframes-core` owns placement.
 
 ## Hard rules
 
 - No video story planning, workflow routing, full-video review, or timeline editing.
-- After creating or processing an asset, **always** append to `manifest.jsonl` and regenerate `index.md`.
-- Never write an unresolved prompt or a remote URL into a composition — only a frozen, project-local asset reference.
-- Gate paid capability behind a key at the **resolve / process** step — never at planning / organize / find.
-- Never put cost / model-selection logic in this prompt; the CLI decides from env.
+- No visual generation — search real assets; invention is the host's.
+- Selection is never a baked heuristic: the model looks or reads, then picks. `--auto` top-N fallback is for headless runs only.
+- After creating or processing an asset, always append to the manifest and regenerate the index.
+- Never write an unresolved prompt or remote URL into a composition — only a frozen, project-local reference.
+- A scene may carry several entities: **append** to `assetCandidates`, never overwrite.
+- Gate paid capability at resolve / process — never at planning / organize / find.

@@ -1,6 +1,6 @@
 # Cinematic mode (pure embed) — pick a locked visual style
 
-> These four templates are **Cinematic mode** (the user-facing name). The directory stays `modes/template/` and is compiled by `make-composition.cjs`. For rail + embed, see [../standard/](../standard/).
+> These four templates are **Cinematic mode** (the user-facing name). The directory stays `modes/cinematic/` and is compiled by `make-composition.cjs`. For rail + embed, see [../standard/](../standard/).
 
 Use this mode when the user wants a **consistent, predictable look** —
 either they named a template or they want something off-the-shelf.
@@ -43,7 +43,7 @@ If the user wants any of those, it's a hand-authored job → use **Standard mode
 
 ## Adding a new template
 
-1. Create `modes/template/<name>/` with `template.html` + `spec.md`
+1. Create `modes/cinematic/<name>/` with `template.html` + `spec.md`
 2. Use `{{PLACEHOLDERS}}` only for layout (not style):
    - `{{WIDTH}} {{HEIGHT}} {{DURATION}}` — frame + duration
    - `{{FONT_SCALE}}` — multiplier on locked sizes (use CSS `calc()`)

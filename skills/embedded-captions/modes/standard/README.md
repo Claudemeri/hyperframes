@@ -17,7 +17,7 @@ The order is **template-first**:
 
 Net per template you touch: its one file + 2-3 named recipes; plus `_anatomy` once. Never the whole `_motion` catalog or all 54.
 
-**Pipeline:** `hyperframes remove-background` (person matte) + `hyperframes transcribe` (verbatim word timings) -> feed both into the scene -> `hyperframes lint && validate`. See `hyperframes-media` / `hyperframes-captions`.
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 
 ## 54 templates
 

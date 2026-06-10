@@ -153,10 +153,21 @@ async function main() {
   const session = await ort.InferenceSession.create(MODEL, { executionProviders: ["cpu"], graphOptimizationLevel: "all" });
   const inName = session.inputNames[0], outName = session.outputNames[0];
 
+  // Resume: if a previous run died mid-way, frames_fg already holds a prefix. Find the
+  // first missing output and restart 3 frames earlier (EMA warm-up), skipping re-writes
+  // of the existing prefix. A crashed 20-min matte then costs seconds, not a full redo.
+  let firstMissing = files.length;
+  for (let i = 0; i < files.length; i++) {
+    if (!fs.existsSync(path.join(framesFg, path.basename(files[i])))) { firstMissing = i; break; }
+  }
+  const startAt = Math.max(0, firstMissing - 3);
+  if (firstMissing >= files.length) { console.log(`[matte] frames_fg already complete (${files.length} frames) — nothing to do`); return; }
+  if (firstMissing > 0) console.log(`[matte] resume: ${firstMissing}/${files.length} already done — restarting at ${startAt} (EMA warm-up)`);
+
   console.log(`[matte] PP-MattingV2 ${MH}x${MW} · ${files.length} frames ${W0}x${H0} → fit ${rw}x${rh} @ (${ox},${oy}) · EMA=${EMA}`);
   const t0 = Date.now();
   let prev = null; // EMA state (full-res alpha, Float32)
-  for (let i = 0; i < files.length; i++) {
+  for (let i = startAt; i < files.length; i++) {
     const { data } = await sharp(files[i]).removeAlpha().raw().toBuffer({ resolveWithObject: true }); // RGB HWC uint8, W0×H0
     // contain-pad into the model canvas
     const padded = await sharp(files[i]).removeAlpha()
@@ -181,6 +192,7 @@ async function main() {
     if (!prev) { prev = new Float32Array(N); for (let p = 0; p < N; p++) prev[p] = af[p * ch]; }
     else for (let p = 0; p < N; p++) prev[p] = EMA * af[p * ch] + (1 - EMA) * prev[p];
 
+    if (i < firstMissing) continue; // resume warm-up frame — EMA updated, no re-write
     const rgba = Buffer.allocUnsafe(N * 4);
     for (let p = 0; p < N; p++) {
       rgba[p * 4] = data[p * 3]; rgba[p * 4 + 1] = data[p * 3 + 1]; rgba[p * 4 + 2] = data[p * 3 + 2];

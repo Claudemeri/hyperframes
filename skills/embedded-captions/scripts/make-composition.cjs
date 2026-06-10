@@ -9,7 +9,7 @@ const fs = require("fs");
 const cp = require("child_process");
 
 const SKILL_ROOT = path.resolve(__dirname, "..");
-const TEMPLATES = path.join(SKILL_ROOT, "modes", "template");
+const TEMPLATES = path.join(SKILL_ROOT, "modes", "cinematic");
 
 // Source clip duration (seconds) via ffprobe. The COMPOSITION/background length must
 // follow the SOURCE, not the last caption — see the Bug-1 note in main().
@@ -104,6 +104,9 @@ function main() {
   const plan = JSON.parse(fs.readFileSync(planPath, "utf8"));
   if (plan.mode === "custom") {
     console.error("[compile] mode=custom — skip this script and hand-write index.html."); process.exit(1);
+  }
+  if (plan.mode === "standard") {
+    console.error("[compile] mode=standard — this plan.json is DERIVED by make-standard.cjs; compile Standard projects with make-standard.cjs (from standard.json), not this script."); process.exit(1);
   }
   let src = fs.readFileSync(findTemplate(plan.template), "utf8");
   // Bug-1: the canvas/background length = SOURCE clip length, NOT the last-caption time.

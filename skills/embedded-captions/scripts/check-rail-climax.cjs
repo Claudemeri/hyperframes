@@ -75,17 +75,29 @@ async function load(page, file) {
   }
   return false;
 }
-// visible text of a selector at time t, by seeking the page's main timeline
+// visible text of a selector at time t, by seeking the page's main timeline.
+// Visibility must be EFFECTIVE (own opacity × every ancestor's): a rail line that
+// fades out as a CONTAINER leaves its word spans at opacity:1 — checking only the
+// span's own style false-positives on text that is actually invisible.
 async function visibleAt(page, t, selector, childSel) {
   return page.evaluate((t, selector, childSel) => {
     const tl = window.__timelines.main; tl.seek(t); document.body.offsetHeight;
+    const eff = (el) => {
+      let o = 1, n = el;
+      while (n && n.nodeType === 1) {
+        const cs = getComputedStyle(n);
+        if (cs.display === "none" || cs.visibility === "hidden") return 0;
+        o *= +cs.opacity;
+        n = n.parentElement;
+      }
+      return o;
+    };
     const out = [];
     for (const el of document.querySelectorAll(selector)) {
-      const cs = getComputedStyle(el);
-      if (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity < 0.05) continue;
+      if (eff(el) < 0.05) continue;
       const kids = childSel ? [...el.querySelectorAll(childSel)] : [];
       if (kids.length) {
-        for (const k of kids) { if (+getComputedStyle(k).opacity > 0.05) out.push(k.textContent); }
+        for (const k of kids) { if (eff(k) > 0.05) out.push(k.textContent); }
       } else if ((el.textContent || "").trim()) out.push(el.textContent);
     }
     return out.join(" ").trim();

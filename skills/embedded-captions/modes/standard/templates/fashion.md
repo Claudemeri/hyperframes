@@ -16,7 +16,7 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 | | |
 |---|---|
-| **Scene / person** | bright beauty set (`bg-beauty`) - matte via `hyperframes remove-background` |
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 | **Font** | `'Playfair Display'` |
 | **Fill** | text `#fbeae6` - active-word accent `#e6a8b0` - climax fill: solid |
 | **Flow reveal** | `fade-up` (per-word, from `transcribe`) -> active word gets the accent |
@@ -47,7 +47,7 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 ## Reproduce
 
 ```bash
-npx hyperframes remove-background subject.mp4 -o person.webm
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
 Build the `_anatomy.md` scene with class `stage s-fashion bg-beauty`, feed the transcript to the flow, set `CLIMAX_IN=hairrise` / `CLIMAX_OUT=lift` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.

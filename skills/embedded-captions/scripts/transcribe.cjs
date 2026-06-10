@@ -49,6 +49,28 @@ function meanVolumeDb(audio) {
   } catch (e) { return null; }
 }
 
+// Where does AUDIBLE content end? Whisper hallucinates trailing words over a silent
+// tail (observed: "I'm sorry." repeated over dead air at a clip's end). silencedetect
+// finds a terminal silence running to EOF; words "spoken" inside it are fabricated.
+// Conservative: applause/music read as non-silence, so this fires only on truly dead
+// tails. Returns {speechEnd, total} or null.
+function audibleEnd(audio) {
+  try {
+    const r = cp.spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", audio,
+      "-af", "silencedetect=noise=-35dB:d=0.6", "-f", "null", "-"], { encoding: "utf8" });
+    const out = (r.stderr || "") + (r.stdout || "");
+    const durM = out.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
+    const total = durM ? (+durM[1] * 3600 + +durM[2] * 60 + +durM[3]) : null;
+    if (total == null) return null;
+    const starts = [...out.matchAll(/silence_start:\s*([\d.]+)/g)].map((x) => +x[1]);
+    const ends = [...out.matchAll(/silence_end:\s*([\d.]+)/g)].map((x) => +x[1]);
+    if (!starts.length) return { speechEnd: total, total };
+    const lastStart = starts[starts.length - 1];
+    const closed = ends.some((e) => e > lastStart);  // silence re-broken before EOF?
+    return { speechEnd: closed ? total : lastStart, total };
+  } catch (e) { return null; }
+}
+
 function main() {
   const project = path.resolve(process.argv[2] || "");
   if (!process.argv[2]) { console.error("usage: transcribe.cjs <project-dir> [model] [language]"); process.exit(1); }
@@ -91,11 +113,27 @@ function main() {
   const arr = Array.isArray(flat) ? flat : flat.words || [];
 
   // normalize to our schema
-  const words = arr
+  let words = arr
     .filter((w) => (w.text ?? w.word) != null)
     .map((w) => ({ text: w.text ?? w.word, start: w.start ?? w.t0, end: w.end ?? w.t1, type: "word" }));
+
+  // Tail-hallucination guard: drop words whisper placed entirely inside a terminal
+  // silence (it fabricates e.g. repeated "I'm sorry." over dead air). Word START past
+  // the audible end (+0.4s slack) = fabricated; real final words start before it.
+  const ae = audibleEnd(audio);
+  let trimmedTail = 0;
+  if (ae && ae.speechEnd < ae.total - 0.8) {
+    const keep = words.filter((w) => w.start <= ae.speechEnd + 0.4);
+    trimmedTail = words.length - keep.length;
+    if (trimmedTail > 0) {
+      console.error(`[transcribe] ⚠ trimmed ${trimmedTail} trailing word(s) starting after the audible end ` +
+        `(${ae.speechEnd.toFixed(2)}s; clip ${ae.total.toFixed(2)}s) — whisper hallucinates over silent tails.`);
+      words = keep;
+    }
+  }
+
   const text = words.map((w) => w.text).join(" ").replace(/\s+([,.!?;:])/g, "$1").trim();
-  fs.writeFileSync(out, JSON.stringify({ text, language_code: language || "en", words }, null, 2));
+  fs.writeFileSync(out, JSON.stringify({ text, language_code: language || "en", words, ...(trimmedTail ? { trimmed_tail_words: trimmedTail } : {}) }, null, 2));
   console.log(`[transcribe] whisper(${model}) ${words.length} words → ${out}`);
   console.log(`[transcribe] text: ${text.slice(0, 160)}${text.length > 160 ? "…" : ""}`);
 

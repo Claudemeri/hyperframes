@@ -16,7 +16,7 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 | | |
 |---|---|
-| **Scene / person** | neon street at night (`bg-neon`) - matte via `hyperframes remove-background` |
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 | **Font** | `'Orbitron'` |
 | **Fill** | text `#f6e9ff` - active-word accent `#2de2e6` - climax fill: gradient |
 | **Flow reveal** | `glitch` (per-word, from `transcribe`) -> active word gets the accent |
@@ -47,7 +47,7 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 ## Reproduce
 
 ```bash
-npx hyperframes remove-background subject.mp4 -o person.webm
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
 Build the `_anatomy.md` scene with class `stage s-synth bg-neon`, feed the transcript to the flow, set `CLIMAX_IN=scan` / `CLIMAX_OUT=scan-collapse` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.

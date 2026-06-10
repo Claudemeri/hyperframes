@@ -57,6 +57,16 @@ function check(project, strict) {
     if (ws.length && gin != null) { const e = Math.min(...ws); if (e < gin - 0.01) issues.push(`[${gid}] group.in=${gin.toFixed(2)} but earliest word starts at ${e.toFixed(2)} — word delayed by ${(gin - e >= 0 ? "+" : "") + (gin - e).toFixed(2)}s. Lower group.in.`); }
     if (we.length && gout != null) { const l = Math.max(...we); if (l > gout + 0.01) issues.push(`[${gid}] group.out=${gout.toFixed(2)} but latest word ends at ${l.toFixed(2)} — word clipped. Raise group.out.`); }
     for (const w of (g.words || [])) {
+      // Exact pairing: a compiler that KNOWS the transcript index emits `ti` —
+      // duplicate words then pair by POSITION, not text-search (which grabs the
+      // first occurrence and reports a phantom drift). Sanity-check the text; on
+      // mismatch fall back to the text matcher below.
+      if (Number.isInteger(w.ti) && seq[w.ti] && seq[w.ti][0] === norm(splitPacked(w.text)[0] || "")) {
+        const drift = w.start - seq[w.ti][1];
+        if (Math.abs(drift) > DRIFT_TOL) issues.push(`[${gid}] '${norm(w.text)}': plan=${w.start.toFixed(3)} transcript=${seq[w.ti][1].toFixed(3)} drift ${(drift >= 0 ? "+" : "") + drift.toFixed(3)}s`);
+        ti = w.ti + 1;
+        continue;
+      }
       const parts = splitPacked(w.text).map(norm);
       parts.forEach((part, pi) => {
         if (!part) return;

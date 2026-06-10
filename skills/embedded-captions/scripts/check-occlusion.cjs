@@ -109,7 +109,10 @@ async function main() {
     const oblit = Object.entries(wordPeaks).filter(([, p]) => p >= wordFail);
     const warn = Object.entries(wordPeaks).filter(([, p]) => p >= wordWarn && p < wordFail);
     let status = "OK";
-    if (oblit.length || peakCap >= capFail) { status = "FAIL"; failures.push(gid); }
+    // HERO caps WANT occlusion (~30–55% is the embed); the generic cap threshold would
+    // fail a working hero. Heroes fail only past the feasibility ceiling (68%).
+    const capLimit = heroIds.has(gid) ? Math.max(capFail, 0.68) : capFail;
+    if (oblit.length || peakCap >= capLimit) { status = "FAIL"; failures.push(gid); }
     else if (warn.length) status = "WARN";
     let s = "";
     if (oblit.length) s = oblit.slice(0, 5).map(([t, p]) => `${t}(${(p * 100).toFixed(0)}%)`).join(" ") + (oblit.length > 5 ? ` …+${oblit.length - 5}` : "");

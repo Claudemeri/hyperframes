@@ -16,7 +16,7 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 | | |
 |---|---|
-| **Scene / person** | gritty basement, overhead lamp (`bg-tactical`) - matte via `hyperframes remove-background` |
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 | **Font** | `'Special Elite'` |
 | **Fill** | text `#c7c2b8` - active-word accent `#fff` - climax fill: stroke |
 | **Flow reveal** | `blur-in` (per-word, from `transcribe`) -> active word gets the accent |
@@ -48,7 +48,7 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 ## Reproduce
 
 ```bash
-npx hyperframes remove-background subject.mp4 -o person.webm
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
 Build the `_anatomy.md` scene with class `stage s-dread bg-tactical`, feed the transcript to the flow, set `CLIMAX_IN=loom` / `CLIMAX_OUT=drag` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.

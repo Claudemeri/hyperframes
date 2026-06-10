@@ -309,7 +309,7 @@ Two placement tweaks that separate "looks like a caption sitting in the scene" f
   1. Sample the matte PNG at climax time: `f_{frame_idx:04d}.png` where `frame_idx = round(climax_time * fps)`.
   2. Scan rows from top until `alpha > 128` — that y is the subject's topmost pixel (usually hair).
   3. Position crown so the *bottom of the last line* lands 30-80px below that y. For a 2-line crown at 0.085h on 1290h frame, line heights ~104px each; total height ~200px. If subject top is at y=445, set `crown.top` such that `top + height = 445 + 50 ≈ 495` → `top = 295px ≈ 23%`.
-  4. Verify with checker — crown peak occlusion should land between 2% and 15%. Above that, too much face covered; below, no bg effect visible.
+  4. Verify with checker — the HERO/crown peak occlusion target is ~30–55% (the embed effect; the head crossing the middle). Below ~15% it reads as a floating label (the hero-weak advisory fires); above ~65% the word is eaten (the gate FAILs). Small narrator caps: ~20–30% texture.
 
   Practical rule of thumb: **crown peak occlusion 3-10%** is the sweet spot. The checker's number tells you directly — not a subjective "it looks good" judgment.
 

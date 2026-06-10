@@ -25,7 +25,7 @@ For the composition contract see `hyperframes-core`; eases + the animated-proper
 
 ```bash
 # 1) The person — transparent talking-head cutout over the scene (VP9 + alpha)
-npx hyperframes remove-background subject.mp4 -o person.webm        # u2net_human_seg
+bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 #    (a still works too:  remove-background portrait.jpg -o person.png)
 
 # 2) The verbatim word timings that drive the flowing caption

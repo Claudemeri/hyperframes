@@ -26,18 +26,58 @@ Everything else in the library carries over **unchanged**: the per-template **st
 `cqh` sizing, exit ≈ 75% of entry, **climax dwell ≥ 1 s**, and the restraint rule (effects only at the climax;
 the rail stays clean + active-word accent).
 
-## Pipeline (Standard)
+## Pipeline (Standard) — author JSON, compile, never hand-write the HTML
 
 ```
 1. hyperframes init <project> --non-interactive --video <video.mp4> --skip-skills
-2. node scripts/matte.cjs <project>          # PP-MattingV2 → frames_fg/*.png
-3. node scripts/transcribe.cjs <project>     # Whisper → transcript.json (verbatim word timings)
-4. [AGENT] pick 3 templates by transcript fit (their `## Triggers`), read those 3 + the 2-3 motion
-   recipes they name + this file; then author <project>/index.html (climax) + <project>/rail.html (rail)
-5. bash scripts/render-and-composite.sh <project>   # renders both, mattes, alpha-overlays rail → final.mp4
+2. bash scripts/prepare.sh <project>          # matte ∥ transcribe → safe-zones (one command)
+3. [AGENT] pick up to 3 templates by transcript fit (their `## Triggers`) → take their STYLE
+   TOKENS; author <project>/standard.json (schema below — your creative choices only)
+4. node scripts/make-standard.cjs <project>   # compiles → index.html + rail.html + derived plan.json
+5. node scripts/preview-frames.cjs <project>  # seconds-cheap visual QA (SKILL.md § Visual QA)
+6. bash scripts/render-and-composite.sh <project>  # gates (timing/occlusion+hero/overflow/hand-off) → final.mp4
 ```
 
-## `index.html` — video + embed climax (matte puts it behind the subject)
+## `standard.json` — the schema (this is what you author)
+
+```jsonc
+{
+  "template": "didone",                  // which library template the tokens came from
+  "width": 1920, "height": 1080, "fps": 30,
+  "font": "Bodoni Moda",                 // climax font — LITERAL family name (injector embeds it)
+  "rail_font": null,                     // optional rail override (only for unreadable display faces)
+  "cfill": "#f4efe6", "cacc": "#caa14a", // fill + active-word accent (the template's tokens)
+  "climax_css": "font-style:italic;",    // optional extra CSS on the climax (template tokens)
+  "rail_css": "",                        // optional extra CSS on rail lines
+  "rail": {
+    "bottom_pct": 9, "width_pct": 90, "font_cqh": 6.4,
+    "lines": [["You","need","to"], ["judge","us","by","the"], ["actions","that","we","take."],
+              ["I","think","the","company"], ["has","taken","a","number","of","actions"],
+              ["over","its","time."]]
+    // EVERY spoken word you want captioned, in spoken order, grouped 2-5 words/line at
+    // clause/breath boundaries. Include the promoted word where it is spoken — the compiler
+    // lifts it out and generates the hand-off. Words must match the transcript verbatim.
+  },
+  "climax": {
+    "match": "actions",                  // the promoted word (as written in rail.lines)
+    "occurrence": 2,                     // WHICH occurrence in the lines (duplicate words!)
+    "text": "ACTIONS",                   // display form (usually uppercase)
+    "top_pct": 36, "font_cqh": 34,       // placement: centered, crossing the subject (safe-zones heroAnchor)
+    "entrance": "rise",                  // rise | scale-settle | pop
+    "exit": "rise-off",                  // rise-off | fade | shrink-off
+    "hold": "thought"                    // "thought" = hold to end of sentence (the hand-off); or seconds
+  }
+}
+```
+
+**What the compiler guarantees** (so you don't have to): word timings from the transcript by
+sequence (duplicates pair by position); rail lines pre-empt each other (no overlap); the
+rail↔climax hand-off (promoted word appears ONCE; pre-line freezes; climax anchors across the
+page-flip to the end of its thought); canvas duration = source length; climax line-fit; seek-safe
+GSAP in both files; gates wired (the derived plan.json runs timing + occlusion + hero checks).
+**Change standard.json and recompile — never edit the generated HTML.**
+
+## Appendix — hand-author fallback: `index.html` skeleton (only if the compiler can't express your design)
 
 ```html
 <!doctype html><html lang="en"><head><meta charset="UTF-8">
@@ -60,7 +100,7 @@ the rail stays clean + active-word accent).
   .stage-tokens{--cfill:#e9e6dd;--cacc:#e3c06a}                         /* ← the template's fill/accent (colours only) */
 </style></head><body class="stage-tokens">
   <div id="root" data-composition-id="main" data-start="0" data-duration="{{DUR}}" data-width="{{W}}" data-height="{{H}}">
-    <video id="a-roll" src="source.mp4" muted playsinline data-duration="{{DUR}}" data-track-index="0" style="z-index:1"></video>
+    <video id="a-roll" src="source.mp4" muted playsinline data-start="0" data-duration="{{DUR}}" data-track-index="0" style="z-index:1"></video>
     <div id="stage"><div class="climax"><span>{{CLIMAX_WORD}}</span></div></div>
     <audio id="a-roll-audio" src="source.mp4" data-start="0" data-duration="{{DUR}}" data-track-index="3" data-volume="1"></audio>
   </div>
@@ -77,7 +117,7 @@ the rail stays clean + active-word accent).
 </body></html>
 ```
 
-## `rail.html` — the rail only, transparent (alpha-composited in front)
+## Appendix — hand-author fallback: `rail.html` skeleton
 
 Same `#root`/timeline contract, but **transparent**, **no `#a-roll` video**, **no climax** — plus the `.grade`
 vignette. Words injected from `transcript.json`, revealed at each word's `start`; the active word is recoloured to

@@ -31,17 +31,32 @@ if [[ ! -d "$PROJECT/frames_fg" ]]; then
   echo "[render] missing matte frames at $PROJECT/frames_fg — run matte.cjs first" >&2
   exit 1
 fi
+# Which compiler owns this project? Cinematic = make-composition.cjs (plan.json);
+# Standard = make-standard.cjs (standard.json → index/rail + a DERIVED plan.json with
+# mode=="standard" — never feed that derived plan back through the Cinematic compiler).
+compiler_for() {
+  if [[ -f "$PROJECT/standard.json" ]]; then echo "make-standard.cjs"; return; fi
+  if [[ -f "$PROJECT/plan.json" ]] && node -e 'process.exit(require(process.argv[1]).mode==="standard"?0:1)' "$PROJECT/plan.json" 2>/dev/null; then
+    echo "make-standard.cjs"; return
+  fi
+  echo "make-composition.cjs"
+}
 if [[ ! -f "$PROJECT/index.html" ]]; then
-  if [[ -f "$PROJECT/plan.json" ]]; then
-    echo "[render] no index.html — auto-compiling from plan.json"
-    node "$(dirname "$0")/make-composition.cjs" "$PROJECT"
+  if [[ -f "$PROJECT/standard.json" || -f "$PROJECT/plan.json" ]]; then
+    C="$(compiler_for)"
+    echo "[render] no index.html — auto-compiling via $C"
+    node "$(dirname "$0")/$C" "$PROJECT"
   else
-    echo "[render] missing $PROJECT/index.html and plan.json — run make-composition.cjs first" >&2
+    echo "[render] missing $PROJECT/index.html and standard.json/plan.json — author + compile first" >&2
     exit 1
   fi
+elif [[ -f "$PROJECT/standard.json" && "$PROJECT/standard.json" -nt "$PROJECT/index.html" ]]; then
+  echo "[render] standard.json newer than index.html — recompiling"
+  node "$(dirname "$0")/make-standard.cjs" "$PROJECT"
 elif [[ -f "$PROJECT/plan.json" && "$PROJECT/plan.json" -nt "$PROJECT/index.html" ]]; then
-  echo "[render] plan.json newer than index.html — recompiling"
-  node "$(dirname "$0")/make-composition.cjs" "$PROJECT"
+  C="$(compiler_for)"
+  echo "[render] plan.json newer than index.html — recompiling via $C"
+  node "$(dirname "$0")/$C" "$PROJECT"
 fi
 
 # Embed template fonts BEFORE the gates + render. hyperframes only auto-supplies
@@ -78,8 +93,9 @@ if [[ -f "$PROJECT/plan.json" && -d "$PROJECT/frames_fg" ]]; then
   node "$(dirname "$0")/check-occlusion.cjs" "$PROJECT" --strict > "$OCC_LOG" 2>&1 &
   OCC_PID=$!; occ_t0=$SECONDS; OCC_RC=""; verdict_at=""
   while kill -0 "$OCC_PID" 2>/dev/null; do
-    # mark when the verdict header is printed (analysis done)
-    [[ -z "$verdict_at" ]] && grep -qE '\[v2\].*word-fail' "$OCC_LOG" && verdict_at=$SECONDS
+    # mark when the verdict header is printed (analysis done). if-form: a failed grep
+    # must NOT trip set -e (it silently killed the whole render on fresh projects).
+    if [[ -z "$verdict_at" ]] && grep -qE '\[v2\].*word-fail' "$OCC_LOG" 2>/dev/null; then verdict_at=$SECONDS; fi
     # verdict printed but still alive 8s later → native (sharp) teardown hang; or no
     # verdict after 150s → measure/analysis stuck. Either way: kill + read verdict.
     if { [[ -n "$verdict_at" ]] && (( SECONDS - verdict_at > 8 )); } || (( SECONDS - occ_t0 > 150 )); then
@@ -90,7 +106,7 @@ if [[ -f "$PROJECT/plan.json" && -d "$PROJECT/frames_fg" ]]; then
     fi
     sleep 2
   done
-  [[ -z "$OCC_RC" ]] && { wait "$OCC_PID" 2>/dev/null; OCC_RC=$?; }
+  if [[ -z "$OCC_RC" ]]; then OCC_RC=0; wait "$OCC_PID" 2>/dev/null || OCC_RC=$?; fi   # capture rc without tripping set -e
   cat "$OCC_LOG"
   if (( OCC_RC != 0 )); then
     echo "[render] ABORTED — fix plan.json layout to reduce subject occlusion / frame-edge overflow, then re-run." >&2
@@ -171,7 +187,7 @@ if [[ -z "$CAPTION_LAYER" && -f "$PROJECT/plan.json" ]]; then
 fi
 if [[ -z "$CAPTION_LAYER" && -f "$PROJECT/index.html" ]]; then
   ATTR="$(grep -oE 'data-caption-layer="(bg|fg)"' "$PROJECT/index.html" | head -1 | grep -oE '(bg|fg)' || true)"
-  [[ -n "$ATTR" ]] && CAPTION_LAYER="$ATTR"
+  if [[ -n "$ATTR" ]]; then CAPTION_LAYER="$ATTR"; fi
 fi
 CAPTION_LAYER="${CAPTION_LAYER:-bg}"
 echo "[render] caption_layer=$CAPTION_LAYER"
@@ -195,7 +211,11 @@ echo "[render] hyperframes render @ ${FPS}fps"
 # guard the shell waits forever. This helper enforces a max wall-clock budget,
 # and if the output is already on disk when we hit it, treats the run as
 # successful and kills the zombie. Tune HF_TIMEOUT_S via env if needed.
-HF_TIMEOUT_S="${HF_TIMEOUT_S:-240}"
+# Default SCALES with clip size: two parallel Chromium passes on a long clip
+# legitimately exceed a fixed 240s (a 38s/1151-frame render was killed at 244s
+# while healthy). ~1.5s per source frame, floor 240s.
+N_FRAMES="$(ls "$PROJECT/frames_fg" 2>/dev/null | wc -l | tr -d ' ')"
+HF_TIMEOUT_S="${HF_TIMEOUT_S:-$(( N_FRAMES * 3 / 2 > 240 ? N_FRAMES * 3 / 2 : 240 ))}"
 # hf_render_dir: render one hyperframes composition.
 # args: <output.mp4> <label> <project_dir>
 # watches for the Chromium-shutdown-hang; if output file exists and is >1MB
@@ -267,20 +287,34 @@ if [[ -f "$PROJECT/index_fg.html" ]]; then
   hf_render_dir "$FG_CAPS" "fg_caps" "$FG_SHADOW" &
   FG_PID=$!
   # Wait for both; fail if either fails.
-  wait "$BG_PID"; BG_RC=$?
-  wait "$FG_PID"; FG_RC=$?
+  BG_RC=0; wait "$BG_PID" || BG_RC=$?
+  FG_RC=0; wait "$FG_PID" || FG_RC=$?
   rm -rf "$FG_SHADOW"
   if (( BG_RC != 0 )); then echo "[render] bg render failed" >&2; exit 1; fi
   if (( FG_RC != 0 )); then echo "[render] fg render failed" >&2; exit 1; fi
 elif [[ -f "$PROJECT/rail.html" ]]; then
-  # Standard mode: render index.html from a shadow dir so rail.html isn't ALSO
-  # discovered as a root composition (the multiple-root ambiguity — otherwise the
-  # renderer might pick rail.html as the entry). The rail renders separately below.
+  # Standard mode: TWO independent hyperframes passes (base = index.html with the
+  # embed; rail = rail.html transparent). Each renders from its own shadow dir (the
+  # multiple-root ambiguity), and they share no state — run them IN PARALLEL like
+  # the fg-hybrid above (~halves the Chromium wall time). The rail webm is consumed
+  # by the composite stage below, which finds it already rendered.
   BASE_SHADOW="$PROJECT/_base_shadow"; rm -rf "$BASE_SHADOW"; mkdir -p "$BASE_SHADOW"
   link_assets "$PROJECT" "$BASE_SHADOW"
   cp "$PROJECT/index.html" "$BASE_SHADOW/index.html"
-  hf_render_dir "$BG" "bg_plus_caps" "$BASE_SHADOW" || { echo "[render] bg render failed" >&2; rm -rf "$BASE_SHADOW"; exit 1; }
-  rm -rf "$BASE_SHADOW"
+  RAIL_SHADOW="$PROJECT/_rail_shadow"; rm -rf "$RAIL_SHADOW"; mkdir -p "$RAIL_SHADOW"
+  link_assets "$PROJECT" "$RAIL_SHADOW"
+  cp "$PROJECT/rail.html" "$RAIL_SHADOW/index.html"
+  RAIL_WEBM="$PROJECT/rail.webm"
+  echo "[render] standard base + rail — launching both passes in parallel"
+  hf_render_dir "$BG" "bg_plus_caps" "$BASE_SHADOW" &
+  BASE_PID=$!
+  hf_render_dir "$RAIL_WEBM" "rail" "$RAIL_SHADOW" "webm" &
+  RAIL_PID=$!
+  BASE_RC=0; wait "$BASE_PID" || BASE_RC=$?
+  RAIL_RC=0; wait "$RAIL_PID" || RAIL_RC=$?
+  rm -rf "$BASE_SHADOW" "$RAIL_SHADOW"
+  if (( BASE_RC != 0 )); then echo "[render] bg render failed" >&2; exit 1; fi
+  if (( RAIL_RC != 0 )); then echo "[render] rail render failed" >&2; exit 1; fi
 else
   hf_render_dir "$BG" "bg_plus_caps" "$PROJECT" \
     || { echo "[render] bg render failed" >&2; exit 1; }
@@ -324,20 +358,25 @@ fi
 #   (3) alpha-composite the rail IN FRONT so it is never occluded (rail = on top).
 # The existing Cinematic paths below are untouched.
 if [[ -f "$PROJECT/rail.html" ]]; then
-  echo "[render] STANDARD (rail + embed) — embed behind subject, rail alpha-overlaid in front (${W}x${H})"
   MATTED="$PROJECT/_matted.mp4"
-  ffmpeg -y -i "$BG" \
-    -framerate "$FPS" -i "$PROJECT/frames_fg/f_%04d.png" \
-    -filter_complex "[1:v]scale=${W}:${H},format=yuva420p[m];[0:v][m]overlay=format=auto[v]" \
-    -map "[v]" -map 0:a -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 16 -preset medium -c:a copy "$MATTED"
+  if [[ "$CAPTION_LAYER" == "fg" ]]; then
+    # caption_layer:fg — the climax sits IN FRONT of the subject (no behind-subject
+    # embed possible, e.g. a frame-filling 9:16 subject). bg_plus_caps already has the
+    # climax drawn over the video, so we SKIP the matte overlay (which would push the
+    # subject back in front of it). The rail still overlays on top below.
+    echo "[render] STANDARD (rail + FRONT climax) — caption_layer=fg, matte overlay skipped (${W}x${H})"
+    cp "$BG" "$MATTED"
+  else
+    echo "[render] STANDARD (rail + embed) — embed behind subject, rail alpha-overlaid in front (${W}x${H})"
+    ffmpeg -y -i "$BG" \
+      -framerate "$FPS" -i "$PROJECT/frames_fg/f_%04d.png" \
+      -filter_complex "[1:v]scale=${W}:${H},format=yuva420p[m];[0:v][m]overlay=format=auto[v]" \
+      -map "[v]" -map 0:a -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 16 -preset medium -c:a copy "$MATTED"
+  fi
 
-  # render rail.html (transparent) via a shadow dir (same trick as the fg hybrid)
-  RAIL_SHADOW="$PROJECT/_rail_shadow"; rm -rf "$RAIL_SHADOW"; mkdir -p "$RAIL_SHADOW"
-  link_assets "$PROJECT" "$RAIL_SHADOW"
-  cp "$PROJECT/rail.html" "$RAIL_SHADOW/index.html"
+  # rail.webm was already rendered IN PARALLEL with the base pass above.
   RAIL_WEBM="$PROJECT/rail.webm"
-  hf_render_dir "$RAIL_WEBM" "rail" "$RAIL_SHADOW" "webm" || { echo "[render] rail render failed" >&2; rm -rf "$RAIL_SHADOW"; exit 1; }
-  rm -rf "$RAIL_SHADOW"
+  [[ -f "$RAIL_WEBM" ]] || { echo "[render] rail.webm missing (parallel rail pass failed?)" >&2; exit 1; }
 
   # alpha-overlay the transparent rail in front of the matted video (force vp9
   # decode so the WebM alpha plane is honoured by overlay)

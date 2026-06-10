@@ -13,12 +13,16 @@ metadata:
 
 ## Operational flow (TL;DR)
 
-The craft prose below is long; the **pipeline itself is short**:
+The craft prose below is long; the **pipeline itself is short** — and everything
+deterministic is computed or compiled, never hand-written:
 
 1. **Decision gate** (refuse bad clips) → **pick mode** (Standard vs Cinematic)
-2. `hyperframes init` → `matte.cjs` (subject matte) → `transcribe.cjs` (words)
-3. **author**: Cinematic → write `plan.json` → `make-composition.cjs`; Standard → author `index.html` (embed) + `rail.html` (rail) from a chosen template
-4. `render-and-composite.sh` → `final.mp4`
+2. `hyperframes init` → **`bash scripts/prepare.sh <project>`** (matte ∥ transcribe in parallel, then safe-zones — one command, nothing forgotten)
+3. **author a small JSON of creative choices** (read `safe-zones.json` first):
+   Standard → `standard.json` → **`make-standard.cjs`** compiles index.html + rail.html (timings from the transcript, rail pre-emption, the rail↔climax hand-off, canvas=source length — all generated, correct by construction);
+   Cinematic → `plan.json` → `fill-timings.cjs` → `fit-fonts.cjs` → `make-composition.cjs`
+4. **Visual QA**: `node scripts/preview-frames.cjs <project>` → faithful composite previews in ~2s/frame (no render). Check § Visual QA before paying for a render.
+5. `render-and-composite.sh` → gates (timing / occlusion+hero / overflow / hand-off) → `final.mp4`
 
 Load-bearing rules people miss:
 
@@ -52,7 +56,7 @@ This is exactly what **Standard mode** builds (rail = `rail.html`, embed = the c
 | Mode | What it is | Recommend it for | Author in |
 |---|---|---|---|
 | **Standard** (rail + embed) | a verbatim lower-third **rail** carries the whole transcript; only the peak(s) promote to an **embed** climax behind the subject | **explainer · voiceover / talking-head · interview · keynote · tutorial · product walkthrough · news · podcast clip** — anything where the spoken words must be fully read; accessibility; dense / information-heavy speech | [modes/standard/](modes/standard/) — 54-template library |
-| **Cinematic** (pure embed) | **embed only** — no rail; every caption is composited into the scene behind the subject (hero typography, accumulation, occlusion as the effect) | **brand film · hype / teaser · social reel · music video · showcase · motivational · trailer** — short & punchy, few words, mood over comprehension; or the user says "make it cinematic / flashy / wow" or names a Cinematic template | [modes/template/](modes/template/) — `champion` · `cinematic-cream` · `memory-wall` · `portrait-header` |
+| **Cinematic** (pure embed) | **embed only** — no rail; every caption is composited into the scene behind the subject (hero typography, accumulation, occlusion as the effect) | **brand film · hype / teaser · social reel · music video · showcase · motivational · trailer** — short & punchy, few words, mood over comprehension; or the user says "make it cinematic / flashy / wow" or names a Cinematic template | [modes/cinematic/](modes/cinematic/) — `champion` · `cinematic-cream` · `memory-wall` · `portrait-header` |
 
 **Recommendation heuristic** (you suggest, the user decides): dense speech / must-read words / longer clip → **Standard**; short, stylish, few words, mood over comprehension → **Cinematic**; bright backdrop (caption-region luminance > 180) → **Standard** (the cream/`screen` Cinematic templates wash out).
 
@@ -74,6 +78,8 @@ Read the samples. Refuse if:
 - Multiple speakers / hard cuts (split & render each shot, or refuse)
 - No human subject (this skill is for talking-head)
 - Under 3 seconds, **no speech**, or face never clearly visible — `transcribe.cjs` warns when audio is near-silent (Whisper hallucinates words like "Thank you." over silence); **heed it and refuse** rather than caption fabricated words
+- **Source already has burned-in captions / subtitles / heavy text graphics** — adding a second caption system conflicts and the footage ships untouched (no covering/inpainting). Burned text often appears only mid-clip: sample a **1fps contact sheet** (`ffmpeg -i in.mp4 -vf "fps=1,scale=160:-1,tile=10x5" sheet.png`), don't trust 3 spot frames.
+- **Transcript is garbage** — non-native/heavy-accent speech can transcribe into confident gibberish. Sanity-read `transcript.json` before authoring; if it doesn't parse as language, try `WHISPER_MODEL=medium` once, else refuse (a verbatim rail of fabricated words is worse than no captions).
 - Busy handheld with fast motion (matte flickers)
 
 ### Pre-flight probes (cost nothing, prevent the worst failures)
@@ -85,39 +91,60 @@ Read the samples. Refuse if:
 
 ---
 
-## Pipeline — 6 steps
+## Pipeline — 5 steps
 
 ```
 1. hyperframes init <project> --non-interactive --video <video.mp4> --skip-skills
-2. node scripts/matte.cjs <project>            # → frames_fg/*.png (PP-MattingV2 matte, onnxruntime-node)
-3. node scripts/transcribe.cjs <project>       # → transcript.json (Whisper, our schema)
-3b. node scripts/safe-zones.cjs <project>      # → safe-zones.json (clean zones + embed-vs-fg verdict, FROM the matte — read before authoring)
-4. [AGENT STEP] mode-dependent — see below
-4b. (Cinematic) node scripts/fill-timings.cjs <project> # group/word times from transcript BY SEQUENCE (kills drift + duplicate-word mismatch)
-4c. (Cinematic) node scripts/fit-fonts.cjs <project>    # shrink any nowrap line that would overflow its box (kills the overflow round)
-5. (Cinematic mode only) node scripts/make-composition.cjs <project>
-6. bash scripts/render-and-composite.sh <project>  # → final.mp4 + history/ snapshot
+2. bash scripts/prepare.sh <project>       # matte ∥ transcribe (parallel) → safe-zones. One command.
+                                           #   → frames_fg/ transcript.json safe-zones.json
+3. [AGENT STEP — the only creative step] author a small JSON; see below by mode
+   Standard:  author standard.json → node scripts/make-standard.cjs <project>
+   Cinematic: author plan.json → node scripts/fill-timings.cjs → fit-fonts.cjs → make-composition.cjs
+4. node scripts/preview-frames.cjs <project>   # ~2s/frame composite previews → § Visual QA (BEFORE the render)
+5. bash scripts/render-and-composite.sh <project>  # gates → final.mp4 + history/ snapshot
 ```
 
-Step 4 differs by mode:
+Step 3 differs by mode:
 
-### Step 4 — Cinematic mode (pure embed)
+### Step 3 — Cinematic mode (pure embed)
 
-0. **Read `safe-zones.json` first** (step 3b). If `recommendation:"fg"` → the subject fills the frame; author `caption_layer:"fg"` (don't fight it with bg embeds). If `"embed"` → place your caption **planes inside the reported clean `zones`** (prefer the `clearerSide`) instead of guessing positions — this is what avoids the occlusion-failure re-tries.
-1. Pick a template from the [modes/template/](modes/template/) catalog by scene fit (or the one the user named)
-2. Read its `spec.md` for required layout decisions
-3. Write `<project>/plan.json`: `template`, `duration`, `fps`, `width`, `height`, layout fields per the spec, and `groups[]` (each with `slot` + `tone` + `in/out` + `words`)
-4. Run `node scripts/fill-timings.cjs <project>` (fills group/word times from the transcript **by sequence** — you only choose the grouping; duplicates resolve correctly) then `node scripts/fit-fonts.cjs <project>` (shrinks any `nowrap` line that would overflow its box). Then step 5 compiles plan.json → index.html and the gates (`check-timing`, `check-occlusion`) run before render — with safe-zones + fitted sizes + sequenced timings as inputs, they should pass first try.
+1. **Read `safe-zones.json` first.** Narration planes go in **`zones.hugLeft`/`hugRight`** — clean strips ABUTTING the silhouette (text far from the body reads as floating, not embedded; far corners are the fallback, not the default). The hero defaults to `heroAnchor`/`heroBands.best` (centered ON the subject, ~30–55% occluded). `recommendation:"fg"` moves NARRATION in front for legibility; **the hero stays embedded whenever `heroBands.feasible`** — hero-fg is the last resort.
+2. Read [modes/cinematic/cinematic-cream/spec.md](modes/cinematic/cinematic-cream/spec.md) (→ template.html header: what's LOCKED vs OPEN).
+3. **Author `<project>/cinematic.json`** — thought-BLOCKS, not raw groups: each block = lines of words (grouped 2–5 at clause boundaries) + the plane it stacks in + per-line `css` (size/weight/style only — no positions) + at most ONE line marked `"hero": true` (the promoted word; `"text"` for display form). Schema: `scripts/make-cinematic.cjs` header.
+4. **Compile**: `node scripts/make-cinematic.cjs <project>` — lowers blocks → plan.json → index.html. Generated for you: transcript-sequenced timings, accumulate-within-block, page-flip-between-blocks, the hero hand-off (lifted out, holds to its block's end), **reading order by construction** (stack order = spoken order), fg fallback per safe-zones. Then the gates run as usual. *(Hand-authoring plan.json directly remains possible for designs blocks can't express — then run `fill-timings.cjs` + `fit-fonts.cjs` + `make-composition.cjs` yourself.)*
 
-### Step 4 — Standard mode (rail + embed)
+### Step 3 — Standard mode (rail + embed)
 
-**Read [modes/standard/PIPELINE.md](modes/standard/PIPELINE.md) FIRST** — it is the contract and overrides the library's `_anatomy.md` for this skill (subject matte, our element contract, two files).
+**Read [modes/standard/PIPELINE.md](modes/standard/PIPELINE.md) FIRST** — it is the contract (the `standard.json` schema + how the compiler realizes the hand-off) and overrides the library's `_anatomy.md` for this skill.
 
-1. Read the transcript; pick the peak beat(s) (the headline word → **embed**) and the rest (→ **rail**, verbatim).
-2. **Pick the 3 templates** that best fit the content + scene (match each file's `## Triggers`); read those 3 + the 2–3 motion recipes they name in [modes/standard/_motion.md](modes/standard/_motion.md). Build one (or blend tokens).
-3. Author `<project>/index.html` — source video + the **embed climax** in `#stage` (skeleton + the template's style tokens + a `CLIMAX_IN`/`CLIMAX_OUT`).
-4. Author `<project>/rail.html` — the **verbatim rail** only, transparent (words from `transcript.json`, active word `.act`, a `FLOW_IN`/`FLOW_OUT`).
-5. Render: `bash scripts/render-and-composite.sh <project>` renders both, composites the climax behind the subject via the matte, alpha-overlays the rail in front. No `plan.json` → template gates skip (`check-overflow.cjs` still warns); self-check rail timing + embed scarcity per PIPELINE.md.
+1. Read the transcript; pick the **promoted word** (the headline beat → climax) — prefer a clause-final word. Everything else rides the **rail**, verbatim.
+2. **Pick up to 3 templates** that fit content + scene (each file's `## Triggers`); take their **style tokens** (font / fills / accent / climax CSS).
+3. **Author `<project>/standard.json`** — your creative choices only: template tokens, rail line grouping (2–5 words/line at clause boundaries — include the promoted word where spoken), and the climax block (`match`/`occurrence`/`text`/`top_pct`/`font_cqh`/`entrance`/`exit`). Schema: [modes/standard/PIPELINE.md](modes/standard/PIPELINE.md) § standard.json.
+4. **Compile**: `node scripts/make-standard.cjs <project>` → index.html + rail.html + a derived plan.json. The compiler pulls every word's timing from the transcript by sequence, generates rail pre-emption + the rail↔climax **hand-off** (promoted word lifted out, pre-line freeze, climax holds to end of thought, page-flip), sets canvas = source length, and line-fits the climax. **Don't hand-edit the generated HTML** — change standard.json and recompile.
+5. Render: the timing / occlusion(+hero) / overflow / hand-off gates all run (the derived plan.json lights them up); with the compiler they pass first try.
+
+---
+
+## Visual QA — preview BEFORE you render
+
+`node scripts/preview-frames.cjs <project> [t…]` composites **faithful preview frames in ~2s each**
+(caption layers screenshotted at seek-time + real video frame + matte occlusion + rail overlay = what
+the final composite will look like at that moment). Default samples = each group/climax window.
+A full render costs minutes — never use it to *discover* layout problems.
+
+Check the previews (`<project>/preview/sheet.png`) against this list — these are the failures the
+geometric gates **cannot** catch:
+1. **Washout** — light text over a bright region (window/sign/sky): unreadable → move the plane or change template/mode.
+2. **Text-on-text** — captions over the scene's own text/graphics, or two caption groups colliding.
+3. **Reading order** — on-screen vertical order must match spoken order; the hero must not sit below later words.
+4. **Hero presence** — the climax should be BIG and visibly behind the subject (~30–55% occluded), not a floating label in a margin.
+5. **Balance** — one coherent column/band, not scattered fragments; margins breathing; nothing clipped.
+
+**Fresh-eyes review (recommended for anything user-facing):** you have confirmation bias about your
+own layout. If you can spawn a subagent, give it ONLY the preview sheet + this checklist and ask for
+PASS/FIX verdicts per frame ("review these caption previews against the 5-point checklist; answer
+PASS or the specific fix per frame"). Apply fixes in standard.json / plan.json, recompile, re-preview —
+each loop costs seconds. Render once, when the previews pass.
 
 ---
 
@@ -125,14 +152,13 @@ Step 4 differs by mode:
 
 | Template | Frame | Look | Spec |
 |---|---|---|---|
-| cinematic-cream | 16:9 + 9:16 (DNA-only) | DNA-only: Inter + soft/present motion + warm-cream palette. Agent composes planes + per-group typography + block-synced accumulation per scene. Unified template replacing memory-wall/champion/portrait-header for this aesthetic family. | [template.html](modes/template/cinematic-cream/template.html) header |
-| memory-wall | 16:9 landscape | Italic poem + uppercase climax, right-aligned cascade (superseded by cinematic-cream, kept for reference) | [spec](modes/template/memory-wall/spec.md) |
-| champion | 16:9 landscape | Side column + center-stage crown crossing subject (superseded by cinematic-cream) | [spec](modes/template/champion/spec.md) |
-| portrait-header | 9:16 portrait | Centered header strip + optional bottom crown (superseded by cinematic-cream) | [spec](modes/template/portrait-header/spec.md) |
+| **cinematic-cream** | 16:9 + 9:16 (DNA-only) | THE Cinematic template. Inter + soft/present motion + warm-cream palette; agent composes planes + per-group typography + block-synced accumulation per scene. | [spec.md](modes/cinematic/cinematic-cream/spec.md) → template.html header |
+
+(Older templates — memory-wall / champion / portrait-header — are **superseded** and live in [modes/cinematic/_archive/](modes/cinematic/_archive/) for reference only. Don't pick them for new work.)
 
 > **Note:** these are the **Cinematic** (pure-embed) templates — they composite text into the scene with no rail. For **rail + embed** (most explainer / voiceover), use **Standard mode** → the 54-template design library in [modes/standard/](modes/standard/).
 
-To add a new template: see [modes/template/README.md § Adding a new template](modes/template/README.md).
+To add a new template: see [modes/cinematic/README.md § Adding a new template](modes/cinematic/README.md).
 
 ---
 

@@ -34,8 +34,8 @@ for (const root of HF_ROOTS) {
     if (fs.existsSync(bunDir))
       for (const d of fs.readdirSync(bunDir))
         if (d.startsWith("sharp@")) cands.push(path.join(bunDir, d, "node_modules", "sharp"));
-  } catch (e) {}
-  for (const c of cands) { try { if (fs.existsSync(c)) { sharp = require(c); break; } } catch (e) {} }
+  } catch {}
+  for (const c of cands) { try { if (fs.existsSync(c)) { sharp = require(c); break; } } catch {} }
   if (sharp) break;
 }
 
@@ -218,7 +218,7 @@ async function main() {
   const CELL = Math.max(W, H) / 48;
   const GW = Math.max(8, Math.round(W / CELL)), GH = Math.max(8, Math.round(H / CELL));
   let fps = 24;
-  try { const f = parseFloat(String(fs.readFileSync(path.join(project, "matte.fps"), "utf8")).replace(/[^\d.]/g, "")); if (f > 0) fps = f; } catch (e) {}
+  try { const f = parseFloat(String(fs.readFileSync(path.join(project, "matte.fps"), "utf8")).replace(/[^\d.]/g, "")); if (f > 0) fps = f; } catch {}
 
   const bgDir = path.join(project, "frames_bg");
   const hasBg = fs.existsSync(bgDir);

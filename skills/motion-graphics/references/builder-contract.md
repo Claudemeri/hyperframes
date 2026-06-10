@@ -35,4 +35,4 @@ Root `#stage` (`data-composition-id`) needs `position: relative; width: <W>px; h
 - Clamp at tween bounds; don't let a spring overshoot past a held value.
 - Allowed eases: `power1–4`, `back`, `bounce`, `circ`, `elastic`, `expo`, `sine` (`.in/.out/.inOut`).
 - One motif per scene. Run `hyperframes inspect`; mark intentional overflow `data-layout-allow-overflow="true"`.
-- **Palette discipline**: define all colors in one `palette` object / CSS custom properties — no inline hex scattered through the markup (for `asset-fusion`, eyedropper the palette from the asset). _(Adapted from agent-opus's codegen prompt — not copied.)_
+- **Palette discipline**: define all colors in one `palette` object / CSS custom properties — no inline hex scattered through the markup (for `asset-fusion`, eyedropper the palette from the asset).

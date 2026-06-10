@@ -17,7 +17,7 @@ Search or generate one **hero asset** with strong geometric affordance. `asset_n
 
 - Borrow the annotation kit from registry **`north-korea-locked-down`** (hand-drawn scribble circle draw-on, pop-up label + pointer, editorial wash, camera push).
 - Primitives: gauge fill / marker-rise along the affordance · connector (data → asset point) · diegetic chart fused to the asset's geometry.
-- Reference: `codegen_RWA` (visual-design fusion) + agent-opus `storyboard/prompts/codegen/generate-background-description` (adapt, not copy).
+- Adapt the diegetic chart to each asset's affordance (read the geometry, fuse the data into it).
 
 ## Build (reuse-first + hand-author the affordance)
 

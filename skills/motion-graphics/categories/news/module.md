@@ -1,6 +1,6 @@
 # news — category module (search-driven)
 
-Search a real news article → animate it as an **article-highlight** — a faithful HF port of agent-opus `CenteredTextEmphasis` / `HighlightableText`. Signature motion: the article text is laid out at a **readable size (NOT zoomed)**, slides + fades up, then the **keyword is highlighted in place** — a marker band grows left→right behind it. No blow-up zoom. ~5–7s.
+Search a real news article → animate it as an **article-highlight** — a faithful HF port of the centered-emphasis technique. Signature motion: the article text is laid out at a **readable size (NOT zoomed)**, slides + fades up, then the **keyword is highlighted in place** — a marker band grows left→right behind it. No blow-up zoom. ~5–7s.
 
 Two layouts share that one highlight core — pick by aspect + whether there's a logo / person to feature:
 
@@ -13,7 +13,7 @@ Two layouts share that one highlight core — pick by aspect + whether there's a
 
 RWA / web search (or `hyperframes capture`) → a real article. The Director extracts the **keyword** (1–2 words / a number / a name — the hook) and, for Layout B, also a **brand logo**, a **date**, and a **person photo**. `asset_needs: { kind: news|web|image, query }` — request the logo (Wikimedia / simple-icons) and the person photo (Wikimedia) as separate asset queries. Run the person photo through `hyperframes remove-background <in> -o <out>.png` to get a transparent cutout.
 
-## The highlight core (shared by both layouts) — agent-opus, in HF
+## The highlight core (shared by both layouts) — the marker-band technique
 
 The keyword highlight is a marker band grown L→R via `background-size` (NOT a `transform:scaleX` bar):
 
@@ -29,7 +29,7 @@ The keyword highlight is a marker band grown L→R via `background-size` (NOT a 
 }
 ```
 
-`box-decoration-break:clone` makes the band **wrap across line breaks** seamlessly — a multi-word keyword spanning 2–3 lines still highlights continuously (the old `scaleX` bar could not). GSAP tweens the CSS var `--hlw` 0%→100%, **swept on AFTER the text settles — never pre-applied**. Optionally scale the duration with keyword length ~0.5–1.5s (agent-opus `getScaledHighlightDuration`).
+`box-decoration-break:clone` makes the band **wrap across line breaks** seamlessly — a multi-word keyword spanning 2–3 lines still highlights continuously (the old `scaleX` bar could not). GSAP tweens the CSS var `--hlw` 0%→100%, **swept on AFTER the text settles — never pre-applied**. Optionally scale the duration with keyword length ~0.5–1.5s.
 
 ## Layout A — centered-emphasis (9:16, text-only) — Builder
 
@@ -53,4 +53,4 @@ The editorial article-card layout (logo top-left + date + big serif headline wit
 
 ## Critical
 
-Highlight is **grown in place, swept on AFTER the text — never pre-applied**. The text **stays readable — do NOT zoom the keyword to fill the frame** (team feedback 2026-06-09: zoom loses context and reads wrong; agent-opus never zooms — it presents the text and highlights the word). For Layout B, the person MUST be a `remove-background` cutout (no rectangular photo box). Deterministic; honor `references/builder-contract.md`.
+Highlight is **grown in place, swept on AFTER the text — never pre-applied**. The text **stays readable — do NOT zoom the keyword to fill the frame** (team feedback 2026-06-09: zoom loses context and reads wrong; the technique never zooms — it presents the text and highlights the word). For Layout B, the person MUST be a `remove-background` cutout (no rectangular photo box). Deterministic; honor `references/builder-contract.md`.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* check-occlusion.cjs — pixel-perfect occlusion gate (Node port of check-occlusion-v2.py).
- * Runs measure-layout.cjs (real Chromium DOM rects), reads the RVM matte alpha via sharp,
+ * Runs measure-layout.cjs (real Chromium DOM rects), reads the subject-matte alpha via sharp,
  * computes per-word / per-cap occlusion. No Python.
  *   node check-occlusion.cjs <project-dir> [--strict] [--word-fail F] [--word-warn F] [--cap-fail F] [--remeasure]
  */

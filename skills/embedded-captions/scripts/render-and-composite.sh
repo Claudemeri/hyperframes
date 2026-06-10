@@ -67,7 +67,7 @@ if [[ -f "$PROJECT/plan.json" && -f "$PROJECT/transcript.json" ]]; then
 fi
 
 # Gate: subject occlusion + frame-edge overflow — pixel-perfect via Chromium DOM
-# rects (measure-layout.cjs) × the RVM matte alpha (sharp). Template mode only
+# rects (measure-layout.cjs) × the subject-matte alpha (sharp). Template mode only
 # (skipped when plan.json is absent; custom mode uses check-overflow.cjs below).
 if [[ -f "$PROJECT/plan.json" && -d "$PROJECT/frames_fg" ]]; then
   # check-occlusion prints its verdict, then can intermittently hang on native
@@ -132,7 +132,7 @@ if [[ -f "$PROJECT/rail.html" && -f "$PROJECT/index.html" && -f "$(dirname "$0")
   fi
 fi
 
-# FPS: matte.fps (written by matte-rvm at the source's NATIVE rate) is authoritative
+# FPS: matte.fps (written by matte.cjs at the source's NATIVE rate) is authoritative
 # so the matte overlay stays frame-aligned with the render. Falls back to plan.fps /
 # frame-count inference / 24. Warn if plan.json fps disagrees with the matte.
 FPS=""
@@ -319,7 +319,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # STANDARD mode (rail + embed) — detected by rail.html.
 #   $BG = index.html rendered (source video + the embed climax).
-#   (1) overlay the RVM matte so the subject occludes the climax (embed = behind).
+#   (1) overlay the subject matte so the subject occludes the climax (embed = behind).
 #   (2) render rail.html → transparent WebM (the verbatim rail).
 #   (3) alpha-composite the rail IN FRONT so it is never occluded (rail = on top).
 # The existing Cinematic paths below are untouched.

@@ -5,19 +5,19 @@ Things that broke during skill development. Check against this list before you s
 ## Matting
 
 ### CoreML execution provider corrupts face alpha
-RVM ONNX through CoreML partitions ~60 of 300 nodes to CoreML and the rest to CPU. Mixed-precision boundary produces alpha ≈ 30 (out of 255) inside the subject's face while the background correctly reads 0. Result: caption text visibly shines THROUGH the face.
+Running the matting ONNX through the CoreML EP partitions the graph across providers; the mixed-precision boundary produced alpha ≈ 30 (out of 255) inside the subject's face while the background correctly read 0 (observed with the previous RVM engine — don't re-try). Result: caption text visibly shines THROUGH the face.
 
-**Fix**: Only ever use `providers=["CPUExecutionProvider"]` for RVM ONNX. Our script does this; don't "optimize" it by adding CoreML.
+**Fix**: Only ever use `providers=["CPUExecutionProvider"]` for the matting ONNX. Our script does this; don't "optimize" it by adding CoreML.
 
-### Wrong downsample_ratio makes alpha smoky around edges
-RVM recommends ~512 on the shorter edge. For 1080p = 0.25, for 720p = 0.5. Too high (0.5 on 1080p) gives decent alpha but wastes compute; too low (0.125 on 1080p) smokes out hair.
+### Aspect distortion / sharp channel-stride make the alpha garbage
+Two earned scars in `matte.cjs` (PP-MattingV2): (1) the ONNX exports are **fixed-size** — squashing a portrait clip into the landscape canvas distorts humans and degrades the matte; `matte.cjs` contain-pads (aspect preserved, centered on black, alpha cropped back) instead. (2) sharp returns a **3-channel** buffer from `.raw()` after resizing a 1-channel raw input — reading it with a 1-channel stride silently produces a smeared, striped, displaced matte that can *look* plausible in the composite. Always `toBuffer({resolveWithObject:true})` and stride by `info.channels`.
 
-**Fix**: `matte.cjs` computes this automatically from input height.
+**Fix**: both handled inside `matte.cjs`; preserve them if you touch it.
 
 ### isnet-general-use / u2net_human_seg miss props
 rembg's general/human models capture the person but drop handheld props (mic, notebook). If the caption crosses the mic, it will NOT be occluded by the mic — text floats in front of it unnaturally.
 
-**Fix**: For scenes where props matter, either (a) accept RVM captures what it captures, or (b) add a manual mask ROI for the prop region. We haven't productized (b) yet.
+**Fix**: For scenes where props matter, either (a) accept that the human-matting model captures what it captures, or (b) add a manual mask ROI for the prop region. We haven't productized (b) yet.
 
 ## Layout
 
@@ -91,18 +91,18 @@ Template defaults (66/78/92/140) assume a ~560px column. Expanding the plane to 
 
 ## Scene admission
 
-### Handheld / fast camera → RVM alpha flickers
-RVM is temporally coherent but moderate motion only. Fast camera pans (vlog selfie) produce frame-to-frame alpha jitter that shows as flickering caption edges.
+### Handheld / fast camera → matte alpha flickers
+The matte is temporally smoothed (EMA in matte.cjs) but moderate motion only. Fast camera pans (vlog selfie) still produce frame-to-frame alpha jitter that shows as flickering caption edges.
 
 **Fix**: SKILL.md decision gate lists handheld vlog as `⚠️` — degrade or refuse. Production version would add `vidstabdetect` compensation; v1 does not.
 
 ### Multi-person scenes → matte is ambiguous
-RVM segments "foreground" as a single alpha. With two people, it captures both but they're treated as one blob. Captions can't go "behind person A but in front of person B". If the scene has both speakers visible, the skill should split by shot boundaries first.
+The human-matting model segments "foreground" as a single alpha. With two people, it captures both but they're treated as one blob. Captions can't go "behind person A but in front of person B". If the scene has both speakers visible, the skill should split by shot boundaries first.
 
 **Fix**: Either pre-split with PySceneDetect + per-shot planning, or refuse for `⚠️` multi-subject scenes.
 
 ### Undetected shot cut inside the clip
-Some sources (interviews, broadcast clips) cut to B-roll/archive footage mid-clip. RVM's matte + caption layout assumes the subject is the same person throughout — a hard cut mid-render creates garbage (caption placement relative to old subject applied to a totally different shot).
+Some sources (interviews, broadcast clips) cut to B-roll/archive footage mid-clip. The matte + caption layout assumes the subject is the same person throughout — a hard cut mid-render creates garbage (caption placement relative to old subject applied to a totally different shot).
 
 **Fix for v1**: Probe the clip at 3-5 timestamps before accepting it. If any frame doesn't contain the primary subject at the same position, trim the clip to end before the cut. `Steve Jobs 60 Minutes` cut to Beatles archival at t≈9s, was manually trimmed to 8.5s.
 

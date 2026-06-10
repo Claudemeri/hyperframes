@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * safe-zones.cjs — PRECOMPUTE where captions can safely go, from the RVM matte.
+ * safe-zones.cjs — PRECOMPUTE where captions can safely go, from the subject matte.
  *
  *   node safe-zones.cjs <project-dir>            → safe-zones.json (global + per-sentence windows) + summary
  *   node safe-zones.cjs <project-dir> <in> <out> → just that time window's zones (ad-hoc query)

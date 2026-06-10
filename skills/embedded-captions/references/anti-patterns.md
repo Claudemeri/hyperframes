@@ -125,11 +125,11 @@ Transcription is Whisper (via `transcribe.cjs`, no API key) — good word timing
 
 ## Matting
 
-### You enable CoreML for RVM ONNX.
-It's the Apple way, obviously faster. No. CoreML partitions the ONNX graph across providers (244 of 303 nodes on CoreML, 59 on CPU). The mixed-precision boundary produces alpha=30 inside the subject's face while background correctly reads 0. Captions shine through face. Pin the CPU execution provider only (`onnxruntime-node`). Our `matte.cjs` already does this; don't "optimize" it by re-adding CoreML.
+### You enable CoreML for the matting ONNX.
+It's the Apple way, obviously faster. No. CoreML partitions the ONNX graph across providers. The mixed-precision boundary produced (observed with the previous RVM engine) alpha=30 inside the subject's face while background correctly reads 0. Captions shine through face. Pin the CPU execution provider only (`onnxruntime-node`). Our `matte.cjs` already does this; don't "optimize" it by re-adding CoreML.
 
 ### You pick a matte model by "general vs human."
-rembg's `u2net_human_seg` gets people but misses handheld mics. `isnet-general-use` catches more but still drops mics on standing mounts. The right choice for video is **RVM** (temporally coherent + fast CPU) with `matte.cjs`. Only fall back to rembg isnet when RVM fails for some reason.
+rembg's `u2net_human_seg` gets people but misses handheld mics. `isnet-general-use` catches more but still drops mics on standing mounts. The right choice for video is **PP-MattingV2** (human-trained, fast CPU, Apache-2.0; EMA-smoothed for temporal stability) via `matte.cjs`. Only fall back to rembg isnet when it fails for some reason.
 
 ---
 

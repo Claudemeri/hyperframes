@@ -319,7 +319,7 @@ Two placement tweaks that separate "looks like a caption sitting in the scene" f
 
 ### Pre-render occlusion + frame-overflow gate
 
-**`check-occlusion.cjs` (canonical, pixel-perfect)** is the only occlusion checker in `scripts/`. It auto-runs `measure-layout.cjs` (headless Chromium via Puppeteer) which loads the compiled `index.html`, seeks the GSAP timeline to 4 sample times per group (15/40/65/90% through window), and queries `getBoundingClientRect()` on every `.cap` and child `.w` span. Output is `_layout.json` with the actual rendered pixel coordinates of every word at every sample. Then it computes per-word, per-cap occlusion against the real RVM matte alpha (read via `sharp`):
+**`check-occlusion.cjs` (canonical, pixel-perfect)** is the only occlusion checker in `scripts/`. It auto-runs `measure-layout.cjs` (headless Chromium via Puppeteer) which loads the compiled `index.html`, seeks the GSAP timeline to 4 sample times per group (15/40/65/90% through window), and queries `getBoundingClientRect()` on every `.cap` and child `.w` span. Output is `_layout.json` with the actual rendered pixel coordinates of every word at every sample. Then it computes per-word, per-cap occlusion against the real subject-matte alpha (read via `sharp`):
 
 - **Per-word peak occlusion** — the load-bearing metric: a 5-word phrase where 3 words are fully eaten averages the same as 8 words half-eaten, but only one of those is shippable, so per-WORD peak is what gates. Per-word peak ≥65% = `obliterated`, ≥35% = `warn`. A `WARN` band hit on a single climax word is OK (cinematic edge crop); two adjacent words obliterated is not.
 - **Per-cap aggregate** — avg + peak occlusion across all samples. Cap fails at peak ≥50%.

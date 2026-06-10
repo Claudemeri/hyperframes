@@ -7,14 +7,15 @@ to THIS skill's pipeline. Where this file and `_anatomy.md` disagree, **this fil
 
 ## 3 things differ from `_anatomy.md` (read this, then use the library freely)
 
-1. **Matte = RVM, not `remove-background`.** Ignore the `hyperframes remove-background` / `person.webm` /
-   `.cut` layer in `_anatomy.md`. This skill mattes with `scripts/matte.cjs` (RVM → `frames_fg/*.png`) and
-   composites the subject **in post** via `render-and-composite.sh`. **Never put the person in the HTML.**
+1. **Matte = this skill's `matte.cjs` (PP-MattingV2), not `remove-background`.** Ignore the
+   `hyperframes remove-background` / `person.webm` / `.cut` layer in `_anatomy.md`. This skill mattes with
+   `scripts/matte.cjs` (PP-MattingV2 → `frames_fg/*.png`) and composites the subject **in post** via
+   `render-and-composite.sh`. **Never put the person in the HTML.**
 2. **Contract = ours.** Not `.stage` / `window.__timelines['cap-{id}']`. Use `#root[data-composition-id="main"]`
    + `#a-roll` (the source video = their z0 background plate) + `#stage` + `#a-roll-audio` +
    `window.__timelines["main"]`. Same seek-safe rules (no `Math.random`/`Date.now`/CSS-keyframes/`repeat:-1`).
 3. **Two files, not one** (this is how the rail ends up *in front* of the subject while the climax sits *behind*):
-   - **`index.html`** — the source video + the **embed climax** in `#stage`. The RVM matte overlays this, so
+   - **`index.html`** — the source video + the **embed climax** in `#stage`. The subject matte overlays this, so
      the subject occludes the climax (their z1 "behind the speaker").
    - **`rail.html`** — the **rail** (flow) only, transparent background, no video, no climax. Rendered to a
      transparent WebM and alpha-composited **on top of** the matte, so the rail is never occluded
@@ -29,11 +30,11 @@ the rail stays clean + active-word accent).
 
 ```
 1. hyperframes init <project> --non-interactive --video <video.mp4> --skip-skills
-2. node scripts/matte.cjs <project>          # RVM → frames_fg/*.png  (KEEP RVM)
+2. node scripts/matte.cjs <project>          # PP-MattingV2 → frames_fg/*.png
 3. node scripts/transcribe.cjs <project>     # Whisper → transcript.json (verbatim word timings)
 4. [AGENT] pick 3 templates by transcript fit (their `## Triggers`), read those 3 + the 2-3 motion
    recipes they name + this file; then author <project>/index.html (climax) + <project>/rail.html (rail)
-5. bash scripts/render-and-composite.sh <project>   # renders both, RVM-mattes, alpha-overlays rail → final.mp4
+5. bash scripts/render-and-composite.sh <project>   # renders both, mattes, alpha-overlays rail → final.mp4
 ```
 
 ## `index.html` — video + embed climax (matte puts it behind the subject)
@@ -46,7 +47,7 @@ the rail stays clean + active-word accent).
   html,body{width:{{W}}px;height:{{H}}px;overflow:hidden;background:#000}
   #a-roll{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 12%;z-index:1}
   #stage{position:absolute;inset:0;z-index:2;container-type:size;pointer-events:none}   /* cqh works off this */
-  /* CLIMAX — big, behind the subject (RVM matte occludes it in post). _anatomy §3 base + the template's tokens.
+  /* CLIMAX — big, behind the subject (subject matte occludes it in post). _anatomy §3 base + the template's tokens.
      ⚠ font-family MUST be the template's LITERAL name (e.g. 'Anton', 'Bangers', 'Oswald'). The render pipeline
      scans for literal family names and auto-embeds the matching @font-face — a CSS var (var(--ff)) is NOT seen,
      so it silently falls back to a generic sans and the whole look dies. Always write the literal name. */

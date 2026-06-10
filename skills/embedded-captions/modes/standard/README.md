@@ -1,7 +1,7 @@
 # Caption Templates - HyperFrames rule set
 
 > **In the embedded-captions skill, read [`PIPELINE.md`](PIPELINE.md) FIRST.** It overrides this library's
-> asset-prep + contract for our pipeline: matte with **RVM** (`scripts/matte.cjs`), NOT `remove-background`;
+> asset-prep + contract for our pipeline: matte with **PP-MattingV2** (`scripts/matte.cjs`), NOT `remove-background`;
 > use our `#root`/`#a-roll`/`#stage` contract; author **two files** (`index.html` = embed climax, `rail.html`
 > = the rail). The style tokens + motion recipes below carry over unchanged.
 

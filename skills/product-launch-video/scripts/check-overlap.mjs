@@ -32,11 +32,7 @@
 //   5. containment placement  — intersection ≥90% of the smaller box when the
 //                               larger is a surface/media (an element placed
 //                               ON a panel is design; text-over-text never is)
-//   6. declared intent        — [data-layout-allow-overlap] on the element or
-//                               an ancestor (deliberate layered composition);
-//                               [data-bridge-id] (Tier-A morphs cross scenes
-//                               by design)
-//   7. transients             — a pair must intersect at ≥2 of the 3 probe
+//   6. transients             — a pair must intersect at ≥2 of the 3 probe
 //                               times to be a violation. A single-probe hit is
 //                               a mid-tween crossing (slide-in transit), and
 //                               is reported separately as a transient, not a
@@ -283,14 +279,7 @@ const PROBE = function probe(cfg, CANVAS_W, CANVAS_H) {
   };
   const isDecor = (el) =>
     chainHas(el, (p) => DECO_RX.test(Array.from(p.classList || []).join(" ") + " " + (p.id || "")));
-  const isExcluded = (el) =>
-    chainHas(
-      el,
-      (p) =>
-        p.getAttribute("aria-hidden") === "true" ||
-        p.hasAttribute("data-layout-allow-overlap") ||
-        p.hasAttribute("data-bridge-id"),
-    );
+  const isExcluded = (el) => chainHas(el, (p) => p.getAttribute("aria-hidden") === "true");
   const selectorFor = (el) => {
     if (el.id) return "#" + el.id;
     const cls = Array.from(el.classList).filter((c) => /^s\d+-/.test(c));
@@ -623,6 +612,6 @@ if (transients.length) {
 }
 console.error(
   `\n  → fix by root cause: move one box / put both in a flow (flex/grid) container / stagger their visible windows.` +
-    `\n    Genuinely intentional layering (chip pinned on a card corner) → add data-layout-allow-overlap="true" to the overlapping element.`,
+    `\n    There is no opt-out — DOM-nested children (text inside its own card) are already ignored; every other flagged pair must clear.`,
 );
 process.exit(1);

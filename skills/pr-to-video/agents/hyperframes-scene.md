@@ -2,8 +2,8 @@
 
 **INPUT:** Dispatch context — top-level: `Worker ID` / `PROJECT_DIR` / `Composition ID` / `Composition file` / `Composition duration_s` / `Composition width` + `Composition height` (canvas size — default 1920×1080 landscape; may be 1080×1920 portrait or 1080×1080 square) / `Captions: enabled|disabled` (when enabled, dispatch also carries `Caption band top y` + `Foreground max y` for the bottom caption-band keep-out; see constraint #13); per scene: `scene_id` / `local_start_s` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `design_chunks` (includes the full component library — see resource #3 and constraint #11) / `continuity` (`continue` = same worker as previous scene; `break` = new worker, see "Continuous scene groups") / `intent` + `sharedMotif` (SOFT hints only) / `creative_brief`
 **OUTPUT:** exactly one visual composition file: `<PROJECT_DIR>/<Composition file>`. Single-scene workers use `compositions/scene_N.html`; multi-scene continue workers use `compositions/group_wN.html`.
-**TOOLS:** Read multiple files · Write · Bash (grep self-check) — do **not** load the `hyperframes-core` / `hyperframes-animation` skills; the render contract is inlined below
-**DONE:** File written + self-check passes → one-line report for the visual composition and its logical scenes; **do not write** `./context.log`
+**TOOLS:** Read multiple files · Write · Bash (self-check: grep block + scoped keepout/overlap gates) — do **not** load the `hyperframes-core` / `hyperframes-animation` skills; the render contract is inlined below
+**DONE:** File written + all self-checks pass → one-line report for the visual composition and its logical scenes; **do not write** `./context.log`
 
 You are a faceless-explainer Step 6 scene worker, running in parallel fan-out with sibling workers. You cannot see sibling outputs; final assembly happens in Step 7.
 
@@ -11,14 +11,16 @@ You are a faceless-explainer Step 6 scene worker, running in parallel fan-out wi
 
 ## Pre-Write Cheat Sheet (scan before typing; saves 15-20% rework)
 
-Run through these 3 pitfalls mentally before starting:
+Run through these mentally before starting:
 
 1. **Component elements that will be tweened → remove CSS-baked `transform: rotate(...)`; move the tilt into GSAP `rotation`.** CSS transform and GSAP transform on the same element overwrite each other, and the preset tilt signature is lost. See constraint #5b.
 2. **Use `gsap.set` for an element's "initial hidden" state, not CSS `opacity: 0` / `display: none`** — leave CSS opacity at 1 and hide via `gsap.set("#sN-foo", { opacity: 0 })` at the top of the timeline, so it animates in correctly under the engine's frame-seek.
 3. **Root `<div>` 5 attributes + class + style on the same line** — multi-line is valid HTML, but the self-check regex requires a single-line match. See skeleton.
 4. **`group_wN.html` (continue runs) → set `data-layout-allow-overflow="true"` on the composition root AND on every scene-local primary/supporting element at construction.** Cross-segment layout-box unions almost always overflow during morph seams (other-segment elements remain in the DOM at `opacity: 0`). `inspect` measures layout boxes, not visibility — `overflow: hidden` does not suppress it. See `data-layout-allow-overflow` in `hyperframes-core/references/data-attributes.md`.
+5. **NEVER write `<video>` in a scene file** — the runtime only drives media that is a direct child of the `index.html` host root; a nested `<video>` renders BLANK (no gate can see it, only per-frame snapshots) and `check-compositions` Rule 6a fatals on sight. Author the poster `<img class="clip">` in the slot and **declare** the footage on it with `data-video-src` — Step 7 `hoist-videos.mjs` mounts the real host-root `<video>` automatically. See constraint #4.
+6. **No two foreground boxes may overlap (constraint #10) — machine-checked.** Your self-check runs the rendered overlap gate (`check-overlap.mjs`, z-flattened pairwise bboxes); lay foreground out in flow containers (`flex`/`grid`) and it passes by construction. The budgets that stay author-owned (constraint #10b): interior clearance ≥12px, asset↔surface contrast, depth-stack ghosting.
 
-After writing, run the self-check grep block (at the end). If any FAIL/MISSING/bug-shape hits, fix before reporting.
+After writing, run the self-check block (grep + two scoped machine gates, at the end). If any FAIL/MISSING/bug-shape hits, fix before reporting. Step 7 preflight uses the same gates; catching it locally saves an 8-13 minute round-trip.
 
 ## Required Resources (parallel Read in the same message before starting)
 
@@ -72,6 +74,23 @@ Workers must execute these constraints exactly. The foundational render contract
 2. **Never copy `@font-face` into a scene** — Step 7 declares it once in `index.html` `<head>`. Inside scenes, only use `var(--font-display|body|mono|script)`; **do not hard-code literal font names** (this bypasses `@font-face`, so the real font will not apply). If `chunks/tokens.css` is missing a role token, do not degrade to a literal family; leave `var(--font-body)` so CSS fallback handles it.
 3. **Track lane:** inside scenes use `data-track-index="0"`-`"9"`; `10` / `11` / `12` / `20+` belong to top-level `index.html` (voice / BGM / captions / SFX, all emitted by Step 7 `assemble-index`). **Do not emit `<audio>` in a scene.**
 4. **Asset src has no leading slash** — `public/hero.png`, not `/public/hero.png`.
+   - **Video assets — declared, never embedded.** An `assetCandidate` whose path ends in `.mp4` / `.webm` / `.mov` is a real moving clip (in this skill typically a contributor-avatar clip or light B-roll — the contract applies all the same). **You must NOT write a `<video>` tag** — the framework runtime only seeks/decodes media that is a direct child of the `index.html` host root, so a `<video>` nested in your scene renders **BLANK** at render time and no gate can see it (`check-compositions` Rule 6a `video-in-scene` fatals on sight). Instead, author the slot as a poster `<img>` and **declare** the footage on it:
+
+     ```html
+     <img
+       class="s3-demo clip"
+       src="public/demo-poster.jpg"
+       data-video-src="public/demo.webm"
+       data-video-offset="0.6"
+       data-start="0.2"
+       data-duration="6"
+     />
+     ```
+
+     - **Poster `src`** = a matching still candidate when one exists; otherwise extract one yourself: `ffmpeg -y -ss 1 -i public/<clip> -frames:v 1 public/<clip-stem>-poster.jpg` (Bash is available). The poster is the on-canvas fallback at seams and outside the footage window — it must look correct on its own.
+     - **`data-video-src`** (required) — relative `public/` path to the clip. **`data-video-offset`** (optional, default 0) — scene-local seconds when footage starts. **`data-video-duration`** (optional) — cap; default plays to scene end. **`data-video-media-start`** (optional) — trim into the source. **`data-video-loop="off"`** (optional) — looping is on by default.
+     - Step 7 `hoist-videos.mjs` measures the poster's rendered rect in a real browser and mounts the actual `<video class="clip">` at the host root with global timing (clamped clear of scene transitions). **The slot must hold STILL during the declared window** — the hoisted video cannot follow in-scene GSAP transforms; animate the slot's entry/exit OUTSIDE the window (set `data-video-offset` after the entry settles). Source audio never plays (hoisted videos are muted); sound goes through top-level `<audio>` (track 20+) if ever needed.
+
 5. **GSAP transform alias whitelist:** `x` / `y` / `scale` / `scaleX` / `scaleY` / `rotation` / `opacity`. Never tween `width` / `height` / `top` / `left`.
    - **Common first mistake when moving an element to a different bbox** (e.g. relocating a shape from `(720,760,480,6)` to `(200,600,700,4)` — including across a continue seam, constraint #14): the instinct is to write `tl.to(el, { left: 200, top: 600, width: 700, height: 4 })` — **this violates the whitelist**. Correct approach: convert the bbox delta to a transform:
      - Center movement: `dx = newCenterX − oldCenterX`, `dy = newCenterY − oldCenterY` → `x: dx, y: dy`
@@ -87,27 +106,30 @@ Workers must execute these constraints exactly. The foundational render contract
   - If that leaf appears in a timeline `tl.to/.fromTo/.set` selector → **delete the CSS line**, and move tilt into GSAP (`gsap.set(el, { rotation: -2 })` or `fromTo({...rotation: -2}, {...rotation: -2, ...})` to preserve static tilt).
 - The same applies to baked `transform: translate(...)` / `scale(...)` / `skew(...)` — once GSAP animates that element, all baked transform is overwritten. `will-change: transform` does not solve this; it is only a perf hint.
 
-6. **Scenes with non-empty `voicePath`** — timing design should leave breathing room for narration.
-   - **Ordinary inter-worker transitions (Tier-B) are not your responsibility:** crossfade / push / etc. are deterministically added by Step 7 `transitions.mjs inject` on your visual clip **wrapper** (`index.html` layer, above your composition), **not inside your composition**. Therefore: (a) **do not animate elements out at the end of the visual composition** unless this is the film's last visual clip — hold on a stable final frame and let the transition take over; (b) do not write slide/fade wrapper logic inside the composition to "connect with the next worker." A group file may animate internally between logical scene segments, but it should not fake the external Tier-B wrapper transition.
-   - **Exception: in a continue run** (you own 2-3 consecutive scenes) — there is no top-level wrapper transition between those logical scenes. You author the continuity inside one `group_wN.html` timeline with shared DOM. See constraint #14.
-7. **Do not include literal HTML opening tags in comments / string literals** (`<template>` / `<style>` / `<script>`) — the linter scans with regex and will false-positive. Escape as `&lt;template&gt;` or use plain text.
-8. **Timeline registration uses a literal Composition ID string:** `window.__timelines["scene_1"] = tl;` for a single-scene file or `window.__timelines["group_w2"] = tl;` for a group file. Do not wrap it behind a variable (`check-compositions.mjs` cannot recognize it with regex). The whole `<script>` selector / dataset key / timeline key must use literals.
-9. **Macro-camera scenes get a layout escape hatch by default**
-   - If `effects` contains any of `coordinate-target-zoom` / `multi-phase-camera` / `camera-cursor-tracking` / `viewport-change` → add `data-layout-allow-overflow="true"` to the outermost zoom/pan wrapper.
-   - Reason: the zoom peak necessarily exceeds the canvas viewport, and `hyperframes inspect` will report `text_box_overflow`. This is by design; declare it in advance.
-   - Example: `<div class="s2-zoom-outer" id="s2-zoom-outer" data-layout-allow-overflow="true">`
-   - ⚠ **`allow-overflow` only pardons decorative bleed; it does not pardon primary large text**: the perception gate still checks whether display text is clipped by the canvas (`primary-offscreen`, caused by zoom scaling). Pushing brand text/headlines out of frame = bug, not by-design. Only mark that text element with `data-layout-bleed="true"` if large-text bleed is truly intentional.
-   - ⚠ **Zooming into an asymmetric target (e.g. companion wider than chip) → measure the offset, do not hand-derive it**: after `await document.fonts.ready`, read the target's real `getBoundingClientRect()` center and bake `TARGET_OFFSET` (`center − viewport_center`); the equal-width card formula gives the **wrong sign** in asymmetric layouts, and 3×+ scaling magnifies the error out of frame. See the `coordinate-target-zoom` rule in `/hyperframes-animation`, section "Getting the offset".
-   - ⚠ **Leave scale headroom:** at peak, primary text should be ≤ ~88% canvas width (derive `maxScale = 0.88×W/r.width` from measured dimensions); do not pick round numbers by feel — if text fills the canvas, a slight center offset clips it.
-10. **Primary handoff before enter (prevent overlap)**
-    - Only one `primary subject` at any moment; all other visible content must be `supporting`.
-    - If `creative_brief` has `PrimarySubjectTimeline` / `Handoff`, follow it; do not redesign.
-    - Before the new primary enters, the previous primary must `exit` / `hide` / `compact` / `demote to supporting`; **camera pan/zoom/push does not count as a handoff**.
-    - Primary has exclusive use of the center safe zone; supporting content must be smaller, lower contrast, less animated, and avoid the primary bbox.
-    - Add `data-layout-role="primary|supporting"` and `data-layout-act="<act-name>"` to major groups, to help human review and future CLI audit.
-    - Timeline order: first `tl.to(previousPrimary, ...)` to exit/downgrade it, then `tl.fromTo(newPrimary, ...)` for entry.
-    - **No FOREGROUND object may overlap another — HARD, machine-checked (`object-overlap`).** A foreground box (card / panel / stat / media / icon / button / text block) must not intersect another foreground box. **The reliable way to guarantee it: lay foreground out in a flow container (`display:flex` / `grid`) — boxes in normal flow cannot overlap.** Reserve `position: absolute` for **decorative / background** layers only (the keep-out keyword list: `bg` / `mesh` / `gradient` / `frame` / `surface` / `halo` / `glow` / …). If you must absolutely-position a foreground object, **you own** that its rendered bbox clears every other foreground bbox.
-    - Preflight `check-rendered-perception.mjs` flags any intersection ≥15% of the smaller box as a **blocking** `object-overlap` at every probe frame — so an overlap is caught at the gate, never left for slow snapshot review. The rare _deliberately_ layered composition opts out with `data-layout-allow-overlap="true"` on the shared wrapper (you then own that it reads as intentional).
+6.  **Scenes with non-empty `voicePath`** — timing design should leave breathing room for narration.
+    - **Ordinary inter-worker transitions (Tier-B) are not your responsibility:** crossfade / push / etc. are deterministically added by Step 7 `transitions.mjs inject` on your visual clip **wrapper** (`index.html` layer, above your composition), **not inside your composition**. Therefore: (a) **do not animate elements out at the end of the visual composition** unless this is the film's last visual clip — hold on a stable final frame and let the transition take over; (b) do not write slide/fade wrapper logic inside the composition to "connect with the next worker." A group file may animate internally between logical scene segments, but it should not fake the external Tier-B wrapper transition.
+    - **Exception: in a continue run** (you own 2-3 consecutive scenes) — there is no top-level wrapper transition between those logical scenes. You author the continuity inside one `group_wN.html` timeline with shared DOM. See constraint #14.
+7.  **Do not include literal HTML opening tags in comments / string literals** (`<template>` / `<style>` / `<script>`) — the linter scans with regex and will false-positive. Escape as `&lt;template&gt;` or use plain text.
+8.  **Timeline registration uses a literal Composition ID string:** `window.__timelines["scene_1"] = tl;` for a single-scene file or `window.__timelines["group_w2"] = tl;` for a group file. Do not wrap it behind a variable (`check-compositions.mjs` cannot recognize it with regex). The whole `<script>` selector / dataset key / timeline key must use literals.
+9.  **Macro-camera scenes get a layout escape hatch by default**
+    - If `effects` contains any of `coordinate-target-zoom` / `multi-phase-camera` / `camera-cursor-tracking` / `viewport-change` → add `data-layout-allow-overflow="true"` to the outermost zoom/pan wrapper.
+    - Reason: the zoom peak necessarily exceeds the canvas viewport, and `hyperframes inspect` will report `text_box_overflow`. This is by design; declare it in advance.
+    - Example: `<div class="s2-zoom-outer" id="s2-zoom-outer" data-layout-allow-overflow="true">`
+    - ⚠ **`allow-overflow` only pardons decorative bleed; it does not pardon primary large text**: pushing brand text / headlines out of frame is a bug, not by-design (finalize snapshot QA will bounce it back as a repair). Keep display text ≤ ~88% canvas width at the zoom peak so a slight center offset cannot clip it.
+    - ⚠ **Zooming into an asymmetric target (e.g. companion wider than chip) → measure the offset, do not hand-derive it**: after `await document.fonts.ready`, read the target's real `getBoundingClientRect()` center and bake `TARGET_OFFSET` (`center − viewport_center`); the equal-width card formula gives the **wrong sign** in asymmetric layouts, and 3×+ scaling magnifies the error out of frame. See the `coordinate-target-zoom` rule in `/hyperframes-animation`, section "Getting the offset".
+    - ⚠ **Leave scale headroom:** at peak, primary text should be ≤ ~88% canvas width (derive `maxScale = 0.88×W/r.width` from measured dimensions); do not pick round numbers by feel — if text fills the canvas, a slight center offset clips it.
+    - ⚠ **`inspect` runs STRICT (no tolerance):** preflight gates `inspect` at the CLI default (2px) — transient bbox wobble from 3D tilt / morph projections is not numerically tolerated. Any element whose 3D transform legitimately flutters its bbox past a container edge needs the same `data-layout-allow-overflow="true"` declaration as the zoom wrappers above.
+10. **No foreground overlap (HARD — machine-checked by `check-overlap.mjs`)** - Only one `primary subject` at any moment; follow `PrimarySubjectTimeline` / `Handoff` from `creative_brief` (do not redesign). Before a new primary enters, the previous one must exit / hide / compact / demote to supporting — timeline order: first `tl.to(previousPrimary, ...)` out, then `tl.fromTo(newPrimary, ...)` in. **Camera pan/zoom/push does not count as a handoff.** Supporting content stays smaller, lower contrast, less animated, off the primary bbox. - **No FOREGROUND object may intersect another** (card / panel / stat / media / icon / button / text block). **Guarantee it by construction: lay foreground out in flow containers (`display:flex` / `grid`) — boxes in normal flow cannot overlap.** Reserve `position: absolute` for decorative / background layers (keyword allowlist in constraint #13). An absolutely-positioned foreground box must clear every other foreground bbox at **every phase of the timeline**, not just the resting pose. - **The gate (run in your self-check, re-run by preflight over all scenes):** the scene is loaded headless, its timeline seeked to 0.4 / 0.7 / 0.92 of duration, every non-background paint atom (text block / media / painted surface) flattened onto one plane — **z-index is ignored** — and any two atoms intersecting ≥4px on both axes at **≥2 probes** is a violation. A single-probe hit is reported as a mid-tween transient (not blocking). DOM ancestors never count (text inside its own card is composition, not collision); an atom ≥90% inside a surface counts as placed-on-it, not overlapping. - **Nesting is composition, not overlap:** a chip pinned on a card corner is fine only when nested inside the card (ancestor — the gate ignores DOM-nested pairs). There is **no opt-out attribute** — every flagged pair must be resolved by construction (move / shrink / reflow / stagger). - Keep `data-layout-role="primary|supporting"` / `data-layout-act="<act-name>"` annotations on major groups (review aid).
+    10b. **Author-owned geometry budgets (not machine-measured — keep them by mental math)**
+
+        Overlap, text-fit and media-fit are machine-gated now (`check-overlap.mjs`; strict `inspect` catches text/container/canvas overflow including `height:auto` media clipping its panel). What remains yours to keep, checked with real px values before writing CSS:
+
+        | Budget                      | Rule (check with real numbers, not by feel)                                                                                                                                                                                                                                  |
+        | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+        | **Interior clearance**      | Every container holding foreground children gives them **≥12px top AND bottom clearance** at rest (sum children heights + gaps + paddings vs container height — do the addition). If you shrink a container (or a keep-out fix shrinks it), **retune its interior** in the same edit |
+        | **Asset ↔ surface contrast** | Place foreground art (inline SVG glyphs / wordmarks / contributor avatars / code panels) on surfaces with real contrast — a dark-glyph SVG on a dark card is invisible. Visuals here are LLM-authored: you own the paths, so recolor `fill`/`stroke` or swap the surface token (there is no captured `asset-descriptions` file to consult) |
+        | **Depth-stack ghosting**    | Multi-layer offset text ("stamp" depth effect): on long words (≥10 chars) at display tier, keep **layers ≤2 or per-layer offset ≤2px** — `layers × offset` beyond ~4px reads as edge ghosting                                                                                  |
+
 11. **`#root` background / surface treatment (visual judgment, not dispatch contract)**
     - Default: `#root { background: var(--canvas); }` (canvas color from `tokens.css`).
     - **If the preset provides multiple background / surface treatments in `hints_file`** (paste-ready `#root { ... }` stanzas — e.g. paper texture base, dark authority panel, signal board), **you may choose one** that fits this scene's mood and paste the entire stanza into the scene `<style>`, so the frame feels like this preset rather than "generic SaaS colors." This is a **style choice**; no one forces which one to pick. All `var(--*)` tokens are already defined in `tokens.css`; do not replace them.
@@ -147,9 +169,9 @@ Workers must execute these constraints exactly. The foundational render contract
     2. `position: absolute` + `top: <X>px`, X ≥ 900 and non-decorative
     3. `position: absolute` + statically addable `top + height` > 900 and non-decorative
 
-    Each violation generates quasi-Edit strings (`edit_old` / `edit_new`) and writes them to `finalize_brief.json.caption_keepout.violations[]`; the finalize agent directly runs `Edit(file, edit_old, edit_new)` to fix it. **So a contract mistake is not left for snapshot visual inspection; preflight catches it immediately — check values against the table before writing.**
+    The static math folds in **CSS `transform: translate*`** (px / % literals) **and `margin-top` / `margin-bottom`** (longhand + px shorthand) — so a negative-margin-centered card is measured at its real bbox, and conversely a negative `margin-bottom` that pushes a chip down IS caught. Each violation generates quasi-Edit strings (`edit_old` / `edit_new`) and writes them to `finalize_brief.json.caption_keepout.violations[]`; the finalize agent directly runs `Edit(file, edit_old, edit_new)` to fix it. **So a contract mistake is not left for snapshot visual inspection; preflight catches it immediately — check values against the table before writing.**
 
-    **Shapes static analysis cannot catch** (GSAP runtime `translateY`, `transform: translate(...)`, `margin-top:`, natural flex layout pushing content to y > 900, etc.) — these are covered by finalize snapshot visual inspection, but **when writing code still position by the rule "element lower edge y ≤ 880"**; do not intentionally hug the edge.
+    **Shapes static analysis cannot catch** (GSAP runtime `translateY`, natural flex layout pushing content to y > 900, unresolvable transforms/margins like `calc()`/`var()`) — these are covered by finalize snapshot visual inspection, but **when writing code still position by the rule "element lower edge y ≤ 880"**; do not intentionally hug the edge.
 
 14. **Continuous scene runs (continuity: continue) — one `group_wN.html`, true shared DOM**
 
@@ -170,7 +192,7 @@ Workers must execute these constraints exactly. The foundational render contract
 
 ## Scope
 
-Only write `<PROJECT_DIR>/<Composition file>`. **Do not** modify `index.html` / copy assets / run `npx hyperframes lint|validate|inspect|snapshot|render` / add or remove effects (if a rule cannot run → STOP and report; do not silently drop it).
+Only write `<PROJECT_DIR>/<Composition file>`. **Do not** modify `index.html` / copy assets / run `npx hyperframes lint|validate|inspect|snapshot|render` (at initial authoring time `index.html` does not exist yet, so project gates cannot run — **exception: Repair Mode below runs a scoped `inspect`**) / add or remove effects (if a rule cannot run → STOP and report; do not silently drop it).
 
 Every id in the `effects` list must appear once on the timeline (usually 2-5; **use every input effect, silently drop none**); exact firing time, driven asset/text, and phase all come from `creative_brief` prose (§3 effect→asset mapping + §5 multi-phase choreography). Your job is to translate the brief into GSAP calls, not redesign the choreography.
 
@@ -260,6 +282,7 @@ Replace placeholders below with real values. For single-scene `scene_1`: `CID=sc
 
 ```bash
 PROJECT_DIR="<Dispatch context PROJECT_DIR>"
+SKILL_DIR="<Dispatch context SKILL_DIR>"
 F="$PROJECT_DIR/<Composition file>"
 CID=<Composition ID>; PREFIX=<sN-or-gN>; EXPDUR=<Composition duration_s>
 W=<Composition width>; H=<Composition height>   # from dispatch (default 1920 / 1080 landscape)
@@ -306,24 +329,30 @@ HARDCODED_FONTS=$(grep -nE "font-family:[[:space:]]*['\"]" "$F" | grep -vE "var\
   echo "FAIL: hard-coded font names — use var(--font-display/body/mono) so index.html @font-face applies"$'\n'"$HARDCODED_FONTS"
 # 6) Asset paths must not have a leading slash — /public/... is fatal under check-compositions Rule 6 (catching it here avoids waiting for gate failure)
 grep -nE '["(]/public/' "$F" && echo "FAIL: asset path has leading slash — write public/... (not /public/...)"
-# 7) Caption-band keep-out (constraint #13) — foreground element lower edge y > 900 = preflight catches it immediately
-#    Each of the three CSS shapes has a grep below; a hit means preflight will likely hit too. Fix against the cheat sheet before writing to save a round-trip.
-#    Allowlist keywords match scripts/captions.mjs keepout; after a hit, manually verify whether the selector is decorative.
-DECO_RX='(bg|background|dot-?grid|mesh|gradient|swell|ambient|texture|noise|scanline|surface|overlay|halo|glow|frame|pin|corner-?pin|deco|star-?burst|burst|ring|stripe|rect|shadow|pulse|ripple|measure|probe|hidden|scrim|backdrop|veil|fog|grain)[-_ {]'
+# 6a) NO <video> in a scene file — nested video is never seeked/decoded and renders BLANK (check-compositions Rule 6a is fatal).
+#     Footage is declared on the poster <img> via data-video-src (constraint #4); hoist-videos.mjs mounts the real host-root <video> in Step 7.
+grep -nE '<video\b' "$F" && \
+  echo "FAIL: <video> tag(s) above — replace with a poster <img class=\"clip\" src=\"public/<still>\" data-video-src=\"public/<clip>\" ...> declaration"
+# 7) Caption-band keep-out (constraint #13) — run the REAL preflight gate, scoped to your composition.
+#    ONLY when dispatch says `Captions: enabled` (static, instant). Same math as preflight: a pass here is a pass there.
+#    --scene matches your Composition ID (scene_N or group_wN) or any of your logical scene ids.
+(cd "$PROJECT_DIR" && node "$SKILL_DIR"/scripts/captions.mjs keepout \
+  --group-spec ./group_spec.json --hyperframes . --scene "$CID")
+# exit 1 → each violation prints the selector + an edit_old → edit_new fix; apply it, re-run until clean.
 
-# 7a) `bottom: 0-179px;` (excluding 180/200+) + decorative filtering
-grep -nB3 -E "bottom:[[:space:]]*([0-9]|[1-9][0-9]|1[0-7][0-9])([.][0-9]+)?px[[:space:]]*;" "$F" 2>/dev/null \
-  | grep -vE "$DECO_RX" | grep -E "bottom:" && \
-  echo "WARN: the `bottom: <X>px;` entries above (X<180) are likely in the caption band — change chip/small btn to bottom:200px / med CTA 220 / large CTA 260. Ignore decorative elements."
-
-# 7b) `top: 900-1079px;` directly starts inside the caption band
-grep -nB3 -E "top:[[:space:]]*(9[0-9]{2}|10[0-7][0-9])([.][0-9]+)?px[[:space:]]*;" "$F" 2>/dev/null \
-  | grep -vE "$DECO_RX" | grep -E "top:" && \
-  echo "WARN: the `top: <X>px;` entries above (X>=900) place the element's top directly in the caption band — set top to <= 880 - element_height."
-
-# 7c) Stretched strip `top: <T> + height: <H>` where T+H>900 — awkward to compute in shell, so preflight captions.mjs keepout handles it
-#     (it is imported into preflight-finalize.mjs; no need for worker self-check here. This note is only for quick manual review)
-echo "info: stretched-strip cases (both top:+height:) with T+H>900 are statically summed by preflight captions.mjs keepout; if you used top + height before writing, confirm top + height <= 880."
+# 8) Foreground overlap (constraint #10) — run the REAL rendered gate, scoped to your scene (always; ~5-10s).
+#    Loads your scene headless, seeks the timeline to 0.4/0.7/0.92 of duration, z-flattens all
+#    non-background paint atoms, and reports any two that intersect.
+#    The gate probes per-logical-scene files: single-scene workers pass --scene "$CID" (CID = scene id).
+#    Group workers (group_wN.html): the gate has no per-scene file to load — it reports 0 scenes probed;
+#    record overlap=skipped(group) in your report and own constraint #10 by construction (flow containers).
+(cd "$PROJECT_DIR" && node "$SKILL_DIR"/scripts/check-overlap.mjs \
+  --group-spec ./group_spec.json --hyperframes . --scene "$CID")
+# exit 1 → fix by root cause (move a box / flow container / stagger visible windows),
+#          re-run until clean. There is no opt-out attribute.
+# exit 2 → gate unavailable (deps not ensured). Do NOT npm-install here (parallel siblings would
+#          race); note "overlap self-check unavailable" as an anomaly in your report and continue —
+#          preflight runs the same gate authoritatively.
 
 # Must be >= 1 — structural evidence
 grep -c "class=\"${CID}-root\"" "$F"                                   # root div still has class, useful while previewing/dev
@@ -354,12 +383,42 @@ done
 
 Any FAIL / MISSING / bug-shape hit → fix before reporting. Step 7 finalize has the same harness, so catching it here saves an 8-13 minute round-trip.
 
+## Repair Mode (TARGETED REPAIR re-dispatch)
+
+When the dispatch contains a `## Repair context` block, you are repairing an **existing** visual composition file after a Step 7 preflight failure — not authoring from scratch. The repair dispatch carries: the verbatim gate findings for your composition's scene(s) (`inspect` error lines / `overlap` violations with both selectors + rects + overlap geometry / `caption_keepout` violations / a fix list), `npx_prefix` (pinned, cache-warmed — from `finalize_brief.json`), and `Inspect at: <t1,t2,...>` (absolute composition timestamps inside your composition's window).
+
+Rules that differ from authoring mode:
+
+1. **Edit in place; do not rewrite.** Preserve the root contract (all 5 attributes), `data-duration` EXACTLY, `s<N>-` / `g<N>-` prefixes, timeline registration, every dispatched effect, and (in a `group_wN.html` continue run) the persistent shared nodes and segment-boundary poses.
+2. **Fix the listed bugs by root cause**, not by suppressing the check — `data-layout-allow-overflow` is legitimate only for genuinely intentional overflow (3D scroll-clip viewports, zoom peaks), never to silence a real clip.
+3. **Self-verify before reporting (the contract that makes repair converge in one round).** `index.html` is already assembled at repair time, so you CAN and MUST run the scoped gates yourself:
+
+   ```bash
+   # Scoped inspect — only your composition's time window; STRICT, no --tolerance flag (same as the preflight gate)
+   (cd "$PROJECT_DIR" && <npx_prefix> inspect --at "<Inspect at>" 2>&1 | tail -30)
+   # Rendered overlap gate, scoped to your composition (always — layout edits can introduce new overlap;
+   # group_wN compositions report 0 scenes probed, see self-check item 8)
+   (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/check-overlap.mjs --group-spec ./group_spec.json --hyperframes . --scene <Composition ID>)
+   ```
+
+   - Pass condition: **zero `✗` lines naming your composition's selectors** (`#s<N>-…` / `.s<N>-…` / `.g<N>-…`) and check-overlap exit 0 for your scene(s). A `✗` naming another worker's selector is not yours — note it in the report, do not fix it.
+   - When dispatch says `Captions: enabled`, also re-run the static keep-out scoped to your composition:
+
+   ```bash
+   (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/captions.mjs keepout --group-spec ./group_spec.json --hyperframes . --scene <Composition ID>)
+   ```
+
+   - Still failing after 3 distinct fix attempts on the same finding → STOP and report the finding + what you tried (do not loop).
+
+4. Also re-run the authoring self-check grep block (above) — a repair must not break the structural contract.
+5. Report: one line per visual composition + `scoped inspect ✓ / overlap ✓ / keepout ✓` (or the STOP detail). This self-verification replaces the orchestrator's per-round full preflight — the orchestrator runs preflight once after ALL repair workers return, expecting it green.
+
 ## Report Template
 
 One line per visual composition:
 
 ```
-group_w2: file=compositions/group_w2.html duration=9.37s scenes=[scene_3,scene_4] effects=[...]
+group_w2: file=compositions/group_w2.html duration=9.37s scenes=[scene_3,scene_4] effects=[...] overlap=skipped(group) keepout=✓
 ```
 
-Plus anomalies (missing asset, ambiguous rule combination, attempted effect drop). Do not write `context.log`.
+`overlap=` / `keepout=` restate the scoped gate results from the self-check (`keepout=skipped` when Captions: disabled; `overlap=skipped(group)` for `group_wN.html` compositions the rendered gate cannot probe per-scene; `overlap=unavailable` only on exit 2). Plus anomalies (missing asset, ambiguous rule combination, attempted effect drop). Do not write `context.log`. In Repair Mode, append the self-verify status line (rule #5 above).

@@ -10,22 +10,24 @@ Emit a DRAFT `shot-plan.json`.
 
 1. **Classify** — form categories by intent below; search-driven categories are picked post-search:
 
-   | Category       | Pick when…                                                                     |
-   | -------------- | ------------------------------------------------------------------------------ |
-   | `kinetic-type` | a punchy line / quote / title; text is the hero                                |
-   | `stat`         | a single hero number / count-up                                                |
-   | `charts`       | bar / line / pie / race / % from data                                          |
-   | `logo-reveal`  | a logo sting / brand lockup (user supplies the logo)                           |
-   | `lower-thirds` | name/title bars, callouts, social overlays                                     |
-   | `webpage`      | highlight / animate a real captured web page or UI _(search-driven)_           |
-   | `news`         | a news article → article-highlight: blur → zoom into keyword _(search-driven)_ |
-   | `tweet`        | a tweet → animated card _(search-driven)_                                      |
-   | `asset-fusion` | a real photo/asset's geometry _becomes_ the chart _(search-driven)_            |
+   | Category       | Pick when…                                                                                                                                                                         |
+   | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `kinetic-type` | a punchy line / quote / title; text is the hero                                                                                                                                    |
+   | `stat`         | a single hero number / count-up                                                                                                                                                    |
+   | `charts`       | bar / line / pie / race / % from data                                                                                                                                              |
+   | `logo-reveal`  | a logo sting / brand lockup (user supplies the logo)                                                                                                                               |
+   | `lower-thirds` | name/title bars, callouts, social overlays                                                                                                                                         |
+   | `maps`         | a geographic shot — highlight regions, connect places, zoom to a location. Sub-fork: **vector** (D3, stylized) vs **basemap** (baked MapLibre — real satellite/dark/zoom-to-place) |
+   | `webpage`      | highlight / animate a real captured web page or UI _(search-driven)_                                                                                                               |
+   | `news`         | a news article → article-highlight: blur → zoom into keyword _(search-driven)_                                                                                                     |
+   | `tweet`        | a tweet → animated card _(search-driven)_                                                                                                                                          |
+   | `asset-fusion` | a real photo/asset's geometry _becomes_ the chart _(search-driven)_                                                                                                                |
 
    If genuinely ambiguous between two, ask exactly one question. Then load `categories/<id>/module.md` for that category's specifics.
 
 2. **Asset strategy → `asset_needs[]`.** Each item: `{ role, kind: image|icon|logo|svg|news|web|tweet, query|source, treatment }`.
    - asset-free (`kinetic-type`, most `stat`/`charts`) → `asset_needs: []`.
+   - `maps` → **vector** lane: `asset_needs: []` (D3/TopoJSON, runs live in HF). **basemap** lane (satellite/dark/zoom-to-place): `asset_needs: [{ type: "map-bake", … }]` (baked in Source — see `categories/maps/module.md`).
    - `webpage` / `news` / `tweet` → search the real source (page / article / tweet) + a supporting image. **Two-pole queries only**: atomic (1–3 words, composable: portraits, logos, objects) OR specific (5–15 words: a news event, a tweet). Never the middle. A failed specific query is dropped, not broadened.
    - `asset-fusion` → search or generate one hero asset.
    - `logo-reveal` → user-supplied logo (`source`).

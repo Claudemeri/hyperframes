@@ -28,6 +28,21 @@ function fail(msg) {
 function nextId(ws, type, prefix) {
   return `${prefix}_${String(find(ws, { type }).length + 1).padStart(3, "0")}`;
 }
+// readable label / source signal for an image candidate whose title is often empty (Google).
+function hostOf(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "source";
+  }
+}
+// pick a file extension from mime first, then the URL, then a type-appropriate default.
+function extOf(mime, url, fallback) {
+  const m = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+  if (mime && m[mime]) return m[mime];
+  const fromUrl = (url.split("?")[0].match(/\.(jpg|jpeg|png|webp|gif|svg)$/i) || [])[1];
+  return fromUrl ? fromUrl.toLowerCase().replace("jpeg", "jpg") : fallback;
+}
 
 const a = parseArgs(process.argv.slice(2));
 const ws = a.workspace || ".media-use-workspace";
@@ -119,9 +134,233 @@ if (type === "bgm") {
     provenance: { provider: "heygen.audio.sounds", prompt: intent },
     metadata: { duration: chosen.duration },
   });
+
+  // persist the resolve decision (intent + candidates + pick) so the selection oracle can score it
+  const reportRel = `.media-use/reports/resolve_${asset_id}.json`;
+  mkdirSync(dirname(join(ws, reportRel)), { recursive: true });
+  writeFileSync(
+    join(ws, reportRel),
+    JSON.stringify(
+      {
+        verb: "resolve:bgm",
+        intent,
+        picked: chosen.id,
+        candidates: tracks.map((t) => ({
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          duration: t.duration,
+          score: t.score,
+        })),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
   console.log(
     JSON.stringify(
       { ok: true, mode: "resolve", registered: saved.asset_id, path: rel, track: chosen.name },
+      null,
+      2,
+    ),
+  );
+} else if (type === "image" || type === "icon") {
+  // Real-asset search (the search wedge): photos/icons of real entities the agent can't invent.
+  // media-use is a THIN client — it does NOT retrieve. It shells out to a configured backend
+  // (MEDIA_USE_SEARCH_CMD; today the asset_scout CLI, long-term heygen-cli/Pinecone) and owns
+  // the part that's actually hard: SELECTION + freeze + provenance (resolve.md, Bin 2026-06-04).
+
+  // Agent-selected freeze (be-the-boat): the main agent viewed a select-sheet montage and chose a URL.
+  // Freeze exactly that candidate — no search, no heuristic pick; the DECISION was the model's.
+  if (a.url && a.url !== true) {
+    const entity = a.entity && a.entity !== true ? a.entity : undefined;
+    const label = a.intent && a.intent !== true ? a.intent : entity || "agent-selected asset";
+    const asset_id = a.id && a.id !== true ? a.id : nextId(ws, "image", type === "icon" ? "icon" : "img");
+    const ext = extOf(undefined, a.url, type === "icon" ? "png" : "jpg");
+    const rel = `assets/${type === "icon" ? "icons" : "images"}/${asset_id}.${ext}`;
+    const out = join(ws, rel);
+    mkdirSync(dirname(out), { recursive: true });
+    let buf;
+    try {
+      const r = await fetch(a.url, { signal: AbortSignal.timeout(20000), headers: { "user-agent": "Mozilla/5.0 (media-use/0.1)" } });
+      if (!r.ok) fail(`download failed: HTTP ${r.status}`);
+      buf = Buffer.from(await r.arrayBuffer());
+    } catch (e) {
+      fail(`download failed: ${(e.message || e).toString().slice(0, 120)}`);
+    }
+    writeFileSync(out, buf);
+    const saved = upsert(ws, {
+      asset_id,
+      type: "image",
+      path: rel,
+      source: "search",
+      status: "ready",
+      description: a.desc && a.desc !== true ? a.desc : entity || label,
+      entity,
+      reusable: true,
+      tags: type === "icon" ? ["image", "icon"] : ["image"],
+      provenance: { provider: "agent-selected", prompt: label, source_url: a.url },
+    });
+    console.log(JSON.stringify({ ok: true, mode: "resolve", registered: saved.asset_id, path: rel, source_url: a.url }, null, 2));
+    process.exit(0);
+  }
+
+  const intent = a.intent && a.intent !== true ? a.intent : a.query;
+  if (!intent || intent === true) fail(`--intent (or --query) is required for --type ${type}`);
+
+  const cmd = process.env.MEDIA_USE_SEARCH_CMD;
+  if (!cmd) {
+    fail(
+      "search backend not configured: set MEDIA_USE_SEARCH_CMD to the search executable " +
+        "(e.g. .../asset_scout/search.sh). media-use does not retrieve; it calls a backend.",
+    );
+  }
+
+  // step 1 (resolve.md): reuse — surface existing project images so we don't re-fetch.
+  const existing = find(ws, { type: "image", query: intent })
+    .filter((r) => (type === "icon" ? (r.tags || []).includes("icon") : true))
+    .map((r) => ({ asset_id: r.asset_id, path: r.path, description: r.description }));
+
+  // step 3: provider search via the configured backend (real GoogleImages / NounProject).
+  const limit = a.limit && a.limit !== true ? String(a.limit) : "8";
+  let res;
+  try {
+    const out = execFileSync(cmd, ["--query", intent, "--media", type, "--num", limit], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 120000,
+    });
+    res = JSON.parse(out.trim().split("\n").pop()); // last line = JSON (backend logs go to stderr)
+  } catch (e) {
+    fail(`search backend failed: ${(e.stderr || e.message || e).toString().slice(0, 300)}`);
+  }
+  if (!res || res.ok === false) fail(`search backend error: ${res ? res.error : "no output"}`);
+
+  const cands = (res.candidates || []).map((c, i) => ({
+    index: i,
+    id: c.url, // asset_scout uses the URL as the stable id
+    url: c.url,
+    name: c.title || hostOf(c.url),
+    description: c.title || `${type} from ${hostOf(c.url)}`,
+    width: c.width,
+    height: c.height,
+    mime_type: c.mime_type,
+    provider: c.provider,
+  }));
+
+  // SELECTION is agentic unless --auto / --pick (resolve.md: get the selection right, not just the call).
+  // Ordered download attempts: --pick = just that one; --auto = top candidates in rank order, so a
+  // hotlink-blocked top pick falls back to the next instead of failing the whole scene.
+  let attempts = [];
+  if (a.pick !== undefined && a.pick !== true) {
+    const pick = String(a.pick);
+    const one = cands.find((c) => c.id === pick) || cands[Number(pick)];
+    if (one) attempts = [one];
+  } else if (a.auto) {
+    attempts = cands.slice(0, 5);
+  }
+  if (!attempts.length) {
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          mode: "search",
+          type,
+          intent,
+          existing,
+          candidates: cands.map((c) => ({
+            index: c.index,
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            width: c.width,
+            height: c.height,
+            provider: c.provider,
+          })),
+          hint: "review candidates (open the urls), then re-run with --pick <index> (or --auto for top-1)",
+        },
+        null,
+        2,
+      ),
+    );
+    process.exit(0);
+  }
+
+  // fetch + freeze with fallback (resolve.md: resolve first, then freeze). Download can 403 / time out on
+  // hotlink-protected hosts (etsy / amazon / some CDNs); try candidates in order until one lands, and send a
+  // browser UA since some hosts reject UA-less fetches.
+  const asset_id = a.id && a.id !== true ? a.id : nextId(ws, "image", type === "icon" ? "icon" : "img");
+  let chosen = null;
+  let rel = null;
+  const tried = [];
+  for (const cand of attempts) {
+    const ext = extOf(cand.mime_type, cand.url, type === "icon" ? "png" : "jpg");
+    const candRel = `assets/${type === "icon" ? "icons" : "images"}/${asset_id}.${ext}`;
+    const out = join(ws, candRel);
+    try {
+      const r = await fetch(cand.url, {
+        signal: AbortSignal.timeout(15000),
+        headers: { "user-agent": "Mozilla/5.0 (media-use/0.1)" },
+      });
+      if (!r.ok) {
+        tried.push(`#${cand.index} HTTP${r.status}`);
+        continue;
+      }
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 1024) {
+        tried.push(`#${cand.index} tiny(${buf.length}b)`);
+        continue;
+      }
+      mkdirSync(dirname(out), { recursive: true });
+      writeFileSync(out, buf);
+      chosen = cand;
+      rel = candRel;
+      break;
+    } catch (e) {
+      tried.push(`#${cand.index} ${(e.name || e.message || "err").toString().slice(0, 24)}`);
+    }
+  }
+  if (!chosen) fail(`all ${attempts.length} candidate download(s) failed: ${tried.join("; ")}`);
+
+  const entity = a.entity && a.entity !== true ? a.entity : undefined;
+  const saved = upsert(ws, {
+    asset_id,
+    type: "image",
+    path: rel,
+    source: "search",
+    status: "ready",
+    description: chosen.description || intent,
+    entity, // canonical real-entity name, for cross-project reuse matching (resolve order step 2)
+    reusable: true, // personal-scope assets are reuse candidates by default
+    tags: type === "icon" ? ["image", "icon"] : ["image"],
+    provenance: { provider: chosen.provider, prompt: intent, source_url: chosen.url },
+    metadata: { width: chosen.width, height: chosen.height, mime_type: chosen.mime_type },
+  });
+
+  // persist the resolve decision so the selection oracle can score it (intent + candidates + pick).
+  const reportRel = `.media-use/reports/resolve_${asset_id}.json`;
+  mkdirSync(dirname(join(ws, reportRel)), { recursive: true });
+  writeFileSync(
+    join(ws, reportRel),
+    JSON.stringify(
+      {
+        verb: `resolve:${type}`,
+        intent,
+        picked: chosen.id,
+        candidates: cands.map((c) => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          provider: c.provider,
+        })),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+  console.log(
+    JSON.stringify(
+      { ok: true, mode: "resolve", registered: saved.asset_id, path: rel, source_url: chosen.url },
       null,
       2,
     ),

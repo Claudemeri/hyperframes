@@ -10,6 +10,8 @@ import { homedir } from "node:os";
 export const SUBDIRS = [
   "assets/raw",
   "assets/generated",
+  "assets/images",
+  "assets/icons",
   "assets/processed",
   "assets/audio/bgm",
   "assets/audio/sfx",

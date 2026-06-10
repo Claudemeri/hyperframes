@@ -205,7 +205,14 @@ function main() {
       id: l.gid, plane: l.plane, layer: globalFg ? "fg" : (l.ln.layer || l.b.layer || "bg"),
       tone: l.ln.tone || tones.default || "soft", allow_overlap: true,
       in: l.in, out: l.out,
-      css: `position:absolute;left:0;right:0;top:${l.slotPx}px; ` + (l.ln.css || "font-size: calc(0.05 * var(--h)); font-weight: 600;"),
+      // carry the PLANE's text-align onto each slotted line (absolute children don't
+      // reliably inherit through the template's .cap centering — authored "right edge
+      // hugs the silhouette" was silently centered)
+      css: `position:absolute;left:0;right:0;top:${l.slotPx}px; ` + (() => {
+        const pc = (C.planes && C.planes[l.plane] && (typeof C.planes[l.plane] === "string" ? C.planes[l.plane] : C.planes[l.plane].css)) || "";
+        const ta = pc.match(/text-align\s*:\s*(left|right|center)/);
+        return ta ? `text-align:${ta[1]}; ` : "";
+      })() + (l.ln.css || "font-size: calc(0.05 * var(--h)); font-weight: 600;"),
       words: l.ln._w.map((w) => ({ text: w.text, start: w.start, end: Math.min(w.end, DUR - 0.05), ti: w.ti })),
     });
   }

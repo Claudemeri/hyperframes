@@ -5,7 +5,7 @@
 // ============================================================================
 // The whole faceless-explainer pipeline used to be hard-locked to landscape
 // 1920×1080. It is now dimension-parametric: every deterministic script
-// (assemble-index, transitions, captions, check-rendered-perception) and every
+// (assemble-index, transitions, captions, preflight-finalize) and every
 // scene worker reads the canvas size from ONE place — `group_spec.json`
 // `width`/`height` — which prep.mjs stamps in.
 //
@@ -34,9 +34,7 @@ export const ORIENTATION_PRESETS = {
 export const DEFAULT_DIMENSIONS = ORIENTATION_PRESETS.landscape;
 
 function sane(w, h) {
-  return (
-    Number.isFinite(w) && Number.isFinite(h) && w >= 240 && h >= 240 && w <= 8192 && h <= 8192
-  );
+  return Number.isFinite(w) && Number.isFinite(h) && w >= 240 && h >= 240 && w <= 8192 && h <= 8192;
 }
 
 // Resolve canvas dims from (in priority order) explicit flags, an explicit

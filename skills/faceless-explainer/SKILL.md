@@ -13,22 +13,22 @@ Input is **arbitrary text** (article / notes / topic / brief). Output is a **fac
 
 All artifacts go to `PROJECT_DIR = videos/<project-name>/` (created in Step 0); all paths below are relative to it.
 
-| Phase                    | Execution                                                                                                  | Primary artifact                                                     | Detailed flow                             |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------- |
-| init                     | Bash                                                                                                       | `hyperframes.json`                                                   | Step 0                                    |
-| scaffold                 | Bash (no agent)                                                                                            | `capture/extracted/tokens.json` + `visible-text.txt`                 | Step 1                                    |
-| scriptwriting            | subagent (`general-purpose`)                                                                               | `narrator_scripts.json` (incl. chosen `stylePreset` + `orientation`) | Step 2 / `agents/scriptwriting.md`        |
-| design-system            | Bash (no agent, deterministic — style = `narrator_scripts.stylePreset`)                                    | `design-system/design.html` + `chunks/`                              | Step 2b                                   |
-| audio                    | `audio.mjs` in Bash                                                                                        | `audio_meta.json`                                                    | `phases/audio/guide.md`                   |
-| visual-design            | subagent (`general-purpose`)                                                                               | `section_plan.md`                                                    | `agents/visual-design.md`                 |
-| prep                     | `prep.mjs` in Bash                                                                                         | `group_spec.json`                                                    | `scripts/prep.mjs`                        |
-| captions (deterministic) | `captions.mjs group` -> `captions.mjs html` in Bash (no subagent)                                          | `caption_groups.json` + `compositions/captions.html`                 | `scripts/captions.mjs`                    |
-| scenes                   | N x subagent (`general-purpose`, parallel in the same message)                                             | `compositions/scene_*.html` or `compositions/group_w*.html`          | `agents/hyperframes-scene.md`             |
-| finalize (Phase 4c)      | Bash prelude (wait-bgm + assemble + inject/verify-transitions + sfx-verify + preflight) -> repair subagent | `renders/video.mp4`                                                  | Step 7 / `agents/hyperframes-finalize.md` |
+| Phase                    | Execution                                                                                                                                                                                        | Primary artifact                                                     | Detailed flow                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------------------- |
+| init                     | Bash                                                                                                                                                                                             | `hyperframes.json`                                                   | Step 0                                    |
+| scaffold                 | Bash (no agent)                                                                                                                                                                                  | `capture/extracted/tokens.json` + `visible-text.txt`                 | Step 1                                    |
+| scriptwriting            | subagent (`general-purpose`)                                                                                                                                                                     | `narrator_scripts.json` (incl. chosen `stylePreset` + `orientation`) | Step 2 / `agents/scriptwriting.md`        |
+| design-system            | Bash (no agent, deterministic — style = `narrator_scripts.stylePreset`)                                                                                                                          | `design-system/design.html` + `chunks/`                              | Step 2b                                   |
+| audio                    | `audio.mjs` in Bash                                                                                                                                                                              | `audio_meta.json`                                                    | `phases/audio/guide.md`                   |
+| visual-design            | subagent (`general-purpose`)                                                                                                                                                                     | `section_plan.md`                                                    | `agents/visual-design.md`                 |
+| prep                     | `prep.mjs` in Bash                                                                                                                                                                               | `group_spec.json`                                                    | `scripts/prep.mjs`                        |
+| captions (deterministic) | `captions.mjs group` -> `captions.mjs html` in Bash (no subagent)                                                                                                                                | `caption_groups.json` + `compositions/captions.html`                 | `scripts/captions.mjs`                    |
+| scenes                   | N x subagent (`general-purpose`, parallel in the same message)                                                                                                                                   | `compositions/scene_*.html` or `compositions/group_w*.html`          | `agents/hyperframes-scene.md`             |
+| finalize (Phase 4c)      | Bash prelude (wait-bgm + assemble + inject/verify-transitions + hoist-videos + sfx-verify + preflight) -> finalize subagent (fix brief findings in place + one lean contact-sheet look + render) | `renders/video.mp4`                                                  | Step 7 / `agents/hyperframes-finalize.md` |
 
 ## Prerequisites
 
-macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node ffmpeg` (use Homebrew Python, **not** `/usr/bin/python3`, or `pip install` is blocked by PEP 668); then `npx hyperframes doctor` once (downloads Chrome). For a final/shipping render also install Puppeteer (`npm i puppeteer`) so the Tier-1 perception gate (collision / contrast / cramped / panel-bleed) actually runs — without it the gate soft-skips and only the finalize eye-check remains; set `PLV_REQUIRE_PERCEPTION=1` (or pass `--require-perception`) to make a skipped gate fail preflight instead of soft-passing. Optional cloud keys (else local fallbacks) — inject in Step 0.5:
+macOS Apple Silicon or Linux x64. System tools: `brew install python@3.11 node ffmpeg` (use Homebrew Python, **not** `/usr/bin/python3`, or `pip install` is blocked by PEP 668); then `npx hyperframes doctor` once (downloads Chrome). The rendered overlap gate (`scripts/check-overlap.mjs`, run in worker self-checks and preflight) reuses that same cached Chrome — it never downloads a browser; its only dep is the `puppeteer-core` npm module, ensured once before scene fan-out (Step 5.5, `--ensure-deps`, ~5s, no full `puppeteer` install). Optional cloud keys (else local fallbacks) — inject in Step 0.5:
 
 | Key                                            | Used for                                    | Default / fallback                                             |
 | ---------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
@@ -222,7 +222,15 @@ Merges all upstream artifacts into `group_spec.json` (parse `section_plan` ancho
 
 exit 0 = normal. If either prints `captions: skipped (<reason>)`, skip the whole chain: no `captions.html`, assemble won't mount track 12. Skin selection / self-check: top of `captions.mjs html`; for offline, pass `--skin-file`. **Do not** run `npx hyperframes lint` on `captions.html`.
 
-Then read `group_spec.json.groups[]` for worker count N. Build the shared header once, then per-worker packets (`tokens` / `easings` / `voice` are identical for every worker):
+Then ensure the overlap-gate dep **once, from the workspace root** (NOT inside `PROJECT_DIR` — the module must land in the workspace `node_modules/` where every worker and preflight can resolve it):
+
+```bash
+node <SKILL_DIR>/scripts/check-overlap.mjs --ensure-deps
+# Installs puppeteer-core (module only, no browser download) if not already resolvable; Chrome is
+# reused from the hyperframes browser cache. Workers must NOT install it themselves (parallel npm race).
+```
+
+Then read `group_spec.json.groups[]` for worker count N. Each worker's self-check runs two scoped machine gates before returning — `captions.mjs keepout --scene` (when captions enabled) and `check-overlap.mjs --scene` (always) — so layout violations are fixed at the source instead of surfacing at preflight. Build the shared header once, then per-worker packets (`tokens` / `easings` / `voice` are identical for every worker):
 
 ```bash
 mkdir -p /tmp/scene-dispatch
@@ -250,7 +258,7 @@ After all workers + captions return, run preflight (scans `group_spec.visual_cli
 
 ### Step 7 - Assembly prelude + preflight gate + finalize
 
-After Step 6 exits 0: a deterministic Bash prelude, then one repair finalize subagent (snapshot QA -> one in-place fix pass -> render). `compositions/scene_N.html` / `group_wN.html` are worker source files; editing them edits the source.
+After Step 6 exits 0: a deterministic Bash prelude (wait-bgm + assemble + inject/verify-transitions + **hoist-videos** + sfx-verify + preflight), then one **finalize subagent** that fixes the brief's findings in place, takes ONE lean contact-sheet look, and renders. Principle: deterministic prelude is all Bash; findings go to finalize (not back to workers); worker re-dispatch is reserved for recomposition. `compositions/scene_N.html` / `group_wN.html` are worker source files; editing them edits the source.
 
 **(1) BGM wait + assembly (Bash):**
 
@@ -263,13 +271,15 @@ After Step 6 exits 0: a deterministic Bash prelude, then one repair finalize sub
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/assemble-index.mjs --group-spec ./group_spec.json --hyperframes .)
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/transitions.mjs inject --group-spec ./group_spec.json --hyperframes .)
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/transitions.mjs verify --group-spec ./group_spec.json --index ./index.html)
+(cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/hoist-videos.mjs --group-spec ./group_spec.json --hyperframes .)
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/verify-output.mjs sfx --group-spec ./group_spec.json --index ./index.html)
 ```
 
-`inject` only changes the `index.html` shell `data-start`/`data-duration`/`data-track-index`, never visual roots. Internal logic: header of each script.
+`inject` only changes the `index.html` shell `data-start`/`data-duration`/`data-track-index`, never visual roots. **`hoist-videos` reads each composition's poster `data-video-src` declarations, measures the poster's rendered rect headless, and mounts the real `<video class="clip">` at the index.html host root with global timing clamped clear of transitions** — the ONLY legal way footage plays, since the runtime never decodes a `<video>` nested in a scene. Internal logic: header of each script.
 
 - assemble exit 1 -> names a visual composition (root `data-duration` != group_spec, or file missing) = worker contract break → return to Step 6, re-dispatch that worker, rerun this step.
 - inject/verify-transitions exit 1 -> injector bug (prep already validated `transitions[]`) → report, don't roll back workers.
+- hoist-videos exit 1 -> a `data-video-src` declaration is invalid (missing file / bad numbers / window too small after transition clamping / poster not measurable) — stderr names the scene + declaration; `Edit` the visual source file (or re-dispatch its worker for a real relayout), then rerun this step. exit 2 -> browser unavailable; run `node <SKILL_DIR>/scripts/check-overlap.mjs --ensure-deps` from the workspace root, then rerun. exit 0 prints one line per hoisted video (src, global window, track, rect).
 - sfx-verify exit 1 -> assembler bug → report.
 
 **(2) Preflight gate (Bash):**
@@ -278,21 +288,25 @@ After Step 6 exits 0: a deterministic Bash prelude, then one repair finalize sub
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/preflight-finalize.mjs --group-spec ./group_spec.json --hyperframes .)
 ```
 
-preflight writes everything the agent should not judge into `finalize_brief.json`: warms a pinned `npx hyperframes@<version>` cache, runs lint/validate/inspect (captures tails), computes the snapshot timeline, runs `captions.mjs keepout` (when `captions_enabled`) with ready-to-apply `edit_old`/`edit_new` strings, and runs `check-rendered-perception.mjs` (Puppeteer geometry incl. cross-text-collision). Fields + algorithm: top of `preflight-finalize.mjs`.
+preflight does everything the agent does not need to judge and writes it all into `finalize_brief.json`: warms a pinned `npx hyperframes@<version>` cache, runs lint/validate/inspect with that version (**inspect runs STRICT — no `--tolerance` flag, CLI default**; by-design transient overflow from 3D morph / tilt / zoom peaks is declared per-element with `data-layout-allow-overflow`, never absorbed numerically — any re-run of inspect elsewhere must also be plain or verdicts disagree) and captures tails + summary counts, computes the snapshot timeline, runs **`check-overlap.mjs`** (the single-rule rendered overlap gate: every scene loaded headless, timeline seeked to 0.4/0.7/0.92 of duration, all non-background paint atoms flattened onto one plane with z-index ignored, pairwise-intersected; persistent overlap = a finding finalize must fix; `status: unavailable` blocks at exit 2 — the gate never soft-skips), and when `captions_enabled` runs `captions.mjs keepout` static check for "foreground lower edge y <= 900" (the bbox math folds in CSS transforms AND `margin-top`/`margin-bottom`). **Keep-out violations include ready-to-apply Edit strings** (`edit_old`/`edit_new`) and **overlap violations carry both selectors + both rects + the overlap rect** — finalize consumes both directly and fixes them in place. Brief fields (`preflight_clean` / `gates_clean` / `gates.*` / `bgm.*` / `overlap.*` / `caption_keepout.*` / `anomalies[]` / `snapshot_times_s[]` / `npx_prefix` / `scenes[]` / `internal_seams[]`) and algorithm details are documented at the top of `preflight-finalize.mjs`. Only contrast and cramped-container remain eye-owned (finalize's one contact-sheet scan); collision / panel-bleed are machine-owned by the overlap gate.
 
-- exit 0 -> all gates pass -> dispatch finalize.
-- exit 2 -> **BLOCKING**: lint/validate/inspect has a real ERROR. Do NOT dispatch finalize, do NOT bypass with `--allow-gate-failure`. Read `finalize_brief.json.gates.<gate>.output_tail`: `text_box_overflow` / `*_overflow` usually = re-dispatch that worker (Step 6, include the inspect selector + scene); rare by-design overflow → add `data-layout-allow-overflow="true"` and rerun. `lint` / `validate` schema/selector/asset issue → `Edit` the file, rerun preflight.
-- exit 1 -> preflight crashed (bad invocation / missing group_spec) → fix the invocation.
+**Exit codes (orchestrator must read them)**:
 
-Scan `anomalies[]` even on exit 0 (loud non-blocking warnings; common: `perception_check_skipped` when Puppeteer is absent → finalize snapshots become the only safety net; each anomaly carries `actionable_install_command`).
+- **exit 0** -> dispatch finalize — **clean or not**. Findings (gate errors / `overlap.violations[]` / `caption_keepout.violations[]`) ride in the brief and finalize fixes them in place as its first work step. Do NOT diagnose them yourself, do NOT hand-Edit visual source files, do NOT re-dispatch workers for them.
+- **exit 2** -> ONLY when the overlap gate could not run (`overlap.status: "unavailable"` — puppeteer-core / Chrome missing). Environment problem with a deterministic remedy: run `node <SKILL_DIR>/scripts/check-overlap.mjs --ensure-deps` from the workspace root (and `npx hyperframes doctor` if it names Chrome), then rerun preflight — do not proceed unmeasured.
+- **exit 1** -> preflight itself crashed (bad invocation / missing group_spec) → fix the invocation.
 
-**(3) Dispatch finalize subagent** (`general-purpose`). prompt = full contents of `agents/hyperframes-finalize.md` + `## Dispatch context`:
+**Worker re-dispatch (Repair Mode) is the EXCEPTION path now, not a preflight branch:** it triggers only when **finalize STOPs** because a scene needs recomposition (content fundamentally wrong / real relayout / animation broken beyond a couple of edits). Then: re-dispatch that scene's owning worker (a group worker owns every logical scene in its `group_wN.html` — dispatch it once with all its findings) with the full `agents/hyperframes-scene.md` + normal dispatch context + a `## Repair context` block carrying finalize's verbatim findings, `npx_prefix` from the brief, `Inspect at: <t1,t2,t3>` (that scene's `midpoint_s` + extras from `brief.scenes[]`), and `Captions: enabled|disabled`; the worker Edits in place and self-verifies (scoped plain `inspect --at` + `check-overlap.mjs --scene` + keepout) per the contract's Repair Mode section. After it returns, rerun (1)+(2) and re-dispatch finalize. If the same finding survives two rounds, STOP and surface it to the user.
+
+Scan `anomalies[]` even on exit 0 (loud non-blocking warnings; currently rare — read each entry's `message` and decide whether it changes the dispatch).
+
+**(3) Dispatch finalize subagent (fix brief findings in place -> ONE lean contact-sheet look -> render)** (`general-purpose`). prompt = full contents of `agents/hyperframes-finalize.md` + `## Dispatch context`:
 
 ```
 SKILL_DIR: <absolute path>
 PROJECT_DIR: <video project root>
 Render quality: high     # Or draft / standard
-Finalize brief: <PROJECT_DIR>/finalize_brief.json   # Agent reads once for gate results + npx_prefix + snapshot_times_s
+Finalize brief: <PROJECT_DIR>/finalize_brief.json   # Preflight has already written it; agent reads once to get findings + npx_prefix + scene timings
 Visual clips:            # One line per group_spec.visual_clips[] entry
   - { id, file, kind, worker_id, scene_ids, start_s, duration_s }
 Scenes:                  # One line per logical scene, copied verbatim from group_spec.json
@@ -300,14 +314,14 @@ Scenes:                  # One line per logical scene, copied verbatim from grou
       <Phase 3 prose for this scene> }
 ```
 
-Normal path (`preflight_clean: true`): finalize skips straight to snapshots (pass the brief's `snapshot_times_s` to `--at` at once) -> visual QA -> one in-place repair pass -> render (brief's `npx_prefix`) -> verify-render. Exception path: branch by failure site in the brief (gate failure → inspect `output_tail`, Edit, rerun that gate; caption keep-out → apply each `caption_keepout.violations[].edit_old/edit_new`, then run `captions.mjs keepout` once). **Finalize must never change a visual root `data-duration`** (= `visual_clips[].duration_s`, fixed upstream; changing it makes assemble fatal — timing is only fixable by returning to Step 6).
+`index.html` is already assembled (transitions injected, videos hoisted); all gates have already run. Finalize's flow: **fix every brief finding in place first** (gate `output_tail` -> Edit + rerun only that gate; `overlap.violations[]` -> Edit per the given selectors/rects + scoped `check-overlap --scene` verify; `caption_keepout.violations[]` -> apply `edit_old`/`edit_new` mechanically), then **ONE snapshot call at scene midpoints + group-internal seam mids, one read of the contact sheet** (looking only for blank/black panels, cut or unreadable text, crushed interiors, broken internal seams — escalate single frames only on suspicion), then **render + verify-render**. No per-frame QA walkthrough. **Finalize must never change a visual root `data-duration`** (= `visual_clips[].duration_s`, fixed upstream; changing it makes assemble fatal — timing is only fixable by returning to Step 6).
 
-- finalize reports the mp4 (verify-render passed) + gate/snapshot status + files repaired in place -> complete.
-- finalize STOP (only when a scene needs full recomposition) -> return to Step 6, re-dispatch that worker, rerun (1)+(2), re-dispatch finalize.
+- finalize reports the mp4 (verify-render passed) + gate status + findings fixed + lean-pass summary + files repaired in place -> complete.
+- finalize STOP (only when a scene needs full recomposition) -> return to Step 6, re-dispatch that worker, rerun (1)+(2), re-dispatch finalize. This is an exception path, not the default.
 
 ### Completion report
 
-Summarize per phase: input title / topic, preset (auto-picked by scriptwriting from the 5 shipped presets), explainer structure, scene count / total duration, worker grouping, transitions, gate status, visual files repaired in place, final mp4 path + bytes + duration.
+Summarize per phase: input title / topic, preset (auto-picked by scriptwriting from the 5 shipped presets), explainer structure, scene count / total duration, worker grouping, transitions, gate status (lint / validate / inspect strict / overlap), hoisted videos (count + tracks), findings fixed in place, lean pass (tiles scanned, escalations), visual files repaired in place, final mp4 path + bytes + duration.
 
 **Offer a live preview — never auto-open one.** The deliverable is the mp4 above. A browser preview is optional and **must not be started until the user asks for it**. Do NOT run `hyperframes preview` / `play` during any earlier phase: a preview opened mid-run shows half-edited compositions and dies when that phase's own snapshot/render server is torn down, which confuses more than it helps. End the report with a single offer line, e.g.:
 

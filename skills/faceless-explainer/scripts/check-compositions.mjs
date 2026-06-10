@@ -390,6 +390,46 @@ for (const target of visualTargets) {
     });
   }
 
+  // Rule 6a: NO <video> inside a scene composition — ever.
+  // Framework rule (hyperframes-core variables-and-media.md, NON-NEGOTIABLE):
+  // the runtime only registers + drives media that is a DIRECT child of the
+  // host root in index.html. A <video> nested in a scene <template> is never
+  // seeked/decoded → renders blank, and no other gate can see it (only
+  // per-frame snapshots). Footage is declared on the poster <img> instead
+  // (data-video-src + optional data-video-offset/-duration/-media-start/-loop)
+  // and hoist-videos.mjs assembles the real host-root <video> in Step 7.
+  for (const vm of html.matchAll(/<video\b[^>]*>/gi)) {
+    const tag = vm[0].length > 120 ? vm[0].slice(0, 117) + "..." : vm[0];
+    errors.push({
+      sceneId,
+      rule: "video-in-scene",
+      detail: `${tag} — <video> must NOT appear inside a scene (nested video is never seeked/decoded by the runtime and renders BLANK at render time). Author the poster <img class="clip"> in the slot and declare the footage on it: data-video-src="public/<clip>" [data-video-offset / data-video-duration / data-video-media-start / data-video-loop="off"]. hoist-videos.mjs mounts the real <video> at the index.html host root deterministically.`,
+    });
+  }
+  // Rule 6a-bis: data-video-src declarations must be valid (the hoist step
+  // consumes them; catching shape errors here keeps failures at Step 6).
+  for (const im of html.matchAll(/<img\b[^>]*\bdata-video-src\s*=\s*"([^"]*)"[^>]*>/gi)) {
+    const src = im[1];
+    const tag = im[0].length > 120 ? im[0].slice(0, 117) + "..." : im[0];
+    if (!/^public\//.test(src)) {
+      errors.push({
+        sceneId,
+        rule: "video-decl-bad-src",
+        detail: `${tag} — data-video-src must be a relative public/ path (got "${src}").`,
+      });
+    }
+    for (const numAttr of ["data-video-offset", "data-video-duration", "data-video-media-start"]) {
+      const m = im[0].match(new RegExp(`${numAttr}\\s*=\\s*"([^"]*)"`, "i"));
+      if (m && !(isFinite(parseFloat(m[1])) && parseFloat(m[1]) >= 0)) {
+        errors.push({
+          sceneId,
+          rule: "video-decl-bad-number",
+          detail: `${tag} — ${numAttr}="${m[1]}" is not a non-negative number.`,
+        });
+      }
+    }
+  }
+
   // Rule 6b: comments must not contain literal HTML opening tags
   // `npx hyperframes lint` scans <template> / <style> / <script> with regexes, so
   // literal tags in comments can be mistaken for real tags and create false structure errors.
@@ -468,7 +508,9 @@ for (const e of errors) {
   bySceneId.get(e.sceneId).push(e);
 }
 
-console.error(`✗ ${errors.length} fatal violation(s) across ${bySceneId.size} composition/scene id(s):\n`);
+console.error(
+  `✗ ${errors.length} fatal violation(s) across ${bySceneId.size} composition/scene id(s):\n`,
+);
 for (const [sceneId, list] of bySceneId) {
   console.error(`  ${sceneId}:`);
   for (const e of list) {
@@ -482,5 +524,7 @@ if (anomalies.length > 0) {
     for (const a of list) console.error(`    [${a.rule}] ${a.detail}`);
   }
 }
-console.error(`\n  Fix the corresponding visual HTML (or have the orchestrator re-dispatch the worker) and rerun finalize.`);
+console.error(
+  `\n  Fix the corresponding visual HTML (or have the orchestrator re-dispatch the worker) and rerun finalize.`,
+);
 process.exit(1);

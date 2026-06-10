@@ -600,13 +600,20 @@ async function runHtml(argv) {
       // collides (the px the first pass writes is re-hit by the second), leaving
       // width stuck at 1920 for portrait. Sentinels make the swap simultaneous.
       h = h
-        .split('data-width="1920"').join(`data-width="${skinW}"`)
-        .split('data-height="1080"').join(`data-height="${skinH}"`)
-        .split("1920px").join(" WPX ")
-        .split("1080px").join(" HPX ")
-        .split(" WPX ").join(`${skinW}px`)
-        .split(" HPX ").join(`${skinH}px`)
-        .split("width=1920, height=1080").join(`width=${skinW}, height=${skinH}`);
+        .split('data-width="1920"')
+        .join(`data-width="${skinW}"`)
+        .split('data-height="1080"')
+        .join(`data-height="${skinH}"`)
+        .split("1920px")
+        .join(" WPX ")
+        .split("1080px")
+        .join(" HPX ")
+        .split(" WPX ")
+        .join(`${skinW}px`)
+        .split(" HPX ")
+        .join(`${skinH}px`)
+        .split("width=1920, height=1080")
+        .join(`width=${skinW}, height=${skinH}`);
     }
     return h;
   }
@@ -1195,10 +1202,17 @@ ${tokensCss.trim()}
 //   (C) `top: <X>px` AND `height: <Y>px` with X + Y > 900
 //         explicit top+height pair lets us compute element bottom exactly
 //
-// Patterns that depend on transforms / margins / runtime GSAP positioning
-// are not statically detectable here — they fall through to the finalize
-// agent's snapshot eye-check (covered by a fallback row in the finalize
-// agent's "phenomenon → root cause" table).
+// The bbox math is transform-aware (translate / translateY / translate3d with
+// px / % literals) AND margin-aware (longhand margin-top / margin-bottom plus
+// the px-literal `margin:` shorthand) — for absolutely positioned elements the
+// inset places the MARGIN box, so e.g. the negative-margin centering trick
+// (`top: 620px; height: 340px; margin-top: -170px` → real bottom 790, naive
+// sum 960) must fold the margin in or it false-positives. Rules whose
+// transform / Y margin cannot be statically resolved (matrix, calc(), var(),
+// auto, %) are conservatively SKIPPED. Only runtime GSAP positioning remains
+// undetectable here — that falls through to the finalize agent's snapshot
+// eye-check (covered by a fallback row in the finalize agent's
+// "phenomenon → root cause" table).
 //
 // Decoration exemption: any selector whose leaf class/id name matches the
 // DECORATION_NAME_RX list (bg / dot-grid / surface / corner-pin / star-burst
@@ -1213,7 +1227,7 @@ ${tokensCss.trim()}
 // violation.
 //
 // CLI usage:
-//   node captions.mjs keepout --group-spec ./group_spec.json --hyperframes . [--json]
+//   node captions.mjs keepout --group-spec ./group_spec.json --hyperframes . [--json] [--scene <sid>[,<sid>]]
 //
 // preflight-finalize.mjs consumes the gate by spawning `keepout --json` and
 // parsing the result object off stdout (out-of-process — no ESM import of this
@@ -1247,7 +1261,10 @@ async function runKeepout(argv) {
     /::(?:before|after|backdrop|placeholder|selection|first-letter|first-line|marker)/i;
 
   // ---------- main check (exported) ----------
-  function checkCaptionKeepout({ groupSpec, hyperframesDir }) {
+  // sceneFilter: optional array of scene_ids — non-empty limits the scan to
+  // those scenes (worker self-check scopes to its own 1-2 scenes; preflight
+  // passes nothing and scans everything).
+  function checkCaptionKeepout({ groupSpec, hyperframesDir, sceneFilter = [] }) {
     const captionsEnabled = groupSpec?.captions_enabled === true;
     const baseResult = {
       enabled: captionsEnabled,
@@ -1261,10 +1278,11 @@ async function runKeepout(argv) {
     if (!captionsEnabled) return baseResult;
 
     const groups = Array.isArray(groupSpec.groups) ? groupSpec.groups : [];
-    const sceneIds = [];
+    let sceneIds = [];
     for (const g of groups) {
       if (Array.isArray(g.scene_ids)) sceneIds.push(...g.scene_ids);
     }
+    if (sceneFilter.length) sceneIds = sceneIds.filter((sid) => sceneFilter.includes(sid));
 
     let scannedCount = 0;
     const violations = [];
@@ -1353,17 +1371,11 @@ async function runKeepout(argv) {
           const val = parseFloat(m[1]);
           return m[2] === "%" ? { frac: val / 100, knownPx: 0 } : { frac: 0, knownPx: val };
         }
-        if (
-          (m = tx.match(
-            /\btranslate3d\(\s*[^,)]+,\s*(-?\d+(?:\.\d+)?)(%|px)\s*,/i,
-          ))
-        ) {
+        if ((m = tx.match(/\btranslate3d\(\s*[^,)]+,\s*(-?\d+(?:\.\d+)?)(%|px)\s*,/i))) {
           const val = parseFloat(m[1]);
           return m[2] === "%" ? { frac: val / 100, knownPx: 0 } : { frac: 0, knownPx: val };
         }
-        if (
-          (m = tx.match(/\btranslate\(\s*[^,)]+,\s*(-?\d+(?:\.\d+)?)(%|px)\s*\)/i))
-        ) {
+        if ((m = tx.match(/\btranslate\(\s*[^,)]+,\s*(-?\d+(?:\.\d+)?)(%|px)\s*\)/i))) {
           const val = parseFloat(m[1]);
           return m[2] === "%" ? { frac: val / 100, knownPx: 0 } : { frac: 0, knownPx: val };
         }
@@ -1373,6 +1385,52 @@ async function runKeepout(argv) {
       const transformY = parseTransformY();
       // Unresolvable transform → conservative skip (don't false-positive).
       if (transformY === null) continue;
+
+      // 4a-bis. Margin-aware Y offset.
+      //    For absolutely positioned elements the inset properties place the
+      //    MARGIN box, so the border box shifts by the margin: with `top:`,
+      //    visualTop = top + margin-top; with `bottom:`, visualBottom =
+      //    H − bottom − margin-bottom. The negative-margin centering trick
+      //    (`top: 620px; height: 340px; margin-top: -170px` → real bottom
+      //    790) false-positives without this fold — a measured session
+      //    burned a repair round on exactly that. Longhand wins when both
+      //    longhand and shorthand are present (close enough to cascade
+      //    order for hand-authored scene CSS). Any Y component we cannot
+      //    statically resolve (auto / % / calc / var) → null → the caller
+      //    skips the rule, same rationale as unresolvable transforms.
+      const parseMarginY = () => {
+        const mt = propPx("margin-top");
+        const mb = propPx("margin-bottom");
+        let shTop = null;
+        let shBottom = null;
+        const sh = body.match(/(?:^|[;{\s])margin\s*:\s*([^;]+);/i);
+        if (sh) {
+          const parts = sh[1].trim().split(/\s+/);
+          // `auto` Y margin on an absolute element resolves to 0 unless BOTH
+          // top and bottom insets are set (the over-constrained centering
+          // case) — only then is it unresolvable statically.
+          const autoResolvable = !(top && bottom);
+          const px = (s) => {
+            if (s === "0") return 0;
+            if (/^auto$/i.test(s)) return autoResolvable ? 0 : null;
+            const m = s.match(/^(-?\d+(?:\.\d+)?)px$/i);
+            return m ? parseFloat(m[1]) : null;
+          };
+          // 1-4 value shorthand: Y components are parts[0] (top) and
+          // parts[2] when present (bottom), else parts[0] again.
+          shTop = px(parts[0]);
+          shBottom = px(parts.length >= 3 ? parts[2] : parts[0]);
+          // Shorthand present but its Y components unresolvable, and no
+          // longhand override for that side → cannot tell → skip rule.
+          if ((shTop === null && !mt) || (shBottom === null && !mb)) return null;
+        }
+        return {
+          top: mt ? mt.val : (shTop ?? 0),
+          bottom: mb ? mb.val : (shBottom ?? 0),
+        };
+      };
+      const marginY = parseMarginY();
+      if (marginY === null) continue;
 
       // Compute the element's visual bottom y AFTER applying the transform. The
       // shift in px = height × frac + knownPx; for frac to be applied we need
@@ -1386,7 +1444,8 @@ async function runKeepout(argv) {
             : transformY.knownPx;
 
       // Pattern A: `bottom: <X>px` with X < 180  →  element bottom y > 900.
-      //    Transform shift adjusts the visual bottom: visualBottom = (1080-X) + shift.
+      //    Transform + margin adjust the visual bottom:
+      //    visualBottom = (H − X) − margin-bottom + shift.
       //    If shift is unresolvable but transform has a % component, conservative skip.
       let hitsA = false;
       let aVisualBottom = null;
@@ -1397,12 +1456,12 @@ async function runKeepout(argv) {
           // when transform has %-Y but no height — conservative skip.
           /* skip pattern A */
         } else {
-          aVisualBottom = CANVAS_HEIGHT_PX - bottom.val + shift;
+          aVisualBottom = CANVAS_HEIGHT_PX - bottom.val - marginY.bottom + shift;
           hitsA = bottom.val < FAIL_THRESHOLD_BOTTOM_PX && aVisualBottom > CAPTION_BAND_TOP_Y;
         }
       }
       // Pattern B: `top: <X>px` with X >= 900    →  element top inside caption band.
-      //    Transform shift adjusts the visual top: visualTop = X + shift.
+      //    Transform + margin adjust the visual top: visualTop = X + margin-top + shift.
       //    When shift is unresolvable, conservative skip.
       let hitsB = false;
       let bVisualTop = null;
@@ -1411,26 +1470,20 @@ async function runKeepout(argv) {
         if (shift === null) {
           /* skip pattern B — would need height to resolve % shift */
         } else {
-          bVisualTop = top.val + shift;
+          bVisualTop = top.val + marginY.top + shift;
           hitsB = bVisualTop >= CAPTION_BAND_TOP_Y;
         }
       }
-      // Pattern C: `top + height` with bottom edge > 900 (transform-aware).
-      //    visualBottom = top + height + shift; shift uses the same height we
-      //    already know, so it is always resolvable here.
+      // Pattern C: `top + height` with bottom edge > 900 (transform- and margin-aware).
+      //    visualBottom = top + margin-top + height + shift; shift uses the same
+      //    height we already know, so it is always resolvable here.
       //    (Skipped when pattern A is already hitting on the same rule — we don't
       //    want to double-fire on `top: 80; bottom: 120; height: ignored`.)
       let hitsC = false;
       let cVisualBottom = null;
-      if (
-        !hitsA &&
-        top &&
-        height &&
-        Number.isFinite(top.val) &&
-        Number.isFinite(height.val)
-      ) {
+      if (!hitsA && top && height && Number.isFinite(top.val) && Number.isFinite(height.val)) {
         const shift = transformShiftPx(height.val);
-        cVisualBottom = top.val + height.val + shift;
+        cVisualBottom = top.val + marginY.top + height.val + shift;
         hitsC = cVisualBottom > CAPTION_BAND_TOP_Y;
       }
 
@@ -1458,21 +1511,26 @@ async function runKeepout(argv) {
         // applying the same transform, the element bottom lands at
         // y ≤ CAPTION_BAND_TOP_Y - 20 (= 880; 20px safety clearance).
         let pattern, oldStr, newStr, elementBottomY, overlapPx, principle;
-        const transformNote =
-          transformY.frac !== 0 || transformY.knownPx !== 0
-            ? ` (with transform Y shift ${(transformY.frac * 100).toFixed(0)}% + ${transformY.knownPx}px)`
-            : "";
+        const offsetNotes = [];
+        if (transformY.frac !== 0 || transformY.knownPx !== 0)
+          offsetNotes.push(
+            `transform Y shift ${(transformY.frac * 100).toFixed(0)}% + ${transformY.knownPx}px`,
+          );
+        if (marginY.top !== 0 || marginY.bottom !== 0)
+          offsetNotes.push(`margin Y ${marginY.top}px / ${marginY.bottom}px`);
+        const transformNote = offsetNotes.length ? ` (with ${offsetNotes.join(", ")})` : "";
         if (hitsA) {
           pattern = "bottom-too-small";
           elementBottomY = Math.round(aVisualBottom);
           overlapPx = elementBottomY - CAPTION_BAND_TOP_Y;
-          // visual_bottom = (1080 - bottom) + shift; target visual_bottom = 880.
-          //   shift = height * frac + knownPx; height is whatever the rule has
-          //   today; so target bottom = 200 + shift (shift is signed).
+          // visual_bottom = (H - bottom) - margin-bottom + shift; target
+          // visual_bottom = 880. shift = height * frac + knownPx; height is
+          // whatever the rule has today; so target bottom =
+          // H - 880 - margin-bottom + shift (shift and margin are signed).
           const shift = transformShiftPx(height ? height.val : 0) || 0;
           const targetBottom = Math.max(
             0,
-            CANVAS_HEIGHT_PX - (CAPTION_BAND_TOP_Y - 20) + shift,
+            CANVAS_HEIGHT_PX - (CAPTION_BAND_TOP_Y - 20) - marginY.bottom + shift,
           );
           oldStr = `bottom: ${bottom.raw}px;`;
           newStr = `bottom: ${targetBottom}px;`;
@@ -1481,10 +1539,10 @@ async function runKeepout(argv) {
           pattern = "top-plus-height-too-tall";
           elementBottomY = Math.round(cVisualBottom);
           overlapPx = elementBottomY - CAPTION_BAND_TOP_Y;
-          // visual_bottom = top + height + shift; shift depends on height when
-          // frac != 0. Solve for new height H' so visual_bottom = 880:
-          //   top + H' + H'*frac + knownPx = 880
-          //   H' = (880 - top - knownPx) / (1 + frac)
+          // visual_bottom = top + margin-top + height + shift; shift depends on
+          // height when frac != 0. Solve for new height H' so visual_bottom = 880:
+          //   top + marginTop + H' + H'*frac + knownPx = 880
+          //   H' = (880 - top - marginTop - knownPx) / (1 + frac)
           // For frac > -1 (which covers `translate(*, -50%)` and the vast
           // majority of layouts); otherwise fall back to the non-transform formula.
           const denom = 1 + transformY.frac;
@@ -1493,22 +1551,22 @@ async function runKeepout(argv) {
               ? Math.max(
                   0,
                   Math.floor(
-                    (CAPTION_BAND_TOP_Y - 20 - top.val - transformY.knownPx) / denom,
+                    (CAPTION_BAND_TOP_Y - 20 - top.val - marginY.top - transformY.knownPx) / denom,
                   ),
                 )
-              : Math.max(0, CAPTION_BAND_TOP_Y - 20 - top.val);
+              : Math.max(0, CAPTION_BAND_TOP_Y - 20 - top.val - marginY.top);
           oldStr = `height: ${height.raw}px;`;
           newStr = `height: ${suggestedHeight}px;`;
-          principle = `top(${top.val}) + height(${height.val}) + shift → visual bottom y = ${elementBottomY} > 900${transformNote}`;
+          principle = `top(${top.val}) + height(${height.val}) + offsets → visual bottom y = ${elementBottomY} > 900${transformNote}`;
         } else {
           // hitsB
           pattern = "top-in-caption-band";
           elementBottomY = Math.round(bVisualTop); // we only know top — bottom is at least this
           overlapPx = elementBottomY - CAPTION_BAND_TOP_Y;
-          // visual_top = top + shift; target visual_top = 820. shift is the
-          // same regardless of top, so: new_top = 820 - shift.
+          // visual_top = top + margin-top + shift; target visual_top = 820.
+          // shift is the same regardless of top, so: new_top = 820 - marginTop - shift.
           const shift = transformShiftPx(height ? height.val : 0) || 0;
-          const suggestedTop = Math.max(0, CAPTION_BAND_TOP_Y - 80 - shift);
+          const suggestedTop = Math.max(0, CAPTION_BAND_TOP_Y - 80 - marginY.top - shift);
           oldStr = `top: ${top.raw}px;`;
           newStr = `top: ${suggestedTop}px;`;
           principle = `visual top y = ${elementBottomY} >= 900${transformNote}`;
@@ -1564,6 +1622,10 @@ async function runKeepout(argv) {
     const groupSpecPath = resolve(flag("group-spec", "./group_spec.json"));
     const hyperframesDir = resolve(flag("hyperframes", "."));
     const asJson = argv.includes("--json");
+    const sceneFilter = (flag("scene", "") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     if (!existsSync(groupSpecPath)) {
       console.error(`✗ check-caption-keepout: group_spec.json missing at ${groupSpecPath}`);
@@ -1579,7 +1641,7 @@ async function runKeepout(argv) {
       FAIL_THRESHOLD_BOTTOM_PX = bandHeight;
       SUGGESTED_MIN_BOTTOM_PX = bandHeight + 20;
     }
-    const result = checkCaptionKeepout({ groupSpec, hyperframesDir });
+    const result = checkCaptionKeepout({ groupSpec, hyperframesDir, sceneFilter });
 
     if (asJson) {
       console.log(JSON.stringify(result, null, 2));

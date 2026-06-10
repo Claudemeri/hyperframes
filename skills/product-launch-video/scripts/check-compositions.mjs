@@ -376,21 +376,43 @@ for (const sceneId of sceneIds) {
     });
   }
 
-  // Rule 6a: every <video> must carry the `muted` attribute.
-  // Source-video audio (a captured demo clip's own soundtrack) would otherwise
-  // mix into the final render alongside the narrator voice + BGM, producing a
-  // garbled audio bed. There is no project-level mute pass — the only place to
-  // enforce this is the scene HTML. Sound, if ever needed, belongs in a separate
-  // <audio> mounted by assemble-index at the top level (track 20+).
-  for (const vm of html.matchAll(/<video\b([^>]*)>/gi)) {
-    const attrs = vm[1];
-    if (!/\bmuted\b/i.test(attrs)) {
-      const tag = vm[0].length > 120 ? vm[0].slice(0, 117) + "..." : vm[0];
+  // Rule 6a: NO <video> inside a scene composition — ever.
+  // Framework rule (hyperframes-core variables-and-media.md, NON-NEGOTIABLE):
+  // the runtime only registers + drives media that is a DIRECT child of the
+  // host root in index.html. A <video> nested in a scene <template> is never
+  // seeked/decoded → renders blank, and no other gate can see it (only
+  // per-frame snapshots). Footage is declared on the poster <img> instead
+  // (data-video-src + optional data-video-offset/-duration/-media-start/-loop)
+  // and hoist-videos.mjs assembles the real host-root <video> in Step 7.
+  for (const vm of html.matchAll(/<video\b[^>]*>/gi)) {
+    const tag = vm[0].length > 120 ? vm[0].slice(0, 117) + "..." : vm[0];
+    errors.push({
+      sceneId,
+      rule: "video-in-scene",
+      detail: `${tag} — <video> must NOT appear inside a scene (nested video is never seeked/decoded by the runtime and renders BLANK at render time). Author the poster <img class="clip"> in the slot and declare the footage on it: data-video-src="public/<clip>" [data-video-offset / data-video-duration / data-video-media-start / data-video-loop="off"]. hoist-videos.mjs mounts the real <video> at the index.html host root deterministically.`,
+    });
+  }
+  // Rule 6a-bis: data-video-src declarations must be valid (the hoist step
+  // consumes them; catching shape errors here keeps failures at Step 6).
+  for (const im of html.matchAll(/<img\b[^>]*\bdata-video-src\s*=\s*"([^"]*)"[^>]*>/gi)) {
+    const src = im[1];
+    const tag = im[0].length > 120 ? im[0].slice(0, 117) + "..." : im[0];
+    if (!/^public\//.test(src)) {
       errors.push({
         sceneId,
-        rule: "video-not-muted",
-        detail: `${tag} is missing the muted attribute — source-video audio would mix into the render. Add muted (alongside loop playsinline) to every <video>.`,
+        rule: "video-decl-bad-src",
+        detail: `${tag} — data-video-src must be a relative public/ path (got "${src}").`,
       });
+    }
+    for (const numAttr of ["data-video-offset", "data-video-duration", "data-video-media-start"]) {
+      const m = im[0].match(new RegExp(`${numAttr}\\s*=\\s*"([^"]*)"`, "i"));
+      if (m && !(isFinite(parseFloat(m[1])) && parseFloat(m[1]) >= 0)) {
+        errors.push({
+          sceneId,
+          rule: "video-decl-bad-number",
+          detail: `${tag} — ${numAttr}="${m[1]}" is not a non-negative number.`,
+        });
+      }
     }
   }
 
@@ -524,5 +546,7 @@ if (anomalies.length > 0) {
     for (const a of list) console.error(`    [${a.rule}] ${a.detail}`);
   }
 }
-console.error(`\n  Fix the corresponding scene HTML (or have the orchestrator re-dispatch the worker) and rerun finalize.`);
+console.error(
+  `\n  Fix the corresponding scene HTML (or have the orchestrator re-dispatch the worker) and rerun finalize.`,
+);
 process.exit(1);

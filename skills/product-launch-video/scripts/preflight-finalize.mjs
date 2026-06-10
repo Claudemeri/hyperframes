@@ -32,39 +32,42 @@
 //      Findings include Edit-ready old_string / new_string so the finalize
 //      agent patches each scene in one Edit call per violation — no Read,
 //      no search, no geometry math. Result lands in `caption_keepout`.
+//      (The bbox math is transform- AND margin-aware; see captions.mjs.)
+//
+//   5b. Run `check-overlap.mjs` — the single-rule rendered overlap gate:
+//      every scene is loaded standalone in headless Chrome, its timeline
+//      seeked to 3 probe times, all non-background paint atoms flattened
+//      onto one plane (z-index ignored) and pairwise-intersected. Persistent
+//      foreground overlap = blocking violation (Repair Mode re-dispatch);
+//      result lands in `overlap`. Chrome is reused from the hyperframes
+//      browser cache; puppeteer-core resolves from the workspace node_modules
+//      (`check-overlap.mjs --ensure-deps` installed it before scene fan-out).
 //
 //   6. Write everything to `finalize_brief.json` for the agent to consume in
 //      one Read. Includes bgm_status.json (written by wait-bgm.mjs before
 //      assemble) so the agent does not need to probe ps / ls / /tmp logs.
-//      `preflight_clean = gates_clean && caption_keepout has 0 violations`
-//      — the agent uses this for fast-path decision.
+//      `preflight_clean = gates_clean && overlap clean && caption_keepout has
+//      0 violations` — the agent uses this for fast-path decision.
 //
 // Exit codes:
-//   0 — brief written and (gates pass) OR (gates fail with `--allow-gate-failure`
-//       set, in which case finalize agent diagnoses from brief.gates[].output_tail)
-//   2 — brief written but at least one of lint / validate / inspect produced a
-//       hard error (gate exit_code != 0). Pipeline is BLOCKED — orchestrator
-//       must STOP and surface gates[].output_tail to the user; do NOT dispatch
-//       finalize subagent. Rationale: a worker emitted a real geometric / schema
-//       bug (e.g. text overflowing its container). Letting finalize patch over it
-//       masks the worker's mental-geometry error. Fix the upstream scene file
-//       (or re-dispatch the worker), then re-run preflight.
+//   0 — brief written. Clean OR with findings — either way the orchestrator
+//       dispatches the finalize agent next, which fixes the brief's findings
+//       in place (gates[].output_tail / overlap.violations[] /
+//       caption_keepout.violations[]) before its lean visual pass + render.
+//       Workers already self-ran the scoped gates at authoring time, so what
+//       leaks here is small mechanical residue — finalize is the single
+//       repair surface for it (worker re-dispatch is reserved for
+//       recomposition-scale problems, via finalize STOP).
+//   2 — the overlap gate could not run (`overlap.status: "unavailable"` —
+//       puppeteer-core / Chrome missing). This is an ENVIRONMENT problem with
+//       a deterministic remedy (`check-overlap.mjs --ensure-deps`, then
+//       `npx hyperframes doctor` if Chrome is named); fix and re-run rather
+//       than proceeding unmeasured.
 //   1 — preflight itself crashed (bad arguments, group_spec missing, etc.)
-//
-// `--allow-gate-failure` flag opts back into the old "always exit 0, let finalize
-// decide" behaviour. Use only when you intentionally want finalize to chase
-// gate fails (e.g. debugging the agent's diagnostic flow).
-//
-// `--require-perception` (or env `PLV_REQUIRE_PERCEPTION=1`) escalates a SKIPPED
-// rendered-perception check (no puppeteer / no Chrome binary) from a soft
-// anomaly to a hard exit-2 block. Use when the run cannot afford to lose the
-// only machine check that catches cross-text-collision / cramped-container /
-// low-contrast-foreground. CI surfaces will typically set this; interactive
-// runs can leave it off so the pipeline still completes without puppeteer.
 //
 // Usage:
 //   node preflight-finalize.mjs --group-spec ./group_spec.json --hyperframes . \
-//        [--out ./finalize_brief.json] [--allow-gate-failure] [--require-perception]
+//        [--out ./finalize_brief.json]
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
@@ -79,14 +82,10 @@ const flag = (name, def) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : def;
 };
-const boolFlag = (name) => argv.includes(`--${name}`);
 
 const groupSpecPath = resolve(flag("group-spec", "./group_spec.json"));
 const hyperframesDir = resolve(flag("hyperframes", "."));
 const outPath = resolve(flag("out", join(hyperframesDir, "finalize_brief.json")));
-const allowGateFailure = boolFlag("allow-gate-failure");
-const requirePerception =
-  boolFlag("require-perception") || process.env.PLV_REQUIRE_PERCEPTION === "1";
 
 if (!existsSync(groupSpecPath)) {
   console.error(`✗ preflight-finalize: group_spec.json missing at ${groupSpecPath}`);
@@ -199,6 +198,12 @@ function runGate(name, args, { timeoutMs = 90_000 } = {}) {
 // reasonable density / cost tradeoff; on a 40s 10-scene project this catches
 // scene_10 CTA overflow that the 9-sample default missed.
 const INSPECT_SAMPLES = Math.max(18, (groupSpec.total_scenes || 0) * 2);
+// inspect runs STRICT — no --tolerance flag, CLI default (2px). By-design
+// transient overflow (3D morph / tilt projection wobble, camera zoom peaks)
+// is not tolerated numerically; it must be DECLARED on the element with
+// data-layout-allow-overflow="true" (scene contract #9). Repair-worker scoped
+// re-runs and finalize re-runs must also run plain `inspect` (no --tolerance)
+// so verdicts agree with this gate.
 const gates = {
   lint: runGate("lint", ["lint"]),
   validate: runGate("validate", ["validate"]),
@@ -331,123 +336,35 @@ try {
 }
 const keepoutClean = captionKeepout.violations.length === 0;
 
-// ---------- 5.5. Rendered-perception check (Tier 1) ----------
-// Spawns check-rendered-perception.mjs which loads each composition in headless
-// Chrome, injects the brand @font-face block (so text is measured in the real
-// display face, not a fallback), seeks the registered timeline at 3 probe times
-// (40%/70%/92% of duration) with suppressEvents=false so discrete-text-sequence
-// onUpdate callbacks actually fire, then queries the live DOM for:
-//   - text-clipping (text natural bbox exceeds parent visible bbox)
-//   - depth-layer-ghost-on-long-word (offset depth-layer pair on ≥10-char word
-//     at display tier ≥60px)
-//   - primary-collision (two data-layout-role="primary" siblings in same act
-//     overlap with IoU > 0.05)
-//   - cross-text-collision (two DIFFERENT display-tier texts with overlapping
-//     bboxes — unannotated headline clash / depth-stack spilling into a neighbour)
-//   - primary-offscreen (display-tier text 15-85% clipped by the canvas due to a
-//     zoom/camera miscentre — checked EVEN under data-layout-allow-overflow)
-//   - font-too-small (rendered font-size < 24px on non-decorative text)
-//   - content-cramped-container (a foreground child is pressed against its parent
-//     container's border, OR container reports scrollHeight > clientHeight — the
-//     signature of a card whose interior was not retuned after the parent shrank)
-//   - low-contrast-foreground (text or inline-SVG with WCAG contrast < 2.5:1
-//     against the first non-transparent background ancestor — the signature of
-//     an asset placed on the wrong surface)
-//
-// Soft-skips if no headless browser is available (puppeteer / puppeteer-core +
-// cached Chrome). Always emits perception_report.json with `skipped: true` in
-// that case so this branch stays deterministic. Adds ~25-40s for 8 scenes; the
-// gate is informational (preflight always exit 0).
-const perceptionReportPath = join(hyperframesDir, "perception_report.json");
-let perception = {
-  skipped: false,
-  scanned: 0,
-  skipped_scenes: 0,
-  no_timeline: 0,
+// ---------- 5b. Rendered overlap gate ----------
+// Single-rule browser gate: z-flatten all non-background paint atoms per
+// scene, no two may intersect (see check-overlap.mjs header). Spawned
+// out-of-process like keepout. `status: "unavailable"` (no puppeteer module /
+// no Chrome) is NOT a soft skip — it blocks like a violation, with the remedy
+// in `reason`, because an unmeasured layout must not read as a clean one.
+let overlap = {
+  status: "unavailable",
+  reason: "check-overlap.mjs did not produce output",
   violations: [],
-  reason: null,
+  transients: [],
+  scenes_scanned: 0,
 };
 try {
-  const perceptionScript = join(__dirname, "check-rendered-perception.mjs");
+  const overlapScript = join(__dirname, "check-overlap.mjs");
   const res = spawnSync(
     process.execPath,
-    [
-      perceptionScript,
-      "--group-spec",
-      groupSpecPath,
-      "--hyperframes",
-      hyperframesDir,
-      "--out",
-      perceptionReportPath,
-    ],
-    { encoding: "utf8", timeout: 240000 },
+    [overlapScript, "--json", "--group-spec", groupSpecPath, "--hyperframes", hyperframesDir],
+    { encoding: "utf8", timeout: 300_000 },
   );
-  if (existsSync(perceptionReportPath)) {
-    const r = JSON.parse(readFileSync(perceptionReportPath, "utf8"));
-    if (r.skipped) {
-      perception = {
-        skipped: true,
-        scanned: 0,
-        skipped_scenes: 0,
-        no_timeline: 0,
-        violations: [],
-        reason: r.reason || "browser unavailable",
-      };
-    } else {
-      perception = {
-        skipped: false,
-        scanned: r.scenes_scanned || 0,
-        failed: r.scenes_failed || 0, // probed but threw — no coverage for those scenes
-        skipped_scenes: r.scenes_skipped || 0, // in group_spec but no file/<template>
-        no_timeline: r.scenes_no_timeline || 0, // probed at t=0 only (no timeline registered)
-        violations: r.violations || [],
-        reason: null,
-      };
-    }
-  } else {
-    perception = {
-      skipped: true,
-      scanned: 0,
-      skipped_scenes: 0,
-      no_timeline: 0,
-      violations: [],
-      reason: `check-rendered-perception script error (exit ${res.status})`,
-    };
-  }
+  if (res.stdout && res.stdout.trim()) overlap = JSON.parse(res.stdout);
+  else if (res.stderr && res.stderr.trim())
+    overlap.reason = res.stderr.trim().split("\n").slice(0, 3).join(" / ");
 } catch (e) {
-  perception = {
-    skipped: true,
-    scanned: 0,
-    skipped_scenes: 0,
-    no_timeline: 0,
-    violations: [],
-    reason: String(e.message || e),
-  };
+  overlap.reason = e.message?.split("\n")[0] || "spawn failed";
 }
+const overlapClean = overlap.status === "ok" && overlap.violations.length === 0;
 
-// Critical perception violations block preflight_clean; font-too-small alone
-// doesn't (decorative chips/eyebrows commonly trip it).
-const criticalPerceptionViolations = perception.violations.filter(
-  (v) => v.type !== "font-too-small",
-);
-// When perception was skipped we treat it as "clean enough to proceed" by
-// default (no puppeteer is a common state during local dev), unless the caller
-// explicitly required it via `--require-perception` / `PLV_REQUIRE_PERCEPTION=1`.
-// In that mode skipped is NOT clean — preflight_clean turns false and the
-// blocking-exit gate below promotes the run to exit 2.
-// Coverage honesty: a non-skipped run that crashed scenes (scenes_failed) or
-// probed nothing (scanned 0 while scenes exist) did NOT cover its scope — an
-// empty violations list then means the probe aborted, NOT that the scenes are
-// clean. Gate it on the same terms as a skip (soft by default; blocks under
-// --require-perception) so a silent crash / partial run can never read as a pass.
-const perceptionPartial =
-  !perception.skipped && ((perception.failed || 0) > 0 || perception.scanned === 0);
-const perceptionClean =
-  perception.skipped || perceptionPartial
-    ? !requirePerception
-    : criticalPerceptionViolations.length === 0;
-
-const preflightClean = gatesClean && keepoutClean && perceptionClean;
+const preflightClean = gatesClean && overlapClean && keepoutClean;
 
 // ---------- 5b. BGM status ----------
 // wait-bgm.mjs runs before assemble-index.mjs. Surface its verdict here so the
@@ -490,26 +407,9 @@ const bgm = {
 
 // ---------- 5.6. Anomalies (loud, brief-level) ----------
 // Things the orchestrator / finalize agent should NOTICE even when they don't
-// block preflight. Skipped perception is the canonical example: the check
-// COULD have caught cross-text-collision but didn't run, so a "clean" brief
-// is misleadingly clean. Other phases can grow this list over time.
+// block preflight. Currently empty in the normal path; phases can grow this
+// list over time (keep the field so brief consumers have a stable shape).
 const anomalies = [];
-if (perception.skipped) {
-  anomalies.push({
-    code: "perception_check_skipped",
-    severity: requirePerception ? "error" : "warning",
-    message: `Rendered-perception check did not run (${perception.reason}). text-clipping / depth-layer-ghost / cross-text-collision / primary-offscreen / content-cramped-container / low-contrast-foreground checks are NOT covered for this run${requirePerception ? " — and --require-perception was set, so this BLOCKS preflight" : " — finalize snapshot eye-check is the only remaining safety net for layout collisions, contrast issues, and cramped interiors"}.`,
-    actionable_install_command: `cd "${hyperframesDir}" && npm i puppeteer`,
-    actionable_alternative: `npm i puppeteer-core && npx hyperframes browser install`,
-  });
-}
-if (perceptionPartial) {
-  anomalies.push({
-    code: "perception_check_partial",
-    severity: requirePerception ? "error" : "warning",
-    message: `Rendered-perception ran but covered nothing usable (scenes_failed=${perception.failed || 0}, scenes_scanned=${perception.scanned}). An empty violations list here means the probe crashed/aborted on those scenes, NOT that they are clean${requirePerception ? " — and --require-perception was set, so this BLOCKS preflight" : " — finalize snapshot eye-check is the only remaining safety net"}. See the check-rendered-perception stderr for the per-scene error.`,
-  });
-}
 
 // ---------- 6. Write brief ----------
 const brief = {
@@ -521,21 +421,8 @@ const brief = {
   gates_clean: gatesClean,
   gates,
   bgm,
+  overlap,
   caption_keepout: captionKeepout,
-  perception: {
-    skipped: perception.skipped,
-    skip_reason: perception.reason,
-    // Surface the install command directly on the perception node so finalize
-    // doesn't have to cross-reference brief.anomalies[] to find it.
-    install_to_enable: perception.skipped ? `cd "${hyperframesDir}" && npm i puppeteer` : null,
-    scenes_scanned: perception.scanned,
-    scenes_failed: perception.failed || 0, // probed but threw → no coverage for those scenes
-    scenes_not_scanned: perception.skipped_scenes, // no file/<template> → never measured
-    scenes_no_timeline: perception.no_timeline, // probed at t=0 only → late reveals unseen
-    partial: perceptionPartial, // ran but covered nothing usable (crash / 0 scanned) — treat like skipped
-    violations: perception.violations,
-    critical_violations_count: criticalPerceptionViolations.length,
-  },
   anomalies,
   preflight_clean: preflightClean,
   deterministic_fixes_applied: deterministicFixes,
@@ -550,7 +437,9 @@ writeFileSync(outPath, JSON.stringify(brief, null, 2) + "\n");
 // ---------- stdout summary ----------
 console.log(`✓ wrote ${outPath}`);
 console.log(`  hyperframes:    ${pinnedVersion} (${cliVersionLine || "version unknown"})`);
-console.log(`  preflight_clean: ${preflightClean ? "yes (gates + caption keep-out)" : "no"}`);
+console.log(
+  `  preflight_clean: ${preflightClean ? "yes (gates + overlap + caption keep-out)" : "no"}`,
+);
 console.log(
   `    lint:     ${gates.lint.ok ? "✓" : "✗"} (${gates.lint.duration_s}s, exit ${gates.lint.exit_code})`,
 );
@@ -558,8 +447,24 @@ console.log(
   `    validate: ${gates.validate.ok ? "✓" : "✗"} (${gates.validate.duration_s}s, exit ${gates.validate.exit_code})`,
 );
 console.log(
-  `    inspect:  ${gates.inspect.ok ? "✓" : "✗"} (${gates.inspect.duration_s}s, exit ${gates.inspect.exit_code})`,
+  `    inspect:  ${gates.inspect.ok ? "✓" : "✗"} (${gates.inspect.duration_s}s, exit ${gates.inspect.exit_code}, strict — no tolerance)`,
 );
+if (overlap.status !== "ok") {
+  console.log(`    overlap:  ✗ gate unavailable — ${overlap.reason}`);
+} else if (overlapClean) {
+  console.log(
+    `    overlap:  ✓ (${overlap.scenes_scanned} scene(s) probed, 0 violations${overlap.transients?.length ? `, ${overlap.transients.length} transient crossing(s) noted` : ""}${overlap.scenes_no_timeline ? `, ⚠ ${overlap.scenes_no_timeline} scene(s) probed at t=0 only` : ""})`,
+  );
+} else {
+  console.log(
+    `    overlap:  ✗ (${overlap.violations.length} foreground overlap(s) across ${new Set(overlap.violations.map((v) => v.scene_id)).size} scene(s))`,
+  );
+  for (const v of overlap.violations) {
+    console.log(
+      `      [${v.scene_id}] ${v.a.selector} × ${v.b.selector}: ${v.overlap.width}×${v.overlap.height}px at (${v.overlap.left},${v.overlap.top}), t=${v.probe_times_s.join("/")}s`,
+    );
+  }
+}
 if (!captionKeepout.enabled) {
   console.log(`    caption-keepout: skipped (captions_enabled=false)`);
 } else if (keepoutClean) {
@@ -576,66 +481,6 @@ if (!captionKeepout.enabled) {
     );
   }
 }
-if (perception.skipped) {
-  // Loud anomaly (was silent in prior versions). Rendered-perception is the
-  // only check that catches cross-text-collision / depth-layer-ghost — without
-  // it, layout collisions only surface at finalize snapshot eye-check, which
-  // is fragile (single-agent, end-of-pipeline, rate-limit prone). Tell the
-  // user EXACTLY how to enable it.
-  console.log(
-    `    perception: ⚠ SKIPPED (${perception.reason}) — cross-text-collision / depth-layer-ghost / primary-offscreen checks DID NOT RUN`,
-  );
-  console.log(
-    `      enable with:  (cd "${hyperframesDir}" && npm i puppeteer)   # or:  npm i puppeteer-core  + install Chrome via \`npx hyperframes browser install\``,
-  );
-} else if (perception.violations.length === 0) {
-  console.log(`    perception: ✓ (${perception.scanned} scene(s) scanned, 0 violations)`);
-} else if (criticalPerceptionViolations.length === 0) {
-  console.log(
-    `    perception: ✓ (${perception.scanned} scene(s) scanned, ${perception.violations.length} non-blocking font-too-small note(s))`,
-  );
-} else {
-  console.log(
-    `    perception: ✗ (${criticalPerceptionViolations.length} critical violation(s) across ${new Set(criticalPerceptionViolations.map((v) => v.scene_id)).size} scene(s)) — see brief.perception.violations[]`,
-  );
-  for (const v of criticalPerceptionViolations) {
-    const m = v.metric || {};
-    let tag;
-    switch (v.type) {
-      case "text-clipping":
-        tag = `overflow_right=${m.overflow_right_px || 0}px / natural=${m.natural_width_px}px in ${m.visible_width_px}px`;
-        if (v.fix_kind === "edit-ready")
-          tag += ` [edit-ready → font-size: ${v.recommended_font_size_px}px]`;
-        break;
-      case "depth-layer-ghost-on-long-word":
-        tag = `${m.char_count}-char @ ${m.font_size_px}px, offset=${m.leading_offset_px}px (max ${m.recommended_max_offset_px}px)`;
-        break;
-      case "primary-collision":
-        tag = `act=${m.act} IoU=${m.iou}`;
-        break;
-      case "cross-text-collision":
-        tag = `IoU=${m.iou}, overlap=${(m.overlap_of_smaller * 100).toFixed(0)}% of smaller (${m.a_bbox} ↔ ${m.b_bbox})`;
-        break;
-      case "primary-offscreen":
-        tag = `${m.clipped_pct}% clipped by canvas, center ${m.center_offset_px} (zoom miscentre)`;
-        break;
-      case "content-cramped-container":
-        tag = `container ${m.container_height_px}px tall, ${m.child_count} foreground children, top clearance=${m.top_clearance_px}px, bottom clearance=${m.bottom_clearance_px}px${m.overflowing ? ", overflowing" : ""}`;
-        break;
-      case "low-contrast-foreground":
-        tag = `kind=${m.kind} contrast=${m.contrast_ratio}:1 (fg=${m.foreground_rgb || m.dominant_fill_rgb} on surface ${m.surface_rgb} @ ${m.surface_host_selector})`;
-        break;
-      default:
-        tag = JSON.stringify(m);
-    }
-    console.log(`      [${v.scene_id}] ${v.type}: "${v.text}" — ${tag}`);
-  }
-}
-if (!perception.skipped && (perception.skipped_scenes || perception.no_timeline)) {
-  console.log(
-    `    perception coverage: ${perception.skipped_scenes} scene(s) not scanned (no file/template), ${perception.no_timeline} probed at t=0 only (no timeline) — clean ≠ fully covered`,
-  );
-}
 console.log(
   `  snapshot_times: ${snapshotTimes.length} timestamp(s)${transitionRows.length ? ` (incl. ${transitionRows.length} transition seam mid${transitionRows.length > 1 ? "s" : ""})` : ""}`,
 );
@@ -648,70 +493,35 @@ if (!preflightClean) {
       `\n  ⚠ at least one CLI gate failed — finalize agent will diagnose from brief.gates[].output_tail`,
     );
   }
+  if (!overlapClean) {
+    console.log(
+      `  ⚠ foreground overlap — route brief.overlap.violations[] verbatim to Repair Mode worker re-dispatch (geometry included; workers self-verify with check-overlap --scene)`,
+    );
+  }
   if (!keepoutClean) {
     console.log(
       `  ⚠ caption-keepout violations — finalize agent applies brief.caption_keepout.violations[].edit_old → edit_new in each file (one Edit per violation, no Read needed)`,
     );
   }
-  if (!perceptionClean) {
-    console.log(
-      `  ⚠ perception violations — finalize agent reviews brief.perception.violations[] (text-clip / depth-ghost / collision are visual bugs; suggestion field gives the fix direction)`,
-    );
-  }
 }
 
-// ---------- 7. Blocking-exit gate (default — pre-finalize hard stop) ----------
-// When any of lint / validate / inspect produced a hard error (gate exit_code
-// != 0), we exit non-zero so the orchestrator stops BEFORE dispatching
-// finalize. Rationale (see top-of-file): a failing gate is upstream-worker
-// signal — text overflowing its container, schema breakage, broken selector
-// scope. Letting finalize patch over it masks the worker's mental-geometry
-// error and burns finalize tokens on bugs that should round-trip to the worker
-// instead. The brief is already on disk; the orchestrator can read
-// gates.<gate>.output_tail and decide whether to re-dispatch the worker or
-// hand-fix the scene file.
-//
-// `--allow-gate-failure` reverts to the pre-block behaviour (always exit 0,
-// finalize chases the failures). Use only when you intentionally want finalize
-// to diagnose gate output (e.g. agent-flow debugging).
-if (!gatesClean && !allowGateFailure) {
-  const failed = [];
-  if (!gates.lint.ok) failed.push(`lint (exit ${gates.lint.exit_code})`);
-  if (!gates.validate.ok) failed.push(`validate (exit ${gates.validate.exit_code})`);
-  if (!gates.inspect.ok) {
-    const cnt =
-      gates.inspect.errors != null
-        ? `${gates.inspect.errors} error(s)`
-        : `exit ${gates.inspect.exit_code}`;
-    failed.push(`inspect (${cnt})`);
-  }
-  console.error(`\n✗ BLOCKED: ${failed.join(", ")} — pipeline must NOT proceed to finalize.`);
+// ---------- 7. Exit ----------
+// Findings do NOT block: the brief carries them and the finalize agent fixes
+// them in place as its first work step (workers already self-ran the scoped
+// gates, so residue here is small and mechanical; bouncing it back through a
+// worker re-dispatch round costs more than finalize's direct Edit). The ONLY
+// hard stop is an unmeasured overlap gate — an environment problem with a
+// deterministic remedy, not a finding.
+if (overlap.status === "unavailable") {
+  console.error(`\n✗ BLOCKED: overlap gate could not run (${overlap.reason}).`);
   console.error(`  brief: ${outPath}`);
   console.error(
-    `  → read brief.gates.<gate>.output_tail to diagnose, then fix the upstream scene file (or re-dispatch the worker).`,
-  );
-  console.error(
-    `  → re-run this script after fix. Override with --allow-gate-failure only if you want finalize to chase the gate errors itself.`,
+    `  → run \`node check-overlap.mjs --ensure-deps\` from the workspace root (and \`npx hyperframes doctor\` if it names Chrome), then re-run this script — do not proceed unmeasured.`,
   );
   process.exit(2);
 }
-
-// ---------- 7b. Blocking-exit gate (perception, opt-in) ----------
-// When `--require-perception` (or `PLV_REQUIRE_PERCEPTION=1`) is set AND
-// rendered-perception was skipped, refuse to proceed. This is the explicit
-// CI-grade safety mode — without perception, content-cramped-container /
-// low-contrast-foreground / cross-text-collision are uncovered, so a
-// "preflight_clean" brief misrepresents reality. Default behaviour is
-// unchanged (no flag → skipped is a soft warning, just like before).
-if (requirePerception && perception.skipped) {
+if (!preflightClean) {
   console.error(
-    `\n✗ BLOCKED: rendered-perception was SKIPPED (${perception.reason}) and --require-perception is set.`,
+    `\n⚠ findings present (gates/overlap/keepout above) — dispatch finalize; it fixes them in place from the brief before the lean visual pass + render.`,
   );
-  console.error(`  brief: ${outPath}`);
-  console.error(`  → install puppeteer to enable the check:`);
-  console.error(`     (cd "${hyperframesDir}" && npm i puppeteer)`);
-  console.error(
-    `  → or rerun without --require-perception / unset PLV_REQUIRE_PERCEPTION to fall back to snapshot-only safety net.`,
-  );
-  process.exit(2);
 }

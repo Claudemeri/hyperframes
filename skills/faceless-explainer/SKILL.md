@@ -151,7 +151,11 @@ BGM generation runs detached in the background when keys/deps allow, otherwise i
 After `design-system/chunks/index.json`, `narrator_scripts.json`, and `audio_meta.json` exist, concatenate all inputs into one dispatch packet (contracts first, static references middle, work items last):
 
 ```bash
-DP=/tmp/vd-dispatch.txt
+# Dispatch packets live in $PROJECT_DIR/.dispatch/ (transient; safe to delete after the run).
+# NEVER use a fixed /tmp path: it persists across runs/projects, so a failed write silently
+# reuses another project's stale packet and contaminates every worker.
+mkdir -p "$PROJECT_DIR/.dispatch"
+DP="$PROJECT_DIR/.dispatch/vd-dispatch.txt"
 {
   echo "## Design chunks"
   (cd "$PROJECT_DIR" && cat design-system/chunks/index.json \
@@ -163,6 +167,8 @@ DP=/tmp/vd-dispatch.txt
   echo "## Narrator scripts"; (cd "$PROJECT_DIR" && cat narrator_scripts.json)
   echo "## Audio meta";       (cd "$PROJECT_DIR" && cat audio_meta.json 2>/dev/null)   # Optional; overrides Duration if drift >10%
 } > "$DP"
+# Guard: a partially-failed build must fail LOUDLY here, not downstream in the subagent
+grep -q '^## Narrator scripts' "$DP" || { echo "FATAL: vd-dispatch.txt incomplete — rebuild before dispatching"; }
 
 # Captions planning hint (put it in the Captions: line of the dispatch below)
 (cd "$PROJECT_DIR" && node -e 'try{const m=require("./audio_meta.json");process.stdout.write(Object.values(m.scenes||{}).some(s=>s.wordsPath)?"enabled":"disabled")}catch{process.stdout.write("enabled")}')
@@ -176,7 +182,7 @@ PROJECT_DIR: <video project root>
 Schema validator: <SKILL_DIR>/scripts/validate.mjs section
 Canvas: <width>×<height>   # default 1920×1080 (16:9 landscape); 1080×1920 (9:16 portrait) or 1080×1080 (1:1 square) if requested upstream (narrator_scripts.orientation/dimensions). Plan layouts for THIS aspect ratio — see composition.md "Portrait & square".
 Captions: <enabled | disabled>   # Planning hint from the node -e above: enabled => leave the bottom ~17% of canvas height as caption territory in prose
-Dispatch packet: /tmp/vd-dispatch.txt   # Step 0 reads it once for all inputs
+Dispatch packet: <PROJECT_DIR>/.dispatch/vd-dispatch.txt   # Step 0 reads it once for all inputs
 Visuals: faceless — every scene is typography / abstract graphics / diagram / data-viz invented from the script. assetCandidates is [] for most or all scenes; plan visuals from text, not from captured assets.
 ```
 
@@ -233,13 +239,20 @@ node <SKILL_DIR>/scripts/check-overlap.mjs --ensure-deps
 Then read `group_spec.json.groups[]` for worker count N. Each worker's self-check runs two scoped machine gates before returning — `captions.mjs keepout --scene` (when captions enabled) and `check-overlap.mjs --scene` (always) — so layout violations are fixed at the source instead of surfacing at preflight. Build the shared header once, then per-worker packets (`tokens` / `easings` / `voice` are identical for every worker):
 
 ```bash
-mkdir -p /tmp/scene-dispatch
+# Same rule as Step 4: packets go in $PROJECT_DIR/.dispatch/, never a fixed /tmp path
+# (a stale /tmp file from a previous project survives a failed write and silently
+# poisons every worker with the wrong design system).
+mkdir -p "$PROJECT_DIR/.dispatch/scene-dispatch"
 (cd "$PROJECT_DIR" && cat design-system/chunks/tokens.css design-system/chunks/easings.js design-system/chunks/voice.md 2>/dev/null) \
-  > /tmp/scene-shared.txt
-# Then per worker: shared header + that worker's Scenes YAML -> /tmp/scene-dispatch/w<N>.txt
+  > "$PROJECT_DIR/.dispatch/scene-shared.txt"
+# Guard BEFORE fan-out: the project's own brand token must be present; a contaminated
+# packet here costs a full re-author round across every affected worker.
+grep -q -- '--brand-primary' "$PROJECT_DIR/.dispatch/scene-shared.txt" || \
+  { echo "FATAL: scene-shared.txt incomplete/stale — rebuild before dispatching workers"; }
+# Then per worker: shared header + that worker's Scenes YAML -> $PROJECT_DIR/.dispatch/scene-dispatch/w<N>.txt
 ```
 
-Start **N scene workers in parallel in the same message** (`general-purpose`, each `run_in_background: true`). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height`) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body + a `Scenes:` list.
+Start **N scene workers in parallel in the same message** (`general-purpose`, each `run_in_background: true`). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height`) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: <PROJECT_DIR>/.dispatch/scene-dispatch/w<N>.txt`, plus the shared header body + a `Scenes:` list.
 
 For the worker top-level context, copy from `group_spec.json.groups[i]`: `worker_id`, `composition_id`, `composition_file`, `duration_s`, `scene_ids`; and from the top of `group_spec.json`: `width`, `height` (the worker authors + self-checks the root at these dims — landscape 1920×1080 unless portrait/square was requested upstream). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580) — constraint #13 keep-out is computed from these, not hardcoded. Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-3 logical scenes): `scene_id` / `local_start_s` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `design_chunks` (absolute paths to the whole component library — the worker chooses by visual judgment) / `creative_brief`. A 2-3 scene worker writes one `group_wN.html` with true shared DOM across the segments.
 

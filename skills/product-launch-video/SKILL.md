@@ -201,7 +201,11 @@ BGM runs detached in the background when available (`$GOOGLE_API_KEY` → Lyria 
 **Join point**: `design-system/chunks/index.json` + `narrator_scripts.json` + `audio_meta.json` all exist. Build one dispatch packet (the subagent reads it once, zero extra Reads):
 
 ```bash
-DP=/tmp/vd-dispatch.txt
+# Dispatch packets live in $PROJECT_DIR/.dispatch/ (transient; safe to delete after the run).
+# NEVER use a fixed /tmp path: it persists across runs/projects, so a failed write silently
+# reuses another project's stale packet and contaminates every worker.
+mkdir -p "$PROJECT_DIR/.dispatch"
+DP="$PROJECT_DIR/.dispatch/vd-dispatch.txt"
 {
   # Section order is deliberate: contracts first, static references middle, work items last
   echo "## Design chunks"
@@ -215,6 +219,8 @@ DP=/tmp/vd-dispatch.txt
   echo "## Narrator scripts"; (cd "$PROJECT_DIR" && cat narrator_scripts.json)
   echo "## Audio meta";       (cd "$PROJECT_DIR" && cat audio_meta.json 2>/dev/null)   # optional; overrides Duration on >10% drift
 } > "$DP"
+# Guard: a partially-failed build must fail LOUDLY here, not downstream in the subagent
+grep -q '^## Narrator scripts' "$DP" || { echo "FATAL: vd-dispatch.txt incomplete — rebuild before dispatching"; }
 
 # Captions planning hint for the Captions: dispatch line below
 (cd "$PROJECT_DIR" && node -e 'try{const m=require("./audio_meta.json");process.stdout.write(Object.values(m.scenes||{}).some(s=>s.wordsPath)?"enabled":"disabled")}catch{process.stdout.write("enabled")}')
@@ -228,7 +234,7 @@ PROJECT_DIR: <video project root>
 Schema validator: <SKILL_DIR>/scripts/validate.mjs section
 Canvas: <width>×<height>   # 1920×1080 default; 1080×1920 portrait / 1080×1080 square when narrator_scripts.orientation says so
 Captions: <enabled | disabled>   # the node -e hint above; enabled => plan keeps key content in the upper ~83%
-Dispatch packet: /tmp/vd-dispatch.txt
+Dispatch packet: <PROJECT_DIR>/.dispatch/vd-dispatch.txt
 ```
 
 The `Captions:` line is an optimistic hint; the authoritative gate is `group_spec.captions_enabled` from Step 5 prep (mismatch is safe — Step 6/7 keep-out always follows group_spec).
@@ -274,7 +280,10 @@ exit 0 = normal. `captions: skipped (<reason>)` = legal skip — no `captions.ht
 **Scene worker fan-out**: read `group_spec.json.groups[]` for worker count N and `group_spec.captions_enabled` for the `Captions:` flag, then build the per-worker dispatch packets and start **N workers in parallel in the same message** (`subagent_type: "general-purpose"`, `run_in_background: true`):
 
 ```bash
-mkdir -p /tmp/scene-dispatch
+# Same rule as Step 4: packets go in $PROJECT_DIR/.dispatch/, never a fixed /tmp path
+# (a stale /tmp file from a previous project survives a failed write and silently
+# poisons every worker with the wrong design system).
+mkdir -p "$PROJECT_DIR/.dispatch/scene-dispatch"
 # Shared header (identical for every worker), computed once:
 # `## Film direction` = the film-level invariants from group_spec.film_direction
 # (palette system / motion defaults + budget / ambient system / negative list);
@@ -284,11 +293,16 @@ mkdir -p /tmp/scene-dispatch
   (cd "$PROJECT_DIR" && node -p 'JSON.parse(require("fs").readFileSync("group_spec.json","utf8")).film_direction || ""')
   echo "## Tokens / easings / voice"
   (cd "$PROJECT_DIR" && cat design-system/chunks/tokens.css design-system/chunks/easings.js design-system/chunks/voice.md 2>/dev/null)
-} > /tmp/scene-shared.txt
-# Per-worker packet: shared header + that worker's Scenes YAML -> /tmp/scene-dispatch/w<N>.txt
+} > "$PROJECT_DIR/.dispatch/scene-shared.txt"
+# Guard BEFORE fan-out: header structure + the project's own brand token must both be present;
+# a contaminated packet here costs a full re-author round across every affected worker.
+grep -q '^## Film direction' "$PROJECT_DIR/.dispatch/scene-shared.txt" && \
+  grep -q -- '--brand-primary' "$PROJECT_DIR/.dispatch/scene-shared.txt" || \
+  { echo "FATAL: scene-shared.txt incomplete/stale — rebuild before dispatching workers"; }
+# Per-worker packet: shared header + that worker's Scenes YAML -> $PROJECT_DIR/.dispatch/scene-dispatch/w<N>.txt
 ```
 
-Each worker's prompt = full `agents/hyperframes-scene.md` + `## Dispatch context` with: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width`/`height`) / `Captions: <enabled|disabled>` / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body (`## Film direction` + `## Tokens / easings / voice`) and the worker's `Scenes:` list **copied verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (`scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` / `creative_brief`). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580). `design_chunks: null` (anomaly already reported by prep) -> the worker falls back to reading `design-system/design.html`.
+Each worker's prompt = full `agents/hyperframes-scene.md` + `## Dispatch context` with: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width`/`height`) / `Captions: <enabled|disabled>` / `Dispatch packet: <PROJECT_DIR>/.dispatch/scene-dispatch/w<N>.txt`, plus the shared header body (`## Film direction` + `## Tokens / easings / voice`) and the worker's `Scenes:` list **copied verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (`scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` / `creative_brief`). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580). `design_chunks: null` (anomaly already reported by prep) -> the worker falls back to reading `design-system/design.html`.
 
 After all workers return, run the static composition gate (scans `compositions/scene_*.html` per `group_spec.scene_ids`; `captions.html` is covered by its own self-lint + Step 7 whole-project lint):
 

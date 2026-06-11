@@ -56,5 +56,10 @@
     "tracking": "-0.035em",
     "sizeRange": [0.2, 0.34]
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "rail works (scale-press→settle) but the letterpress identity wants a scene surface to press INTO"
+  }
 }

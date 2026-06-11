@@ -61,5 +61,10 @@
     "css": "font-style: italic; font-weight: 700;",
     "letterBlur": 1.5
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "italic serif rail reads fine; the signature x-glide + line cascade-out exits don't exist in the std enum"
+  }
 }

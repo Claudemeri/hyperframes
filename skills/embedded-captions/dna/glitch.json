@@ -73,5 +73,10 @@
       }
     ]
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "signature = RGB-split echoes converge (engine fx) — rail keeps only a tinted skin"
+  }
 }

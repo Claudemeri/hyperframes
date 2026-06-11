@@ -80,5 +80,10 @@
       }
     ]
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "signature = streak + trail echoes along the speed vector (engine fx) — rail loses all of it"
+  }
 }

@@ -20,7 +20,7 @@ The packet is read once, is large, and is easy to skim past. Before writing any 
 
 This restatement is only to set your own direction; **never write it into `section_plan.md`**. After restating it, write the anchors + prose for each scene according to guide §2/§4.
 
-> **Output file shape (mandatory):** `section_plan.md` must contain **only** an optional single-line H1 title + a sequence of `## Scene N:` blocks. **Do not write any project-level preface / "Project-level system commitments" / "Voice·Palette·Type·Motion·Transition vocabulary" summary section / cross-scene summary** — downstream never reads it (prep starts splitting from the first `## Scene`, and workers are forbidden to read this file). Writing it = dead bytes that are written but never read, and the validator will fatal. Put global rule commitments into the prose for the **relevant scene** when needed; do not mention them at the top of the file. That is exactly what the "restate but do not write into the file" rule above means: the two restated items (Voice/Blueprint) are tone-setting in your head, not a preface to be committed.
+> **Output shape:** `section_plan.md` = an optional one-line H1 + `## Scene N:` blocks, **nothing else** — any project-level preface / summary section is dead bytes downstream never reads, and a validator fatal (full rule in guide §2 "Whole-file shape"). The two restated items above stay in your head; never write them into the file.
 
 ## Self-Validation
 

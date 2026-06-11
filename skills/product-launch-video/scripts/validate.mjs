@@ -181,13 +181,13 @@ async function runNarrator(argv) {
           errors.push(`${ctx}.transition must be an object {intent, ...}`);
         }
 
-        // captions field is no longer consumed (LV2 captions are agent-authored
-        // in Phase 4a.5 from whisper word JSON). Surface a stderr warning if it's
-        // still present so story-design templates get updated, but don't fail
-        // validation — old narrator_scripts.json files should still pass.
+        // captions field is no longer consumed (Phase 4a.5 captions are built
+        // deterministically by captions.mjs from whisper word JSON). Surface a
+        // stderr warning if it's still present so story-design templates get
+        // updated, but don't fail — old narrator_scripts.json should still pass.
         if ("captions" in scene) {
           console.warn(
-            `! ${ctx}.captions: field is deprecated and ignored by Phase 4a.5 captions agent — remove from narrator_scripts.json`,
+            `! ${ctx}.captions: field is deprecated and ignored by the Phase 4a.5 captions scripts — remove from narrator_scripts.json`,
           );
         }
       });

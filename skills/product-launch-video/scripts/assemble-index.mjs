@@ -225,7 +225,7 @@ if (bgmPath) {
   }
 }
 
-// (track 12) captions — captions agent writes this or skips; key off existence.
+// (track 12) captions — captions.mjs html writes this or legally skips; key off existence.
 let captionsEmitted = false;
 if (existsSync(join(hyperframesDir, "compositions/captions.html"))) {
   body.push(

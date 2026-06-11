@@ -77,7 +77,7 @@ const hyperframesDir = resolve(flag("hyperframes", "."));
 const outPath = resolve(flag("out", "./group_spec.json"));
 // Optional — orchestrator passes <SKILL_DIR>/assets/sfx absolute path.
 // If absent: SFX cues in section_plan are silently ignored.
-// (Captions are written by the Phase 4a.5 captions agent, not by prep.)
+// (Captions are built by the Phase 4a.5 captions.mjs scripts, not by prep.)
 const sfxLibDir = flag("sfx-lib") ? resolve(flag("sfx-lib")) : null;
 
 // ---------- Step 1: bootstrap HyperFrames project root ----------

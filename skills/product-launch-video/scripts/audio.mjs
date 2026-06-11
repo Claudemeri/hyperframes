@@ -189,7 +189,7 @@ const narrator = JSON.parse(readFileSync(narratorPath, "utf8"));
 
 // story-design agents may embed inline tags in the script field: <em>...</em>,
 // <brand>...</brand>, <emph>...</emph>, <cta>...</cta>. These are creative-time
-// annotations only — the Phase 4a.5 captions agent does NOT consume them
+// annotations only — the Phase 4a.5 captions scripts do NOT consume them
 // (captions are derived directly from whisper word JSON). audio.mjs strips
 // them before TTS so the provider doesn't speak the tag names. The strip is
 // conservative: only known tag names; unknown markup is passed through (the

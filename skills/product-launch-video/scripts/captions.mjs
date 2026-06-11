@@ -69,8 +69,8 @@ async function runGroup(argv) {
     process.exit(1);
   }
   function skip(reason) {
-    // Skip is not an error: finalize decides track-12 by file existence, and a
-    // missing caption_groups.json simply means the captions agent also skips.
+    // Skip is not an error: assembly decides track-12 by file existence, and a
+    // missing caption_groups.json simply means the html stage also skips.
     console.log(`captions: skipped (${reason})`);
     process.exit(0);
   }

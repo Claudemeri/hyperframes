@@ -20,7 +20,7 @@ The packet is read once, is large, and is easy to skim past. Before writing any 
 
 This restatement is only to set your own direction; **never write it into `section_plan.md`**. After restating it, write the anchors + prose for each scene according to guide §2/§4.
 
-> **Output shape:** `section_plan.md` = an optional one-line H1 + `## Scene N:` blocks, **nothing else** — any project-level preface / summary section is dead bytes downstream never reads, and a validator fatal (full rule in guide §2 "Whole-file shape"). The two restated items above stay in your head; never write them into the file.
+> **Output shape:** `section_plan.md` = an optional one-line H1 + **one `## Film Direction` block** (film-level invariants written once — palette system, type roles, motion defaults + budget, ambient system, film negative list, transition vocabulary, asset coverage table, stillness allocation; guide §4.1) + `## Scene N:` blocks of **delta prose only** (≤150 words target; guide §4.2), **nothing else**. Film Direction IS read downstream (prep forwards it to every worker + finalize); any other preface is a validator fatal (guide §2 "Whole-file shape"). The two restated items above stay in your head; never write them into the file. The litmus test for every scene sentence: could it appear verbatim in another scene? Yes → it belongs in Film Direction.
 
 ## Self-Validation
 

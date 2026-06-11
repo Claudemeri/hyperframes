@@ -1,7 +1,7 @@
 ## Flow Overview
 
 1. **All inputs are already inlined in dispatch** (`## Effects catalog` / `## Blueprints index` / `## SFX library` / `## Design rules` [full text of 4 rules] / `## Design chunks` [`index.json` + actually present hints/voice/tokens/easings] / `## Narrator scripts` / `## Audio meta`) - **use them directly; do not Read from disk**
-2. For each scene: choose effects from `## Effects catalog` (timeline layering order; count rules in §2), write anchor block + 8 prose requirements; in prose, describe desired visual components by **role** ("a stat block", "a framed quote"), while the worker chooses concrete components from the `## Design chunks` library
+2. Write `## Film Direction` once (the film-level invariants — §4.1), then for each scene: choose effects from `## Effects catalog` (timeline layering order; count rules in §2), write anchor block + **lean delta prose** (≤150 words; §4.2); in prose, describe desired visual components by **role** ("a stat block", "a framed quote"), while the worker chooses concrete components from the `## Design chunks` library
 3. Run validator until exit 0
 
 ---
@@ -57,7 +57,7 @@ No need to read `chunks/type-roles.md` -> named text role directory (worker look
 
 ## 2. Hard Contracts (machine-checked)
 
-**Whole-file shape (mandatory):** `section_plan.md` contains **only** an optional single-line H1 title + a sequence of `## Scene N:` blocks, **nothing else**. **Do not write a project-level preface / "system commitments" / project-level commitments / cross-scene summary** - downstream never reads it: `prep.mjs` starts splitting from the first `## Scene`, validator only traverses scene blocks, and workers are forbidden to read `section_plan.md` (they receive per-scene `creative_brief` sliced by prep). Any paragraph before the first `## Scene` = dead bytes written but never read, and validator errors. Global invariants reach workers through **two real channels**: 1. prose inside the relevant scene; 2. dedicated channels (`voice_file` / `Captions` flag / `tokens.css` / `easings.js`). The "restatement" before writing (§4 Step 0) happens **in your head only**; never write it into the file.
+**Whole-file shape (mandatory):** `section_plan.md` contains **only** an optional single-line H1 title + **one `## Film Direction` block** (validator-required; content in §4.1) + a sequence of `## Scene N:` blocks, **nothing else**. Film Direction is a **real channel**, not a preface: `prep.mjs` copies it into `group_spec.film_direction`, and the orchestrator prepends it to every scene worker's shared packet header and to the finalize dispatch. Any **other** content before the first `## Scene` = dead bytes and a validator error. Global invariants reach workers through **two real channels**: 1. the `## Film Direction` header (film-level rules, written once); 2. dedicated channels (`voice_file` / `Captions` flag / `tokens.css` / `easings.js`). Scene prose carries **only scene-specific deltas** on top of those. The "restatement" before writing (§4 Step 0) happens **in your head only**; never write it into the file.
 
 Each scene in `section_plan.md` is one block, in the same order as `narrator_scripts.json`:
 
@@ -84,7 +84,8 @@ Each scene in `section_plan.md` is one block, in the same order as `narrator_scr
 - Required anchors each stand alone on their own line, with no surrounding text; missing any required anchor -> downstream fatal -> rerun Phase 3
 - **PrimarySubjectTimeline + Handoff:** required for multi-act scenes or scenes where action/payoff + proof/supporting subject share the frame. Missing either -> validator fatal. **Position:** immediately after SFX block and before prose (machine reason in template note above - they must enter `creative_brief` for worker)
 - **Block order:** all `**Anchor:**` lines (including SFX bullets, PrimarySubjectTimeline, Handoff) must precede free prose; any `**Word:**` anchor line after prose begins -> validator fatal (interleaving makes worker brief unpredictable)
-- **File-level:** no project-level preface / commitments section before the first `## Scene` (only one H1 title allowed) -> validator fatal (see whole-file shape above)
+- **File-level:** before the first `## Scene` only one H1 title + one `## Film Direction` block are allowed; **missing `## Film Direction` -> validator fatal**; Film Direction > 700 words -> fatal (it is a one-page header, not a second plan); any other preface -> fatal (see whole-file shape above)
+- **Per-scene prose length:** target ≤150 words; > 320 words -> validator fatal. Walls of prose are almost always film-level invariants restated per scene — move them into `## Film Direction`
 - **Transition** (soft / if present): type must be in TRANSITION-REGISTRY vocabulary; direction is only legal for directional type (`push-slide`); duration `0 < dur <= 2.0s`. The legacy `**Continuity:**` / `**Bridge:**` anchors were removed (Tier-A no longer exists) — writing either is a validator fatal
 
 **Blueprint anchor (soft - validator does not require, strongly recommended):**
@@ -108,7 +109,7 @@ Value of writing Blueprint anchor: (1) forces plan agent to explicitly commit to
 - **Omitting the whole line = accept default:** harness derives from surface conflict / energy (clashing backgrounds -> `blur-crossfade`, high energy -> `zoom-through`, calm -> `blur-crossfade`, otherwise `crossfade`). So **omit when uncertain**; default is usually good
 - harness handles everything: overlap, outgoing clip extension, track assignment, GSAP stamping, verification. You only name intent; **never write transition code, touch timing, or touch index.html**
 
-> This is the plan agent's explicit commitment about how scenes connect. It must align with prose item 8 (transition to next scene). Item 8 is human-readable creative direction; the `**Transition:**` anchor is the machine instruction for the harness.
+> This is the plan agent's explicit commitment about how scenes connect. It must align with the prose "eye destination" sentence (§4.2 item 6) — that sentence is human-readable creative direction; the `**Transition:**` anchor is the machine instruction for the harness.
 
 **SFX anchor (optional / soft - only write when using sound effects):**
 
@@ -185,86 +186,111 @@ Four rule files:
 - `rules/typography.md` - 7-level type role ladder / multi-dimensional hierarchy / font pairing / forbidden pairs / CJK
 - `rules/color-system.md` - 7 palette roles / 60-30-10 / cross-scene consistency / dangerous combinations / background layering
 - `rules/composition.md` - four canvas zones / 7 templates (film >=3 templates) / density rules / depth techniques
-- `rules/motion-language.md` - 5 spring intents / duration tiers / beat structure / stillness-before-climax / continuous motion / transition vocabulary (film 2-3 types)
+- `rules/motion-language.md` - 5 spring intents / duration tiers / beat structure / stillness-before-climax (2-3 scenes, allocated in Film Direction) / motion budget (one macro move + 1-2 live elements) / transition vocabulary (film 2-3 types)
 
 ---
 
-## 4. Writing Prose (after anchors)
+## 4. Writing the Plan - Film Direction Once, Scene Deltas After
 
-**Step 0 (before writing, mandatory):** first restate this run's direction to yourself (Voice register / Blueprint decision for each scene) - full instructions live in the **agent prompt "Restate the contract before writing" section** (that persistent prompt is the single source of truth, not repeated here). Key constraint: restatement **only sets direction in your head; never write it into `section_plan.md`** (writing it = project-level preface = forbidden by §2 whole-file shape = validator fatal).
+**Step 0 (before writing, mandatory):** first restate this run's direction to yourself (Voice register / Blueprint decision for each scene) - full instructions live in the **agent prompt "Restate the contract before writing" section** (that persistent prompt is the single source of truth, not repeated here). Key constraint: restatement **only sets direction in your head** - what belongs on disk is `## Film Direction` (film-level invariants, §4.1) and the scene blocks; any other preface = validator fatal.
 
-Then write one free-prose paragraph in the following 8-item order. This prose is passed **verbatim** to the downstream build agent - write as if briefing a senior animator who has not seen this brand.
+**The litmus test that governs this whole section:** _"Could this sentence appear verbatim in another scene's prose?"_ **Yes -> it belongs in `## Film Direction`, not in the scene.** The archived failure mode this kills: an 11-scene plan of 4,000 words where every scene restated the caption band, the 60-30-10 split, the ambient layers, `multiplicative breathing`, and a `stillness-before-climax` - ~80% invariants repeated 11×, burying each scene's 2-3 genuinely unique ideas where the worker had to dig for them.
+
+### 4.1 `## Film Direction` (write once, before Scene 1; hard cap 700 words, aim for ~250-400)
+
+The film-level invariant layer. prep.mjs copies it into `group_spec.film_direction`; the orchestrator prepends it **verbatim** to every scene worker's packet and the finalize dispatch - so anything written here reaches every downstream agent exactly once. Cover, as compact labeled lines / short lists:
+
+1. **Palette system** - the film's 60-30-10 by role with accent binding ("60% canvas / 30% hairline + repeated canvas (no surface token) / 10% accent: brand-primary carries heroes and the CTA, deco-3 cyan as particle accents only").
+2. **Type roles** - what display / body / mono are for across the film.
+3. **Motion defaults + budget** - default ease intent per element class ("entries `EASE.entry`; heroes heavy; idle `EASE.drift`; exits none - scenes hold the final frame"), and the film's **motion budget**: every scene gets ONE root-level macro motion (camera drift / dolly / parallax) + at most 1-2 secondary live elements; everything else rests (see motion-language.md "Motion Budget"). Reference only canonical role keys `EASE.entry/emphasis/exit/drift`, `DUR.snap/med/slow` - worker uses this key set directly; invented aliases fall through.
+4. **Ambient system** - the recurring background / atmosphere layers and any alternation scheme ("CRT scanlines + grain + low-opacity grid, full-bleed every scene; dark↔light ground alternation by scene parity").
+5. **Film negative list** - what NO scene may do ("no mesh gradients, no neon-on-black, no glow bloom, no purple-blue AI gradient, no bokeh").
+6. **Transition vocabulary** - the 2-3 registry types this film repeats (must agree with the per-scene `**Transition:**` anchors).
+7. **Asset coverage table** - every `assetCandidates[]` path -> the scene that uses it + its role, or `DROP` + a one-line reason. This is the **single place** coverage is decided; scene prose never defends keeping or dropping an asset. story-design spread candidates for coverage, so default to placing each one - but a deliberate DROP with a reason beats a pointless low-opacity "supporting ghost" that fights the one-primary contract.
+8. **Stillness-before-climax allocation** - name the 2-3 scenes (max) that get the beat, where the narration lands a payoff. Repeated in every scene it stops being a comma and becomes a tic.
+9. **Captions** (only when top-level dispatch says `Captions: enabled`) - one line: the bottom ~17% band is reserved film-wide, foreground anchors around 0.42×height; per-scene prose mentions captions only for genuinely risky placements.
+
+Same role/intent discipline as everywhere: **no hex / font names / ease curves / px / ms** (those live in `tokens.css` / `easings.js` / build work).
+
+### 4.2 Scene prose (after anchors; target ≤150 words, validator-fatal above 320)
+
+One free-prose paragraph of **scene-specific deltas only**, passed verbatim to the build agent - write as if briefing a senior animator who has **already read Film Direction**. In order:
 
 1. **Emotion and rhythm footnote** - one sentence naming the beat's _feeling_ and _rhythm_ ("frustrated, slightly-off comma", "luminous launch-film slow build"). **This is the dividing line between real plan and generic AI output.**
-2. **Spatial relationship** - composition template (centered / thirds / split / layered / asymmetric / triptych / strip), primary asset's canvas share (>=40%), and whitespace intent. **When top-level dispatch says `Captions: enabled` (planning hint derived by orchestrator from audio_meta; prep.mjs recomputes authoritative `group_spec.captions_enabled` in Step 5):** captions reserve the bottom ~17% band, so concepts that push content low (full-bleed cards, oversized hero, large CTA, stat stamp) must **explicitly tell worker to keep all content in the upper ~83% and reserve the bottom ~17% as caption territory**, with vertical center anchored around 0.42×height. Example wording: "centered in the upper ~83%, caption band reserved below", "bottom edge of card sits just above the caption band", "CTA vertically centered around 42% of canvas height." Background / ambient layers are unrestricted and remain full-bleed.
-3. **Effect -> asset mapping** - for every id in `**Effects:**`, name the asset (`public/<basename>`, from this scene's `assetCandidates`) or text label driving it, and _when_ it fires in the scene phase timeline. **Default to using all scene `assetCandidates`** (story-design already spread them for coverage; do not prune again): primary subject still occupies >=40% canvas, choose the one most tied to the narrative, and have other candidates **coexist as supporting / ambient layers rather than being dropped** - triptych / strip / layered templates can stage multiple assets with hierarchy, or different phases can introduce them sequentially. If a candidate truly cannot fit this scene -> name it in item 7 negative sentence ("do not use `public/X` in this scene because..."), **do not silently ignore** (if it appears nowhere else, it is discarded). A candidate whose path ends in `.mp4` / `.webm` / `.mov` is a **moving clip** (worker renders it as a muted, looping `<video>`): say _when in the phase timeline it plays_ and whether it holds or loops, rather than treating it as a static image — a `.png` `[video-still]` is the static fallback. **Placement is fixed by the runtime, not the plan: a `<video>` must be a direct child of the host root (`index.html`), NEVER inside a scene's sub-comp `<template>` (it would render blank/black), and its per-scene motion must be authored on the MAIN timeline at global time — the scene sub-comp keeps only the frame/shell and cannot drive the host video.** Brief the effect/timing as usual; worker maps it to a host-root video per `hyperframes-core` → `variables-and-media.md` / `composition-patterns.md` archetype B.
-4. **Brand style overlay (by role, not value)** - Palette: name 60% canvas / 30% surface (if preset has no surface token, use hairline + repeated canvas and say so) / 10% accent, and bind accent to a focal element; Type: what display is used for, what body is used for, whether mono eyebrow exists; Motion: reference only canonical role keys `EASE.entry` / `EASE.emphasis` / `EASE.exit` / `EASE.drift` and `DUR.snap` / `DUR.med` / `DUR.slow` (§1 item 4; these are role keys exposed by `easings.js`) - do not invent alias keys, because worker uses this key set directly and missing keys fall through. **Never copy hex / font names / ease curves / px / em / ms.** If `chunks/tokens.css` lacks a token (e.g. mono font not extracted), note expected fallback.
-5. **Multi-phase choreography** - phase sequence `entry -> ambient drift -> major transition -> stillness -> emphasis -> exit` and rough duration ratio; explicitly name `stillness-before-climax`; name spring intent for each phase (`entry` / `gentle` / `snappy` / `heavy` / `slam`). If §3 selected a blueprint, follow the phase skeleton from that blueprint index description; this scene's emotional beat determines each phase's ratio and ease intent, **not the blueprint's exact timing values** (build work). Use **scene-local relative seconds / ratios** (e.g. "0-0.45s entry", "~0.5s setup hold"); **do not restate total scene duration / end timestamp in prose** (e.g. "exit until 2.82s") - total duration is in `**Duration:**`, and worker `data-duration` is pinned to `estimatedDuration_s`; prose approximations only conflict. Anchor order (PST/Handoff before prose) is in §2.
-6. **Continuous / ambient motion** - what keeps the scene alive after entry: multiplicative breathing on hero (±2-5% scale), inverse-phase card sine drift (±6-8px), icon orbit, halftone density deformation, CTA glow pulse.
-7. **One negative sentence** - what this scene must **not** do, in codex-plugin tone ("no halo behind the bell - Jake killed those", "no neon glow, this is a workspace").
-8. **Transition to next scene** - the transition (crossfade/blur-crossfade/push-slide/zoom-through/squeeze) is injected by the Step 7 harness onto clip wrappers, and **the worker writes no exit tween** - a short sentence about eye destination is enough; **do not elaborate veil/dissolve/curtain mechanics** (nobody follows it, wasted tokens). The machine instruction always lives in the `**Transition:**` anchor.
+2. **Composition + subject** - composition template (centered / thirds / split / layered / asymmetric / triptych / strip), the primary subject and its canvas share (>=40%), supporting elements by role, whitespace intent. Mention the caption band only when this scene's concept pushes content low ("CTA bottom edge sits just above the caption band"). A candidate ending in `.mp4` / `.webm` / `.mov` is a **moving clip**: say _when in the phase timeline it plays_ and whether it holds or loops (worker renders it as a muted host-root `<video>` per `hyperframes-core` archetype B; a `.png` `[video-still]` is the static fallback).
+3. **Scene-unique choreography** - for every id in `**Effects:**`: the asset (`public/<basename>`) or text it drives, and when it fires (scene-local relative seconds / ratios - **never restate total duration**; `data-duration` is pinned to `estimatedDuration_s`). Name this scene's **macro motion** (which camera-style move from the budget). Name spring intent / `EASE.*` keys **only where the scene departs from the Film Direction defaults**. If §3 selected a blueprint, follow its phase skeleton; the emotional beat sets ratios, not the blueprint's timing values.
+4. **Style deltas** (only if any) - where this scene deviates from Film Direction ("accent flips to deco-4 magenta as the hot focal this scene"; "text one weight lighter on the dark ground"). Nothing deviates -> write nothing.
+5. **One negative sentence** (only if scene-specific) - "no glow on the cursor - flat pixel cursor only". Film-level negatives live in the header; do not repeat them.
+6. **Eye destination** - one short sentence on where the eye travels into the next scene. The machine instruction is the `**Transition:**` anchor; **do not elaborate veil/dissolve/curtain mechanics** (the worker writes no exit tween - the harness injects transitions on clip wrappers).
 
-**Do not** write pixel values, GSAP timeline code, composition HTML, concrete hex / font names / ease curves - that is build-agent work. But give enough constraints that the result clearly belongs to _this scene_, not a generic interpretation: concrete intent roles, duration by ratio, font references by purpose, palette distribution by role, specific phase order.
+**Do not** write pixel values, GSAP timeline code, composition HTML, concrete hex / font names / ease curves - that is build-agent work. **Do not re-promise what already travels via Film Direction or dedicated channels:** caption-band geometry, palette ratios, ambient layers, breathing / idle defaults, `EASE`/`DUR` labels that match the declared defaults, voice recipe mechanics (worker has the full `voice_file`; mention voice only for a special application - "hero resolves as one-line UPPERCASE stacked words"), or asset-coverage defenses ("rather than being dropped" - the table owns coverage). **Every surviving word should be a decision unique to this scene.**
 
-**Do not restate global rules that workers already receive through dedicated channels** (saves tokens, avoids drift): each worker already receives `voice_file` (full DOM text recipe), `Captions` flag + its keep-out contract (bottom ~17% caption-band geometry), `tokens.css` / `easings.js` (all token values and curves). Therefore prose should **not repeat** mechanical voice recipe details (strip/case/line breaks), caption-band geometric constants, or any hex/font/curve values scene by scene - write only **scene-specific application or risk** (e.g. voice: "hero resolves as one-line UPPERCASE stacked words; `<mark>` binds 'videos'", not the whole recipe; caption: "CTA bottom edge stays just above caption band", not "bottom 17% is caption territory, anchor 0.42×height" every time). **Global rules without a dedicated channel still need to be carried scene by scene** (e.g. "no neon / no italic / 60-30-10 palette allocation / hard cut / stillness-before-climax beat") - worker only learns those from this scene's prose, so they are load-bearing, not repetition.
+Anchor order (PST/Handoff before prose) is in §2 and unchanged - risky scenes still carry `**PrimarySubjectTimeline:**` + `**Handoff:**` lines.
 
-### Complete Scene Block Example (with anchors)
+### Complete File Example (header + one scene)
 
 ```markdown
+# Acme Launch — Editorial Slate
+
+## Film Direction
+
+**Palette:** 60% paper canvas / 30% hairline rules + repeated canvas (no surface token) / 10% accent — brand-red carries every hero and the CTA; deco-blue only as small chart accents. Ink stays warm off-black.
+**Type:** display = hero claims only; mono uppercase = eyebrows, metadata, chips; body = doc surfaces.
+**Motion:** entries EASE.entry; heroes heavy; idle EASE.drift; exits none — scenes hold the final frame. Budget: one root-level camera move per scene (slow drift or push) + at most one breathing hero; everything else rests.
+**Ambient:** architectural grid at low opacity + paper grain, full-bleed, every scene. Nothing else.
+**Never (film-wide):** no mesh gradients, no neon, no glow bloom, no bokeh.
+**Transitions:** crossfade + push-slide only.
+**Stillness-before-climax:** scenes 2 and 5 only.
+**Assets:** `public/hero-dashboard.png` → Scene 2 primary; `public/logo.svg` → Scenes 1+6 (opener draw, closer hold); `public/team-photo.jpg` → DROP (off-message for a product film).
+
 ## Scene 4: the-spiral
 
 **Effects:** [`discrete-text-sequence`, `cursor-click-ripple`, `context-sensitive-cursor`, `sine-wave-loop`]
 **Duration:** 6.20s
 **Blueprint:** composed
+**Transition:** push-slide LEFT
 
-Beat 2b — the spiral (frustrated, slightly-off comma). Centered chat-app composition: ...
+Beat 2b — the spiral (frustrated, slightly-off comma). Centered chat-app composition: message stack scrolls up at accelerating pace, cursor anchored bottom-right, never moves. ~5-7 follow-up prompts flash through, each punctuated by a button click + a late SFX tick — pace tightens, tension builds. Hold on a final frustrated beat: cursor still, chat full, SFX slightly off. Macro motion: slow dolly-in on the scene root across the whole beat. Multi-phase: setup hold ~0.5s → accelerating montage ~4.8s → final still beat ~0.9s. Accent binds to the cursor only this scene. No halo behind the bell — Jake killed those. Eye exits left toward the incoming resolution panel.
 ```
 
-```markdown
-**Effects:** [`counting-dynamic-scale`, `center-outward-expansion`, `multi-phase-camera`, `svg-icon-enrichment`, `sine-wave-loop`]
-**Blueprint:** extended `hook-counter-burst`
-```
-
-### Prose Example (read before writing)
-
-> "Beat 2b — the spiral (frustrated, slightly-off comma). Centered chat-app composition: message stack scrolls up at accelerating pace, cursor sits anchored at the bottom-right, never moves. ~5-7 follow-up prompts flash through, each punctuated by a button click + a late SFX tick — pace tightens, tension builds. Hold on a final frustrated beat: cursor still, chat full, SFX _slightly_ off. **Palette: canvas + ink default + single accent on the cursor only — no halo, no glow.** Type: display in chat bubbles, body for supporting text. **Multi-phase: setup hold ~0.5s -> accelerating montage ~4.8s -> final still beat ~0.9s (stillness-before-climax) -> cut-the-curve LEFT into Act 3.** Hero cursor does multiplicative breathing on its glow only, not position. No neon."
-
-**Order:** emotional tone -> composition -> palette by role -> type by purpose -> phase sequence with ratio durations + intent roles -> negative sentence -> transition. **No hex / font names / ease curves / GSAP code; every word does work.**
+That scene block is ~100 words of prose, and **every sentence is unique to the scene** - that is the target shape. The palette system, ambient grid, breathing defaults, and caption band are all upstairs in Film Direction, written once.
 
 ---
 
 ## 5. Soft Guidance (taste-level, affects plan quality but not validator)
 
-### Scene Quality Floor - Three-Layer Motion Model
+### Scene Quality Floor - Motion Budget
 
-> This is the **quality-floor perspective** ("what counts as alive enough"); **how to write it per scene** is §4 item 6 (continuous/ambient motion). Same concept at two levels; the "multiplicative breathing is not yoyo" method is explained only here, so do not repeat the methodology in every scene prose.
+> Declared once in Film Direction item 3 ("Motion defaults + budget"); full rationale in motion-language.md "Motion Budget". Do not re-spec it per scene - scene prose only names which macro move this scene uses (§4.2 item 3).
 
-Every scene must have:
+Every scene gets:
 
-1. **Macro Motion** - camera drift: slow whole-frame zoom + displacement (background and camera counter-scale is an archive signature; concrete values are build work)
-2. **Element Motion** - content continues to drift / rotate / scale after entry (never static - use multiplicative breathing on final scale, not yoyo)
-3. **Micro Motion** - ambient details: flowing gradient, breathing glow, loop particles, halftone density deformation
+1. **ONE macro motion** (required) - a root-level camera-style move: slow drift, dolly in/out, push, parallax. It moves every layer coherently (background counter-scale is an archive signature; concrete values are build work) - this global correlation is what makes a frame read as _filmed_ rather than _animated UI_.
+2. **At most 1-2 secondary live elements** - hero multiplicative breathing (on final scale, not yoyo), CTA glow pulse, a single ambient deformation. Pick from motion-language.md's pattern menu.
+3. **Everything else rests.** Stillness is not dead air - it is what makes the moving element read (composition.md hierarchy: "one element moving vs all else static" is a strong contrast). A scene where everything floats at its own phase reads as noise, not life.
+
+An element that springs in and then sits still while the camera holds = slide. An element that rests while the camera drifts = cinema.
 
 ### Scene Quality Floor - Ambient Layer
 
-Beyond core content, every scene needs:
+The ambient system (background swell / grid / scanline / particles / halftone) is declared **once** in Film Direction item 4 and mounted by every scene - scene prose does not re-list it. Per scene, what remains a floor:
 
-1. **Background swell** - dual-radial overlay in brand-adjacent hues; or architectural grid for workspace scenes
-2. **Ambient particles / scanline / halftone** - brand-color float particles, low-opacity scanline, or beat-deforming halftone field
-3. **Emphasis moment** - at least one impact beat (ripple / glow burst / impact lines / screen-shatter)
+1. **No bare solid background** - the film's declared ambient layers must actually be present
+2. **Emphasis moment** - at least one impact beat (ripple / glow burst / impact lines / screen-shatter)
 
 ### Multi-Phase Choreography
 
 ```
-entry -> ambient drift -> major transition (morph / pivot / collapse) -> stillness-before-climax (~0.3-0.75s) -> result / emphasis -> idle breathing -> exit
+entry -> ambient drift -> major transition (morph / pivot / collapse) -> [stillness-before-climax (~0.3-0.75s), only in the 2-3 scenes Film Direction allocates] -> result / emphasis -> idle hold
 ```
 
-An element that springs in and then sits still = slide, not video.
+Phases vary by the beat's role (motion-language.md "Beat Structure"): a fast-montage scene may be two phases; a process-reveal scene may be one continuous take. Do not stamp the same skeleton on all scenes.
 
 ### Forbidden Patterns (most common failures)
 
-- continuous motion covers <50% of scene duration
+- no macro motion: camera holds AND every element settles after entry (the scene reads as a slide)
 - treating 3px micro-float as the only "motion" (archive minimum amplitude ±6px or ±2-5% scale)
+- the opposite failure: everything moves - more than the budgeted 1-2 live elements floating / breathing / orbiting at once (uncorrelated ubiquitous motion = noise; it also erases motion as a hierarchy signal)
 - using word-by-word text popping as the _primary_ visual (unless carefully choreographed as visual lead)
 - all elements enter simultaneously (must stagger; total <=500ms)
 - only ambient layer, no primary content (particles + captions)
@@ -273,7 +299,7 @@ An element that springs in and then sits still = slide, not video.
 - **when captions enabled, key content (CTA / hero / stat stamp / headline) enters bottom ~17% (y>900) caption band = covered by captions** (background/ambient layers may extend down; key foreground may not)
 - generic AI clichés: saturated neon on pure `#000`, purple-blue AI gradient background, decorative floating bokeh balls
 - solid background without swell / grid / scanline / particle
-- jumping directly from action to payoff, with no `stillness-before-climax` comma
+- in a scene Film Direction allocated a `stillness-before-climax`: jumping directly from action to payoff with no comma; in every other scene: stamping the comma anyway (a signature repeated everywhere is a tic)
 - multiple primary subjects fighting for center safe zone; any product / proof / logo / stat / headline / card cluster on screen together must have primary/supporting and handoff
 - treating camera pan / zoom / push as old-content exit; camera moves the viewpoint but does not automatically reduce old primary visual weight
 - **copying concrete hex / font names / ease curves from `chunks/tokens.css` / `chunks/easings.js` into prose** - that is build-agent work

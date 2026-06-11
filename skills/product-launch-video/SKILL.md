@@ -276,12 +276,19 @@ exit 0 = normal. `captions: skipped (<reason>)` = legal skip — no `captions.ht
 ```bash
 mkdir -p /tmp/scene-dispatch
 # Shared header (identical for every worker), computed once:
-(cd "$PROJECT_DIR" && cat design-system/chunks/tokens.css design-system/chunks/easings.js design-system/chunks/voice.md 2>/dev/null) \
-  > /tmp/scene-shared.txt
+# `## Film direction` = the film-level invariants from group_spec.film_direction
+# (palette system / motion defaults + budget / ambient system / negative list);
+# each scene's creative_brief carries only scene-specific deltas on top of it.
+{
+  echo "## Film direction"
+  (cd "$PROJECT_DIR" && node -p 'JSON.parse(require("fs").readFileSync("group_spec.json","utf8")).film_direction || ""')
+  echo "## Tokens / easings / voice"
+  (cd "$PROJECT_DIR" && cat design-system/chunks/tokens.css design-system/chunks/easings.js design-system/chunks/voice.md 2>/dev/null)
+} > /tmp/scene-shared.txt
 # Per-worker packet: shared header + that worker's Scenes YAML -> /tmp/scene-dispatch/w<N>.txt
 ```
 
-Each worker's prompt = full `agents/hyperframes-scene.md` + `## Dispatch context` with: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width`/`height`) / `Captions: <enabled|disabled>` / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body and the worker's `Scenes:` list **copied verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (`scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` / `creative_brief`). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580). `design_chunks: null` (anomaly already reported by prep) -> the worker falls back to reading `design-system/design.html`.
+Each worker's prompt = full `agents/hyperframes-scene.md` + `## Dispatch context` with: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width`/`height`) / `Captions: <enabled|disabled>` / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body (`## Film direction` + `## Tokens / easings / voice`) and the worker's `Scenes:` list **copied verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (`scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` / `creative_brief`). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580). `design_chunks: null` (anomaly already reported by prep) -> the worker falls back to reading `design-system/design.html`.
 
 After all workers return, run the static composition gate (scans `compositions/scene_*.html` per `group_spec.scene_ids`; `captions.html` is covered by its own self-lint + Step 7 whole-project lint):
 
@@ -326,6 +333,8 @@ PROJECT_DIR: <video project root>
 Render quality: high     # or draft / standard
 Captions: <enabled | disabled>   # = group_spec.captions_enabled
 BGM: <one-line wait-bgm verdict, e.g. "ready (lyria)" / "skipped (no key)" / "timeout">
+Film direction: |        # = group_spec.film_direction (film-level invariants the briefs assume)
+  <verbatim>
 Scenes:                  # one line per scene, copied verbatim from group_spec.json
   - { scene_id, start_s, estimatedDuration_s, effects: [...], creative_brief: |
       <Phase 3 prose for this scene> }

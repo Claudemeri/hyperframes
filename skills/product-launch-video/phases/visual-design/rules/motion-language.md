@@ -125,7 +125,7 @@ Static elements = dead video. Plan must name what keeps each element alive after
 
 Inter-scene transitions follow a limited vocabulary. Choose only 2-3 and repeat them - repetition creates professional cohesion. Cleanest archive reference: playground-launch uses **only cut-the-curve** across 8 distinct visual universes, which is what makes the film cohere.
 
-> **These 2-3 slots count only Tier-B transitions on `break` boundaries** (choose 2-3 from crossfade / blur-crossfade / push-slide / zoom-through / squeeze). `shared-element` (morph, Tier-A) is a shared-element bridge hand-written by the worker inside two scenes, **not part of this vocabulary and not counted** - it is driven by narrative `intent: morph`, and may be used freely where the story needs it (e.g. several morph pairs in a demo sequence).
+> **These 2-3 slots count only Tier-B transitions on `break` boundaries** (choose 2-3 from crossfade / blur-crossfade / push-slide / zoom-through / squeeze). `shared-element` (morph, Tier-A) is a shared-element bridge hand-written by the worker inside two scenes, **not part of this vocabulary and not counted** - it is driven by narrative `intent: morph`, which appears only on premium-transition runs (user opt-in); on a standard run every boundary is Tier-B.
 
 ### Cut-the-curve (archive signature; default for most cases)
 

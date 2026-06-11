@@ -22,11 +22,10 @@
 //
 // This script runs AFTER assemble-index + inject-transitions:
 //   1. Scans compositions/scene_*.html for [data-video-src] declarations.
-//   2. Loads each declaring scene standalone in headless Chrome (same probe
-//      machinery as check-overlap.mjs: GSAP CDN + brand tokens + @font-face,
-//      timeline seeked to the video's start frame, [data-start]/[data-duration]
-//      clip windows emulated) and MEASURES the poster's rendered rect +
-//      border-radius. No hand-derived geometry.
+//   2. Loads each declaring scene standalone in headless Chrome (GSAP CDN +
+//      brand tokens + @font-face, timeline seeked to the video's start frame,
+//      [data-start]/[data-duration] clip windows emulated) and MEASURES the
+//      poster's rendered rect + border-radius. No hand-derived geometry.
 //   3. Emits one host-root <video class="clip"> per declaration into
 //      index.html, inside a sentinel block (idempotent — re-runs replace it):
 //        - global data-start/data-duration = scene slot start + local offset,
@@ -45,21 +44,23 @@
 // transforms on the slot. Slot entry/exit animation belongs outside the
 // declared window (use data-video-offset to start after the entry settles).
 //
-// Browser bootstrap is identical to check-overlap.mjs: puppeteer-core via
-// walk-up resolution (--ensure-deps installs it once), Chrome reused from
+// Browser bootstrap: puppeteer-core via walk-up resolution (`--ensure-deps`
+// installs the module once, no browser download), Chrome reused from
 // ~/.cache/hyperframes/chrome or ~/.cache/puppeteer; never downloads.
 //
 // Usage:
 //   node hoist-videos.mjs --group-spec ./group_spec.json --hyperframes . [--json]
+//   node hoist-videos.mjs --ensure-deps     # one-time, from the workspace root
 //
 // Exit codes:
 //   0 — hoisted N videos (or no declarations; any stale block is removed)
 //   1 — a declaration is invalid (missing file / bad numbers / window too
 //       small / element not measurable) — fix the scene file upstream
-//   2 — browser unavailable (same remedy as check-overlap: --ensure-deps)
+//   2 — browser unavailable (remedy: `node hoist-videos.mjs --ensure-deps`)
 
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
+import { execSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -74,6 +75,43 @@ const flag = (name, def) => {
 };
 const asJson = argv.includes("--json");
 const GSAP_CDN = flag("gsap-cdn", "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js");
+
+// ---------- --ensure-deps mode (run once from the workspace root) ----------
+if (argv.includes("--ensure-deps")) {
+  let pp = loadPuppeteer(null);
+  if (!pp) {
+    console.log("hoist-videos: puppeteer-core not resolvable — installing (npm i --no-save) ...");
+    try {
+      execSync("npm install --no-save --no-audit --no-fund puppeteer-core", {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 120_000,
+      });
+    } catch (e) {
+      console.error(
+        `✗ hoist-videos --ensure-deps: npm install failed: ${e.message?.split("\n")[0]}`,
+      );
+      process.exit(2);
+    }
+    pp = loadPuppeteer(null);
+    if (!pp) {
+      console.error(
+        "✗ hoist-videos --ensure-deps: puppeteer-core still not resolvable after install",
+      );
+      process.exit(2);
+    }
+  }
+  const needsBinary = pp.name === "puppeteer-core";
+  const chrome = needsBinary ? findChromeBinary() : "(bundled by puppeteer)";
+  if (needsBinary && !chrome) {
+    console.error(
+      "✗ hoist-videos --ensure-deps: no Chrome binary in ~/.cache/hyperframes/chrome or ~/.cache/puppeteer — run `npx hyperframes doctor` once",
+    );
+    process.exit(2);
+  }
+  console.log(`✓ hoist-videos deps ready: module=${pp.name}, chrome=${chrome}`);
+  process.exit(0);
+}
 
 const groupSpecPath = resolve(flag("group-spec", "./group_spec.json"));
 const projectRoot = resolve(flag("hyperframes", "."));
@@ -189,7 +227,7 @@ for (const d of declarations) {
   }
 }
 
-// ---------- browser bootstrap (same mechanism as check-overlap.mjs) ----------
+// ---------- browser bootstrap ----------
 function loadPuppeteer(root) {
   const bases = [
     pathToFileURL(join(process.cwd(), "noop.mjs")).href,
@@ -253,7 +291,7 @@ const unavailable = (reason) => {
   if (asJson) console.log(JSON.stringify({ status: "unavailable", reason, hoisted: 0 }, null, 2));
   console.error(`✗ hoist-videos: ${reason}`);
   console.error(
-    "  → run `node check-overlap.mjs --ensure-deps` from the workspace root (installs puppeteer-core); Chrome itself comes from `npx hyperframes doctor`",
+    "  → run `node hoist-videos.mjs --ensure-deps` from the workspace root (installs puppeteer-core); Chrome itself comes from `npx hyperframes doctor`",
   );
   process.exit(2);
 };
@@ -351,7 +389,7 @@ ${tmplMatch[1]}
         (sid, t, ord) => {
           const tl = window.__timelines && window.__timelines[sid];
           if (tl) tl.seek(t, false);
-          // emulate runtime clip windows (same approach as check-overlap)
+          // emulate runtime clip windows
           for (const el of document.querySelectorAll("[data-start]")) {
             const start = parseFloat(el.getAttribute("data-start"));
             if (Number.isNaN(start)) continue;

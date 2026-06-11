@@ -354,8 +354,7 @@ writeFileSync(outPath, html);
 // The captions runtime fetches this file at validate time; absence yields a
 // noisy validate ✗ that previously sent finalize on a ~30s debug chase. An
 // empty array is a no-op override list — semantically identical to absent —
-// but the file existing silences validate. preflight-finalize.mjs writes the
-// same shim defensively in case this engine is bypassed on a resume path.
+// but the file existing silences validate.
 const captionOverridesPath = join(hyperframesDir, "caption-overrides.json");
 let captionOverridesCreated = false;
 if (!existsSync(captionOverridesPath)) {

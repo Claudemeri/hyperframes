@@ -1229,9 +1229,8 @@ ${tokensCss.trim()}
 // CLI usage:
 //   node captions.mjs keepout --group-spec ./group_spec.json --hyperframes . [--json] [--scene <sid>[,<sid>]]
 //
-// preflight-finalize.mjs consumes the gate by spawning `keepout --json` and
-// parsing the result object off stdout (out-of-process — no ESM import of this
-// file's CLI dispatcher).
+// Worker self-checks (scoped --scene) and the finalize agent both run this
+// CLI directly; `--json` emits the result object on stdout for machine use.
 //
 // Exit codes (CLI): 0 = captions disabled or no violations, 1 = violations.
 async function runKeepout(argv) {
@@ -1672,7 +1671,7 @@ async function runKeepout(argv) {
       );
     }
     console.error(
-      `\n  → finalize_brief.json.caption_keepout.violations carries identical findings + Edit-ready strings. Finalize agent patches in-place with N Edit calls, no Read/search needed.`,
+      `\n  → apply each fix line above with one Edit call (edit_old → edit_new), then re-run until exit 0. No Read/search needed.`,
     );
     process.exit(1);
   }

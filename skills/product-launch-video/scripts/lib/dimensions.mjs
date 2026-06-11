@@ -5,7 +5,7 @@
 // ============================================================================
 // The whole faceless-explainer pipeline used to be hard-locked to landscape
 // 1920×1080. It is now dimension-parametric: every deterministic script
-// (assemble-index, transitions, captions, preflight-finalize) and every
+// (assemble-index, transitions, captions, hoist-videos) and every
 // scene worker reads the canvas size from ONE place — `group_spec.json`
 // `width`/`height` — which prep.mjs stamps in.
 //

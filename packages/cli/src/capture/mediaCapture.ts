@@ -219,19 +219,20 @@ const DOWNLOADABLE_VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
  * Download a <video> body to assets/videos/<file>, returning the
  * capture-relative path when saved (else null).
  *
- * Guards, in order: SSRF (isPrivateUrl) · direct-file extension only — HLS
- * (.m3u8) / DASH (.mpd) / blob: streams are skipped · Content-Type must be
+ * Guards, in order: direct-file extension only — HLS (.m3u8) / DASH (.mpd) /
+ * blob: streams are skipped · SSRF via safeFetch, which re-validates isPrivateUrl
+ * on EVERY redirect hop (a bare redirect:"follow" only checks the initial URL,
+ * so a public URL could 30x to an internal/metadata host) · Content-Type must be
  * video/* or octet-stream · a hard byte cap enforced WHILE streaming so a
- * missing or lying Content-Length cannot exhaust memory. Mirrors the SSRF + UA
- * conventions of assetDownloader.fetchBuffer; videos stream rather than buffer
- * whole because they are large.
+ * missing or lying Content-Length cannot exhaust memory. Streams from the
+ * Response body rather than buffering whole because videos are large.
  */
 async function downloadVideoBody(
   srcUrl: string,
   filename: string,
   videosDir: string,
 ): Promise<string | null> {
-  if (isPrivateUrl(srcUrl)) return null;
+  if (isPrivateUrl(srcUrl)) return null; // cheap pre-check; safeFetch re-checks every hop
   let ext = "";
   try {
     ext = extname(new URL(srcUrl).pathname).toLowerCase();
@@ -240,12 +241,13 @@ async function downloadVideoBody(
   }
   if (!DOWNLOADABLE_VIDEO_EXTS.has(ext)) return null; // streaming manifest / unknown — leave on origin
   try {
-    const res = await fetch(srcUrl, {
+    // safeFetch resolves redirects manually and re-runs isPrivateUrl on each
+    // Location hop, so a public URL cannot 30x to an internal/metadata host.
+    const res = await safeFetch(srcUrl, {
       signal: AbortSignal.timeout(120000), // up to ~75 MB on a slow link; aborts cleanly → still-frame fallback
       headers: { "User-Agent": "HyperFrames/1.0" },
-      redirect: "follow",
     });
-    if (!res.ok || !res.body) return null;
+    if (!res || !res.ok || !res.body) return null;
     const ct = (res.headers.get("content-type") || "").toLowerCase();
     if (ct && !ct.startsWith("video/") && !ct.includes("octet-stream")) return null;
     const declared = Number(res.headers.get("content-length") || 0);

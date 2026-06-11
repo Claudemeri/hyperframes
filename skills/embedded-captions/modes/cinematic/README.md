@@ -1,57 +1,48 @@
-# Cinematic mode (pure embed) — pick a locked visual style
+# Cinematic mode (pure embed) — one engine, six DNAs
 
-> These four templates are **Cinematic mode** (the user-facing name). The directory stays `modes/cinematic/` and is compiled by `make-composition.cjs`. For rail + embed, see [../standard/](../standard/).
+> Cinematic mode compiles **[../../dna/](../../dna/README.md)** through
+> **[engine.html](engine.html)** (`make-composition.cjs`). The old per-template HTML
+> shells are retired — `cinematic-cream` maps to `dna: "cream"` automatically; the other
+> archived templates (memory-wall / champion / portrait-header, in [\_archive/](_archive/))
+> remain as design references only.
 
-Use this mode when the user wants a **consistent, predictable look** —
-either they named a template or they want something off-the-shelf.
-Visual style (typography, blend, motion) is locked by the template;
-agent only decides **layout** (where the plane sits, perspective angle,
-font scale, caption grouping, slot assignment, crown enable/disable).
-
-## Catalog
-
-| Template | Best for | Frame | Has crown? | Look |
-|---|---|---|---|---|
-| `cinematic-cream` | **Default** — any tone; agent composes planes + per-group typography | 16:9 + 9:16 | Optional (crown plane) | DNA-only: Inter + soft/present motion, warm-cream palette, block accumulation |
-| `memory-wall` | Introspective monologue, side wall visible | 16:9 landscape | No (right-aligned cascade is the climax) | Italic poem, bone-white, screen blend |
-| `champion` | Podcast/interview, cluttered backdrop | 16:9 landscape | Yes (center-stage OR clean-zone) | 5-slot upper-left column + WIMBLEDON-style crown |
-| `portrait-header` | 9:16 talking head, single subject | Portrait | Optional bottom | Centered top header strip, screen blend |
-
-Each template directory contains:
-- `template.html` — the locked HTML/CSS/GSAP shell with `{{PLACEHOLDERS}}`
-- `spec.md` — when to use, what to configure, plan.json shape
+Use this mode for pure-embed asks (no rail): brand film, hype, social reel, showcase.
+The **DNA** locks the visual language (type, palette scheme, blend, motion grammar, hero
+three-act); **safe-zones v2** parameterizes it to the scene (sampled accent, light-
+direction contact shadow, depth-match blur); **the agent decides layout only** (planes,
+blocks, per-line typography within the DNA).
 
 ## Workflow
 
-1. Pick a template (user-specified or agent-chosen by scene fit)
-2. Read its `spec.md` for the layout decisions you must make
-3. Probe the scene (3 frames at 20/50/80%) for plane positioning
-4. Group transcript words and assign slots (`spec.md` describes the slot arc)
-5. Write `<project>/plan.json` with template-specific fields
-6. `node scripts/make-composition.cjs <project>` → `index.html`
-7. `bash scripts/render-and-composite.sh <project>` → `final.mp4`
+1. `bash scripts/prepare.sh <project>` → matte ∥ transcript ∥ envelope → safe-zones v2
+2. Pick a DNA ([../../dna/README.md](../../dna/README.md)): bright hero band → `ink`,
+   else by register (cream / editorial / keynote / documentary / loud). Recommend, let
+   the user pick.
+3. Author `<project>/cinematic.json` — `"dna": "<name>"` + thought-blocks (schema:
+   `scripts/make-cinematic.cjs` header)
+4. `node scripts/make-cinematic.cjs <project>` → plan.json → engine-compiled index.html
+5. `node scripts/preview-frames.cjs <project>` → § Visual QA (failure checks + the 5
+   positive checks in [../../references/reference-bar.md](../../references/reference-bar.md))
+6. `bash scripts/render-and-composite.sh <project>` → gates → final.mp4
 
-## What you DON'T do in template mode
+## What the engine generates (never author these)
 
-- Override `.cap`, `.cap-*`, `mix-blend-mode`, `color`, `text-shadow`,
-  `filter`, GSAP animation, or any locked CSS.
-- Add custom DOM layers (grain, vignette, focus flash, etc.)
-- Tweak GSAP motion curves or word reveal timing per group
+- word timings from the transcript; accumulate-within-block / page-flip-between-blocks
+- the hero hand-off + **three-act orchestration** (dim → RMS-coupled per-letter entrance
+  → breathe + glow), per the DNA's `hero` block
+- scene tokens: `--accent` (sampled), contact shadow, depth blur
+- reading order, re-slot from measured heights, hero size/collision post-pass
 
-If the user wants any of those, it's a hand-authored job → use **Standard mode**
-([../standard/](../standard/)), which builds a rail + embed scene from the template library.
+## What you DON'T do
 
-## Adding a new template
+- Override `.cap` color / blend / shadow / filter / motion curves — that's the DNA.
+  Scene fights the look → pick a different DNA (bright → `ink`), never recolor.
+- Hand-position the hero into a clean margin (it belongs ON the subject, ~30–55%
+  occluded — safe-zones `heroBands.best`).
+- Add full-frame grades/textures over the footage (hard rule: the video ships untouched).
 
-1. Create `modes/cinematic/<name>/` with `template.html` + `spec.md`
-2. Use `{{PLACEHOLDERS}}` only for layout (not style):
-   - `{{WIDTH}} {{HEIGHT}} {{DURATION}}` — frame + duration
-   - `{{FONT_SCALE}}` — multiplier on locked sizes (use CSS `calc()`)
-   - `{{PLANE_TOP}} {{PLANE_LEFT}} {{PLANE_RIGHT}} {{PLANE_WIDTH}} {{PLANE_HEIGHT}}` — geometry
-   - `{{ROTATE_Y}} {{ROTATE_X}}` — perspective
-   - `{{CROWN_TOP}}` — crown plane Y (if template has crown)
-   - `{{HEADER_TOP}} {{HEADER_HEIGHT}}` — for header-strip templates
-   - `{{GROUPS_HTML}} {{GROUPS_JSON}}` — caption HTML + JS data
-   - `{{CROWN_HTML}} {{CROWN_JSON}}` — optional crown block
-3. Add a row to the catalog table above
-4. (Optional) Render a sample MP4 + commit `preview.gif` for browsing
+## Adding a DNA
+
+`dna/<name>.json` — copy one, change the voice (see [../../dna/README.md](../../dna/README.md)
+§ Adding). The engine consumes it with no code change. A DNA must be a distinct voice
+with a reason to exist, not a recolor.

@@ -14,8 +14,8 @@ function hfResolve(pkg) {
   for (const root of roots) {
     const cands = [path.join(root, "node_modules", pkg)];
     const bun = path.join(root, "node_modules", ".bun");
-    try { if (fs.existsSync(bun)) for (const d of fs.readdirSync(bun)) if (d.startsWith(pkg + "@")) cands.push(path.join(bun, d, "node_modules", pkg)); } catch {}
-    for (const c of cands) { try { if (fs.existsSync(c)) return require(c); } catch {} }
+    try { if (fs.existsSync(bun)) for (const d of fs.readdirSync(bun)) if (d.startsWith(pkg + "@")) cands.push(path.join(bun, d, "node_modules", pkg)); } catch (e) {}
+    for (const c of cands) { try { if (fs.existsSync(c)) return require(c); } catch (e) {} }
   }
   console.error(`[v2] cannot find ${pkg} — set HYPERFRAMES_ROOT`); process.exit(3);
 }
@@ -58,8 +58,9 @@ async function main() {
   // Hero groups (the ONE big promoted word) are SUPPOSED to sit ON the subject — for them
   // occlusion is a TARGET (~30–55%), not "minimize". Collect their ids for the advisory below.
   const heroIds = new Set();
-  for (const g of (plan.groups || [])) if (g && (g.hero === true || /^(hero|crown)$/i.test(g.plane || ""))) heroIds.add(g.id);
-  if (plan.crown_group && plan.crown_group.id) heroIds.add(plan.crown_group.id);
+  const heroIn = {};
+  for (const g of (plan.groups || [])) if (g && (g.hero === true || /^(hero|crown)$/i.test(g.plane || ""))) { heroIds.add(g.id); heroIn[g.id] = g.in; }
+  if (plan.crown_group && plan.crown_group.id) { heroIds.add(plan.crown_group.id); heroIn[plan.crown_group.id] = plan.crown_group.in; }
   const M = 2; // frame-edge tolerance (px) — matches check-overflow.cjs
   const frameW = layout.width, frameH = layout.height;
 
@@ -74,14 +75,17 @@ async function main() {
       for (const w of (cap.words || [])) {
         if ((w.opacity ?? 1) < 0.3) continue;
         wordsData.push({ text: w.text, occlusion: occlusionForRect(mask, w.x, w.y, w.w, w.h) });
-        // Frame-edge overflow — clipped text is always wrong; track worst per cap.
+        // Frame-edge overflow — clipped SETTLED text is always wrong; a hero's first
+        // 0.5s is its entrance TRANSIENT (slam over-scale, streak fly-in pass through
+        // off-frame states by design) — judge overflow on the hold, not mid-flight.
+        if (heroIds.has(cap.id) && heroIn[cap.id] != null && sample.t < heroIn[cap.id] + 0.5) continue;
         const off = { left: Math.max(0, Math.round(-w.x - M)), right: Math.max(0, Math.round(w.x + w.w - frameW - M)),
                       top: Math.max(0, Math.round(-w.y - M)), bottom: Math.max(0, Math.round(w.y + w.h - frameH - M)) };
         const score = off.left + off.right + off.top + off.bottom;
         if (score > 0 && (!entry.overflow || score > entry.overflow.score)) entry.overflow = { text: w.text, off, score, t: sample.t };
       }
       const capOccl = occlusionForRect(mask, cap.cap_bbox.x, cap.cap_bbox.y, cap.cap_bbox.w, cap.cap_bbox.h);
-      entry.samples.push({ t: sample.t, cap_occl: capOccl, words: wordsData });
+      entry.samples.push({ t: sample.t, cap_occl: capOccl, cap_bbox: cap.cap_bbox, words: wordsData });
     }
   }
 
@@ -121,7 +125,16 @@ async function main() {
     // HERO target-occlusion advisory (not a failure): a hero should sit ON the subject
     // (~30–55%). If it barely grazes, it reads as a small floating word, not an embed.
     if (heroIds.has(gid) && peakCap < 0.15) {
-      console.log(`  ${gid}  [hero-weak] peak ${(peakCap * 100).toFixed(0)}% — hero barely crosses the subject; it should sit ON the subject (~30–55% = the embed effect). Center it (safe-zones heroAnchor) + make it BIG; don't park it in a clean margin.`);
+      // METRIC HONESTY: this advisory uses CAP-AREA occlusion, which saturates ~15%
+      // for a width-filled hero over a narrow subject (the 30–55% figure elsewhere is
+      // the safe-zones BAND metric — different denominator). If the hero already owns
+      // the width, "center it + make it BIG" is unactionable — stay quiet.
+      const widest = Math.max(...entry.samples.map((sm) => (sm.cap_bbox && sm.cap_bbox.w) || 0), 0);
+      if (widest >= frameW * 0.8) {
+        console.log(`  ${gid}  [hero-ok] peak ${(peakCap * 100).toFixed(0)}% cap-area — width-saturated hero over a narrow subject; cap-area can't reach the band target (this is the geometry, not a layout fault).`);
+      } else {
+        console.log(`  ${gid}  [hero-weak] peak ${(peakCap * 100).toFixed(0)}% — hero barely crosses the subject; it should sit ON the subject (~30–55% by the safe-zones BAND metric = the embed effect). Center it (safe-zones heroAnchor) + make it BIG; don't park it in a clean margin.`);
+      }
     }
   }
   if (failures.length) {

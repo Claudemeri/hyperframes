@@ -22,6 +22,7 @@ const OUT = path.join(__dirname, "fonts.css");
 const FAMILY = {
   "anton": "Anton",
   "audiowide": "Audiowide",
+  "inter": "Inter",
   "baloo-2": "Baloo 2",
   "bangers": "Bangers",
   "bodoni-moda": "Bodoni Moda",
@@ -48,9 +49,9 @@ const faces = [];
 let raw = 0;
 const seenFamilies = new Set();
 for (const f of files) {
-  const m = f.match(/^(.*)-latin-(\d+)-normal\.woff2$/);
+  const m = f.match(/^(.*)-latin-(\d+)-(normal|italic)\.woff2$/);
   if (!m) { console.error(`[fonts] skip unrecognized filename: ${f}`); continue; }
-  const slug = m[1], weight = m[2];
+  const slug = m[1], weight = m[2], style = m[3];
   const family = FAMILY[slug];
   if (!family) { console.error(`[fonts] no family mapping for slug "${slug}" (${f}) — add it to FAMILY`); process.exit(1); }
   const buf = fs.readFileSync(path.join(FILES, f));
@@ -59,7 +60,7 @@ for (const f of files) {
   faces.push(
     `@font-face {\n` +
     `  font-family: '${family}';\n` +
-    `  font-style: normal;\n` +
+    `  font-style: ${style};\n` +
     `  font-weight: ${weight};\n` +
     `  font-display: block;\n` +  // block (not swap): render text only once the real face is ready — measure-layout + capture see the true glyphs, never a fallback flash
     `  src: url(data:font/woff2;base64,${buf.toString("base64")}) format('woff2');\n` +

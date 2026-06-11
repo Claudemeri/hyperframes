@@ -17,14 +17,16 @@ PROJECT="${1:?usage: prepare.sh <project-dir>}"
 PROJECT="$(cd "$PROJECT" && pwd)"
 SD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "[prepare] matte ∥ transcribe …"
-MLOG="$PROJECT/_prepare_matte.log"; TLOG="$PROJECT/_prepare_transcribe.log"
+echo "[prepare] matte ∥ transcribe ∥ envelope …"
+MLOG="$PROJECT/_prepare_matte.log"; TLOG="$PROJECT/_prepare_transcribe.log"; ELOG="$PROJECT/_prepare_envelope.log"
 node "$SD/matte.cjs" "$PROJECT"      > "$MLOG" 2>&1 &  MPID=$!
 node "$SD/transcribe.cjs" "$PROJECT" > "$TLOG" 2>&1 &  TPID=$!
+node "$SD/audio-envelope.cjs" "$PROJECT" > "$ELOG" 2>&1 &  EPID=$!
 
 MRC=0; TRC=0
 wait "$MPID" || MRC=$?
 wait "$TPID" || TRC=$?
+wait "$EPID" || echo "[prepare] (envelope skipped — hero amplitude falls back to neutral)" >&2
 # surface both logs (they contain the guards' warnings — near-silent audio, tail trim)
 sed 's/^/  [matte] /'      "$MLOG" | tail -6
 sed 's/^/  [transcribe] /' "$TLOG" | tail -12

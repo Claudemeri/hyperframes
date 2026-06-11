@@ -28,14 +28,14 @@ const HF_ROOTS = [process.env.HYPERFRAMES_ROOT, path.resolve(__dirname, "../../.
 function findInBun(root, pkg, sub) {
   const cands = [path.join(root, "node_modules", pkg)];
   const bunDir = path.join(root, "node_modules", ".bun");
-  try { if (fs.existsSync(bunDir)) for (const d of fs.readdirSync(bunDir)) if (d.startsWith(pkg + "@")) cands.push(path.join(bunDir, d, "node_modules", pkg)); } catch {}
+  try { if (fs.existsSync(bunDir)) for (const d of fs.readdirSync(bunDir)) if (d.startsWith(pkg + "@")) cands.push(path.join(bunDir, d, "node_modules", pkg)); } catch (e) {}
   for (const c of cands) { const p = sub ? path.join(c, sub) : c; if (fs.existsSync(p)) return p; }
   return null;
 }
 let puppeteer = null, sharp = null, gsapSource = null;
 for (const r of HF_ROOTS) {
-  if (!puppeteer) { const p = findInBun(r, "puppeteer"); if (p) try { puppeteer = require(p); } catch {} }
-  if (!sharp) { const p = findInBun(r, "sharp"); if (p) try { sharp = require(p); } catch {} }
+  if (!puppeteer) { const p = findInBun(r, "puppeteer"); if (p) try { puppeteer = require(p); } catch (e) {} }
+  if (!sharp) { const p = findInBun(r, "sharp"); if (p) try { sharp = require(p); } catch (e) {} }
   if (!gsapSource) { const g = findInBun(r, "gsap", path.join("dist", "gsap.min.js")); if (g) gsapSource = fs.readFileSync(g, "utf8"); }
 }
 if (!puppeteer || !sharp) { console.error("[preview] need puppeteer+sharp — set HYPERFRAMES_ROOT"); process.exit(0); }
@@ -56,16 +56,24 @@ async function shotAt(browser, file, W, H, t) {
     }
     await page.goto(`file://${file}`, { waitUntil: "load", timeout: 15000 });
     const t0 = Date.now();
-    while (Date.now() - t0 < 10000) {
-      if (await page.evaluate(() => !!(window.__timelines && window.__timelines.main))) break;
+    let tlReady = false;
+    while (Date.now() - t0 < 15000) {
+      tlReady = await page.evaluate(() => !!(window.__timelines && window.__timelines.main));
+      if (tlReady) break;
       await new Promise((r) => setTimeout(r, 120));
     }
-    await page.evaluate(async () => { try { await document.fonts.ready; } catch {} });
+    if (!tlReady) throw new Error(`timeline never registered in ${path.basename(file)}`);
+    // bundled @font-face → previews show the REAL faces (same set the renderer embeds)
+    try {
+      const fontsCss = path.join(__dirname, "..", "modes", "standard", "fonts", "fonts.css");
+      if (fs.existsSync(fontsCss)) await page.addStyleTag({ content: fs.readFileSync(fontsCss, "utf8") });
+    } catch (e) {}
+    await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
     await page.evaluate((t) => {
       const v = document.getElementById("a-roll"); if (v) v.style.display = "none"; // transparent hole for the bg frame
       document.body.style.background = "transparent";
       document.documentElement.style.background = "transparent";
-      window.__timelines.main.seek(t); void document.body.offsetHeight;
+      window.__timelines.main.seek(t); document.body.offsetHeight;
     }, t);
     await new Promise((r) => setTimeout(r, 60));
     return await page.screenshot({ omitBackground: true }); // RGBA png of caption layer only
@@ -79,31 +87,40 @@ async function main() {
   if (!fs.existsSync(idx)) { console.error("[preview] no index.html — compile first"); process.exit(1); }
   const railP = path.join(project, "rail.html");
   const hasRail = fs.existsSync(railP);
+  const fgP = path.join(project, "index_fg.html");
+  const hasFg = fs.existsSync(fgP); // hybrid: fg caps render ABOVE the matte (like the real composite)
 
   let fps = 24;
-  try { const f = parseFloat(String(fs.readFileSync(path.join(project, "matte.fps"), "utf8")).replace(/[^\d.]/g, "")); if (f > 0) fps = f; } catch {}
+  try { const f = parseFloat(String(fs.readFileSync(path.join(project, "matte.fps"), "utf8")).replace(/[^\d.]/g, "")); if (f > 0) fps = f; } catch (e) {}
 
   // sample times: explicit > climax window + line midpoints > thirds
   let globalFg=false;
-  try { globalFg = JSON.parse(fs.readFileSync(path.join(project,"plan.json"),"utf8")).caption_layer === "fg"; } catch{}
+  try { globalFg = JSON.parse(fs.readFileSync(path.join(project,"plan.json"),"utf8")).caption_layer === "fg"; } catch(e){}
   let times = process.argv.slice(3).map(Number).filter(Number.isFinite);
   if (!times.length) {
     try {
       const plan = JSON.parse(fs.readFileSync(path.join(project, "plan.json"), "utf8"));
-      // hero/climax windows FIRST — when truncating, the peak moments must survive
-      const gs = [...(plan.groups || [])].sort((a, b) => (b.hero === true) - (a.hero === true));
-      for (const g of gs) {
+      // heroes get 2 samples each (entrance + hold); every OTHER group gets at least
+      // a shot at one midpoint — the old 2-per-group list truncated at 12 and silently
+      // dropped whole narration blocks from the sheet (cold-start agents missed bugs there)
+      const gs = plan.groups || [];
+      const heroes = gs.filter((g) => g.hero === true), rest = gs.filter((g) => !g.hero);
+      for (const g of heroes) {
         const span = g.out - g.in;
         times.push(+(g.in + span * 0.25).toFixed(2), +(g.in + span * 0.7).toFixed(2));
       }
-    } catch {}
+      const mids = rest.map((g) => +((g.in + g.out) / 2).toFixed(2));
+      const budget = Math.max(2, 16 - times.length);
+      const step = Math.max(1, Math.ceil(mids.length / budget));
+      for (let i = 0; i < mids.length; i += step) times.push(mids[i]);
+    } catch (e) {}
   }
   if (!times.length) {
     const n = fs.existsSync(path.join(project, "frames_bg")) ? fs.readdirSync(path.join(project, "frames_bg")).length : 0;
     const dur = n / fps || 10;
     times = [dur * 0.25, dur * 0.5, dur * 0.75].map((t) => +t.toFixed(2));
   }
-  times = [...new Set(times)].slice(0, 12).sort((a, b) => a - b);
+  times = [...new Set(times)].slice(0, 16).sort((a, b) => a - b);
 
   const meta = await sharp(path.join(project, "frames_bg", fs.readdirSync(path.join(project, "frames_bg")).filter((f) => f.endsWith(".png")).sort()[0])).metadata();
   const W = meta.width, H = meta.height;
@@ -124,6 +141,7 @@ async function main() {
       // global caption_layer:"fg" → captions sit ON TOP of the subject; the matte
       // must NOT be stacked over them (the render skips the overlay too).
       if (!globalFg && fs.existsSync(fg)) layers.push({ input: fg });             // subject occludes embed
+      if (hasFg) layers.push({ input: await shotAt(browser, fgP, W, H, t), blend: "screen" }); // hybrid fg caps in front (screen, like the real ffmpeg pass)
       if (hasRail) layers.push({ input: await shotAt(browser, railP, W, H, t) }); // rail in front
       const out = path.join(outDir, `t${String(t).replace(".", "_")}.png`);
       await sharp(bg).composite(layers).png().toFile(out);

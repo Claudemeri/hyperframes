@@ -53,10 +53,26 @@ if [[ ! -f "$PROJECT/index.html" ]]; then
 elif [[ -f "$PROJECT/standard.json" && "$PROJECT/standard.json" -nt "$PROJECT/index.html" ]]; then
   echo "[render] standard.json newer than index.html — recompiling"
   node "$(dirname "$0")/make-standard.cjs" "$PROJECT"
+elif [[ -f "$PROJECT/cinematic.json" && "$PROJECT/cinematic.json" -nt "$PROJECT/index.html" ]]; then
+  echo "[render] cinematic.json newer than index.html — recompiling"
+  node "$(dirname "$0")/make-cinematic.cjs" "$PROJECT"
 elif [[ -f "$PROJECT/plan.json" && "$PROJECT/plan.json" -nt "$PROJECT/index.html" ]]; then
   C="$(compiler_for)"
   echo "[render] plan.json newer than index.html — recompiling via $C"
   node "$(dirname "$0")/$C" "$PROJECT"
+else
+  # the COMPILERS themselves may have changed since this project last compiled —
+  # rendering stale HTML after a compiler fix silently re-ships the old bug
+  C="$(compiler_for)"
+  RECOMPILER="$C"
+  # for cinematic projects the FULL compiler is make-cinematic (compiler_for points
+  # at make-composition, which only re-emits html from an already-compiled plan)
+  if [[ -f "$PROJECT/cinematic.json" && "$C" == "make-composition.cjs" ]]; then RECOMPILER="make-cinematic.cjs"; fi
+  ENGINE="$(dirname "$0")/../modes/cinematic/engine.html"
+  if [[ "$(dirname "$0")/$RECOMPILER" -nt "$PROJECT/index.html" || "$(dirname "$0")/lib-dna.cjs" -nt "$PROJECT/index.html" || ( -f "$ENGINE" && "$ENGINE" -nt "$PROJECT/index.html" ) ]]; then
+    echo "[render] compiler/engine newer than index.html — recompiling via $RECOMPILER"
+    node "$(dirname "$0")/$RECOMPILER" "$PROJECT"
+  fi
 fi
 
 # Embed template fonts BEFORE the gates + render. hyperframes only auto-supplies
@@ -70,6 +86,10 @@ fi
 node "$(dirname "$0")/inject-fonts.cjs" "$PROJECT" \
   || echo "[render] (font embed skipped — inject-fonts.cjs/fonts.css unavailable)" >&2
 
+# gate ledger — each gate appends one line; echoed as a summary before "done"
+# (verdicts were drowning hundreds of lines up in ffmpeg logs)
+GATES="$PROJECT/_gates.txt"; : > "$GATES"
+
 # Gate: plan.json word timings must align with transcript.json within 80ms.
 # A caption whose animation fires 500ms before or after the word is spoken
 # breaks the "belongs to the scene" illusion — hard fail, not a warning.
@@ -79,6 +99,7 @@ if [[ -f "$PROJECT/plan.json" && -f "$PROJECT/transcript.json" ]]; then
     echo "[render] ABORTED — fix plan.json word timings to match transcript.json, then re-run." >&2
     exit 2
   fi
+  echo "timing            PASS (strict)" >> "$GATES"
 fi
 
 # Gate: subject occlusion + frame-edge overflow — pixel-perfect via Chromium DOM
@@ -115,7 +136,9 @@ if [[ -f "$PROJECT/plan.json" && -d "$PROJECT/frames_fg" ]]; then
       exit 2
     fi
     echo "[render] OCCLUSION_SKIP=1 set — continuing despite occlusion/overflow warnings." >&2
+    echo "occlusion+overflow OVERRIDDEN (OCCLUSION_SKIP=1 — conscious accept)" >> "$GATES"
   fi
+  if (( OCC_RC == 0 )); then echo "occlusion+overflow PASS" >> "$GATES"; fi
 fi
 
 # Custom mode (no plan.json) skips the template gates above. Run a lightweight,
@@ -125,10 +148,17 @@ fi
 if [[ ! -f "$PROJECT/plan.json" && -f "$PROJECT/index.html" && -f "$(dirname "$0")/check-overflow.cjs" ]]; then
   node "$(dirname "$0")/check-overflow.cjs" "$PROJECT" \
     || echo "[render] (overflow check skipped — Chromium/puppeteer unavailable)" >&2
-  # Standard mode: also gate rail.html — the only automated coverage the rail gets.
-  if [[ -f "$PROJECT/rail.html" ]]; then
-    node "$(dirname "$0")/check-overflow.cjs" "$PROJECT" rail.html \
-      || echo "[render] (rail overflow check skipped)" >&2
+  echo "overflow(index)   checked (custom mode, warning-only)" >> "$GATES"
+fi
+# rail.html gets NO other automated coverage (the occlusion gate only reads plan.json
+# caps) — run its overflow check whenever it exists. Was dead code inside the
+# no-plan.json branch: Standard always HAS a derived plan.json, so it never ran.
+if [[ -f "$PROJECT/rail.html" && -f "$(dirname "$0")/check-overflow.cjs" ]]; then
+  if node "$(dirname "$0")/check-overflow.cjs" "$PROJECT" rail.html; then
+    echo "overflow(rail)    PASS" >> "$GATES"
+  else
+    echo "[render] (rail overflow check skipped — Chromium/puppeteer unavailable)" >&2
+    echo "overflow(rail)    skipped (infra)" >> "$GATES"
   fi
 fi
 
@@ -145,6 +175,9 @@ if [[ -f "$PROJECT/rail.html" && -f "$PROJECT/index.html" && -f "$(dirname "$0")
       exit 2
     fi
     echo "[render] RAIL_CLIMAX_SKIP=1 — continuing despite the rail/climax duplicate." >&2
+    echo "rail-climax       OVERRIDDEN (RAIL_CLIMAX_SKIP=1)" >> "$GATES"
+  else
+    echo "rail-climax       PASS (no duplicate reveal)" >> "$GATES"
   fi
 fi
 
@@ -384,7 +417,8 @@ if [[ -f "$PROJECT/rail.html" ]]; then
     -filter_complex "[0:v][1:v]overlay=format=auto[v]" \
     -map "[v]" -map 0:a -r "$FPS" -t "$MATTE_DUR" -c:v libx264 -crf 16 -preset medium -c:a copy "$FINAL"
   rm -f "$MATTED"
-  echo "[render] done → $FINAL"
+  if [[ -s "$GATES" ]]; then echo "[render] ── gates ──"; sed 's/^/[render]   /' "$GATES"; fi
+echo "[render] done → $FINAL"
   exit 0
 fi
 
@@ -426,4 +460,5 @@ else
     "$FINAL"
 fi
 
+if [[ -s "$GATES" ]]; then echo "[render] ── gates ──"; sed 's/^/[render]   /' "$GATES"; fi
 echo "[render] done → $FINAL"

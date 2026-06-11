@@ -1,12 +1,22 @@
 #!/usr/bin/env node
 /*
- * make-composition.cjs — compile plan.json + template → index.html (TEMPLATE MODE).
- * 1:1 Node port of make-composition.py (pure string templating, no Python).
+ * make-composition.cjs — compile plan.json → index.html (CINEMATIC MODE).
+ *
+ * DNA path (canonical): plan.dna names a dna/<name>.json → modes/cinematic/engine.html
+ * is compiled with scene-resolved tokens (lib-dna.cjs): scene-sampled accent, light-
+ * direction contact shadow, depth-match blur, hero three-act orchestration with
+ * RMS-coupled amplitude. plan.template="cinematic-cream" maps to dna "cream".
+ *
+ * Legacy path: plan.template naming an archived template dir still compiles 1:1
+ * (memory-wall / champion / portrait-header in modes/cinematic/_archive are NOT
+ * auto-discovered — restore them to modes/cinematic/ to use).
+ *
  *   node make-composition.cjs <project-dir>
  */
 const path = require("path");
 const fs = require("fs");
 const cp = require("child_process");
+const dnaLib = require("./lib-dna.cjs");
 
 const SKILL_ROOT = path.resolve(__dirname, "..");
 const TEMPLATES = path.join(SKILL_ROOT, "modes", "cinematic");
@@ -18,7 +28,7 @@ function sourceDurationSec(project) {
   try {
     cands = cands.concat(fs.readdirSync(project).filter(
       (f) => /\.(mp4|mov|webm|mkv|m4v)$/i.test(f) && !/^(final|bg_plus_caps|fg_caps|rail|index)/.test(f)));
-  } catch {}
+  } catch (e) {}
   for (const c of cands) {
     const p = path.isAbsolute(c) ? c : path.join(project, c);
     if (!fs.existsSync(p)) continue;
@@ -28,7 +38,7 @@ function sourceDurationSec(project) {
         { encoding: "utf8" }).trim();
       const d = parseFloat(out);
       if (d > 0) return d;
-    } catch {}
+    } catch (e) {}
   }
   return null;
 }
@@ -56,20 +66,43 @@ function escBr(t) {
   const e = String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   return e.replace(/&lt;br&gt;/g, "<br>").replace(/&lt;br\/&gt;/g, "<br>").replace(/&lt;br \/&gt;/g, "<br>");
 }
-function renderCap(g) {
+// hero words get per-letter inner spans (<span class="l">) so the engine can stagger
+// letters; .w keeps wrapping the word so every gate (occlusion / overflow / layout)
+// measures exactly what it measured before.
+function wordSpan(w, i, perLetter) {
+  if (!perLetter) return `<span class="w" data-i="${i}">${escBr(w.text)}</span>`;
+  const t = String(w.text);
+  if (/<br\s*\/?>/i.test(t)) return `<span class="w" data-i="${i}">${escBr(t)}</span>`; // explicit <br> words stay whole
+  const letters = [...t].map((ch) => ch === " " ? " " : `<span class="l">${escBr(ch)}</span>`).join("");
+  return `<span class="w" data-i="${i}">${letters}</span>`;
+}
+function renderCap(g, heroCfg) {
   const slot = g.slot ?? g.style ?? "";
   const layerAttr = g.layer ? ` data-layer="${g.layer}"` : "";
+  const isHero = heroCfg && g.hero === true;
+  const perLetter = isHero && heroCfg.perLetter;
   const cls = slot ? `cap cap-${slot}` : "cap";
-  const spans = g.words.map((w, i) => `<span class="w" data-i="${i}">${escBr(w.text)}</span>`).join("\n            ");
-  return `<div id="${g.id}" class="${cls}"${layerAttr}>\n            ${spans}\n          </div>`;
+  const spans = g.words.map((w, i) => wordSpan(w, i, perLetter)).join("\n            ");
+  const capDiv = `<div id="${g.id}" class="${cls}"${layerAttr}>\n            ${spans}\n          </div>`;
+  if (!isHero) return capDiv;
+  // fx siblings render UNDER the hero (earlier sibling = beneath): glow first, then
+  // echoes, then the hero itself. Plain .w spans; none are in plan.groups → gates skip.
+  const plainSpans = g.words.map((w, i) => `<span class="w" data-i="${i}">${escBr(w.text)}</span>`).join("\n            ");
+  const parts = [];
+  if (heroCfg.glow) parts.push(`<div id="${g.id}-glow" class="${cls} hero-glow" aria-hidden="true"${layerAttr}>\n            ${plainSpans}\n          </div>`);
+  (heroCfg.echoes || []).forEach((ec, k) => {
+    parts.push(`<div id="${g.id}-echo-${k}" class="${cls} hero-echo" aria-hidden="true"${layerAttr}>\n            ${plainSpans}\n          </div>`);
+  });
+  parts.push(capDiv);
+  return parts.join("\n          ");
 }
-function buildGroupsHtml(groups, planes) {
-  if (!planes) return groups.map(renderCap).join("\n        ");
+function buildGroupsHtml(groups, planes, heroCfg) {
+  if (!planes) return groups.map((g) => renderCap(g, heroCfg)).join("\n        ");
   const order = Object.keys(planes); const grouped = {}; order.forEach((p) => (grouped[p] = [])); const free = [];
   for (const g of groups) { const pid = g.plane; if (pid && pid in grouped) grouped[pid].push(g); else free.push(g); }
   const parts = [];
-  for (const pid of order) parts.push(`<div id="plane-${pid}" class="plane plane-${pid}">\n          ${grouped[pid].map(renderCap).join("\n          ")}\n        </div>`);
-  for (const g of free) parts.push(renderCap(g));
+  for (const pid of order) parts.push(`<div id="plane-${pid}" class="plane plane-${pid}">\n          ${grouped[pid].map((g) => renderCap(g, heroCfg)).join("\n          ")}\n        </div>`);
+  for (const g of free) parts.push(renderCap(g, heroCfg));
   return parts.join("\n        ");
 }
 function buildPlanesCss(planes) {
@@ -82,16 +115,42 @@ function buildPlanesCss(planes) {
     return `      .plane-${pid} { ${css} }`;
   }).filter(Boolean).join("\n");
 }
-function buildPerGroupCss(groups) {
+function buildPerGroupCss(groups, tokens) {
   return groups.map((g) => {
     const parts = []; if (g.scale != null) parts.push(`--s: ${g.scale};`);
     let css = (g.css || "").trim(); if (css) parts.push(css.endsWith(";") ? css : css + ";");
-    return parts.length ? `      #${g.id} { ${parts.join(" ")} }` : null;
+    const isHero = tokens && g.hero === true;
+    if (isHero) {
+      // DNA hero treatment (case / tracking / extra css) — authored css still wins (it comes first? no: later rules win; DNA goes first so the author can override)
+      const dnaHero = [];
+      if (tokens.heroCase && tokens.heroCase !== "none") dnaHero.push(`text-transform: ${tokens.heroCase};`);
+      if (tokens.heroTracking && tokens.heroTracking !== "0") dnaHero.push(`letter-spacing: ${tokens.heroTracking};`);
+      if (tokens.heroCss) dnaHero.push(tokens.heroCss.endsWith(";") ? tokens.heroCss : tokens.heroCss + ";");
+      if (tokens.hero && tokens.hero.heroColor) dnaHero.push(`color: ${tokens.hero.heroColor};`);
+      parts.unshift(...dnaHero);
+    }
+    const rules = [];
+    if (parts.length) rules.push(`      #${g.id} { ${parts.join(" ")} }`);
+    // fx duplicates mirror the hero's geometry exactly (same slot/absolute CSS) so a
+    // flex/slot plane can't displace them; glow blur comes from .hero-glow (em-based),
+    // echo colors from their own rules (they must NOT inherit a transparent text fill).
+    if (isHero && tokens.hero) {
+      // word-level hero treatment (e.g. chrome's gradient clip — background-clip:text
+      // can't clip through composited children, so it must live ON the .w span)
+      if (tokens.hero.wordCss) rules.push(`      #${g.id} .w { ${tokens.hero.wordCss} }`);
+      if (tokens.hero.glow > 0 && parts.length) rules.push(`      #${g.id}-glow { ${parts.join(" ")} }`);
+      (tokens.hero.echoes || []).forEach((ec, k) => {
+        const extra = `color: ${ec.color}; -webkit-text-fill-color: ${ec.color}; background: none;` + (ec.blur ? ` filter: blur(${ec.blur}px);` : "");
+        rules.push(`      #${g.id}-echo-${k} { ${parts.join(" ")} ${extra} }`);
+      });
+    }
+    return rules.length ? rules.join("\n") : null;
   }).filter(Boolean).join("\n");
 }
 function buildGroupsJson(groups) {
   return JSON.stringify(groups.map((g) => ({
     id: g.id, in: g.in, out: g.out, tone: g.tone ?? "soft",
+    ...(g.hero === true ? { hero: true } : {}), ...(g.minor === true ? { minor: true } : {}), ...(g.plane ? { plane: g.plane } : {}),
     words: g.words.map((w) => ({ text: w.text, start: w.start, end: w.end })),
   })), null, 10);
 }
@@ -108,7 +167,23 @@ function main() {
   if (plan.mode === "standard") {
     console.error("[compile] mode=standard — this plan.json is DERIVED by make-standard.cjs; compile Standard projects with make-standard.cjs (from standard.json), not this script."); process.exit(1);
   }
-  let src = fs.readFileSync(findTemplate(plan.template), "utf8");
+  // ── DNA resolution: plan.dna (canonical) or a legacy template name ──────────
+  const dnaName = plan.dna || dnaLib.LEGACY[plan.template] || null;
+  let dna = null, tokens = null;
+  if (dnaName) {
+    try { dna = dnaLib.load(dnaName); }
+    catch (e) { console.error(`[compile] ${e.message}`); process.exit(1); }
+  }
+  const heroGroups = (plan.groups || []).filter((x) => x.hero === true);
+  if (dna) {
+    tokens = dnaLib.resolveTokens(dna, project, { heroGroups });
+    console.log(`[compile] DNA "${dna.name}" (${tokens.register}) — accent ${tokens.accent}` +
+      `${tokens.blurPx ? ` · depth-match blur ${tokens.blurPx}px` : ""}` +
+      `${tokens.heroes.length ? ` · hero amp ${tokens.heroes.map((h) => h.amp).join("/")} (RMS-coupled)` : ""}`);
+  }
+  let src = dna
+    ? fs.readFileSync(path.join(TEMPLATES, "engine.html"), "utf8")
+    : fs.readFileSync(findTemplate(plan.template), "utf8");
   // Bug-1: the canvas/background length = SOURCE clip length, NOT the last-caption time.
   // If plan.duration < source, the bg video ends before the matte → the tail shows only
   // the foreground subject on black. Caption groups keep their own in/out (they may end
@@ -118,13 +193,16 @@ function main() {
   if (srcDur && Math.abs(srcDur - (plan.duration || 0)) > 0.2)
     console.log(`[compile] canvas duration → source length ${renderDur.toFixed(2)}s (plan.duration=${plan.duration}); captions keep their own times.`);
   const plane = plan.plane || {}, header = plan.header || {}, crown = plan.crown || {};
-  // LOCKED DNA — Cinematic mode does NOT let the plan override colour / blend / shadow /
-  // filter. Picking a template commits to its visual identity; only layout + per-group
-  // typography stay agent-authored. If a scene's luminance fights the look, pick a
-  // DIFFERENT template — never recolour this one. (plan.cap_color / blend_mode /
+  // LOCKED DNA — the plan can NOT override colour / blend / shadow / filter. Picking a
+  // DNA commits to its visual identity; only layout + per-group typography stay
+  // agent-authored. If a scene's luminance fights the look, pick a DIFFERENT DNA
+  // (bright scene → "ink") — never recolour this one. (plan.cap_color / blend_mode /
   // text_shadow / text_filter are intentionally ignored.)
-  const capColor = "#fff5df";
+  const capColor = tokens ? tokens.capColor : "#fff5df";
   const g = (o, k, d) => (o && o[k] != null ? o[k] : d);
+  const heroCfg = tokens && tokens.heroes && tokens.heroes.length
+    ? { perLetter: tokens.heroes[0].perLetter, glow: tokens.heroes[0].glow, echoes: tokens.heroes[0].echoes || [] }
+    : null;
   const subs = {
     DURATION: `${renderDur}`, FPS: `${plan.fps ?? 24}`, WIDTH: `${plan.width}`, HEIGHT: `${plan.height}`,
     FONT_SCALE: `${plan.font_scale ?? 1.0}`,
@@ -135,11 +213,20 @@ function main() {
     CROWN_TOP: `${g(crown, "top", plan.crown_top ?? g(plan.crown_position || {}, "top", 440))}`,
     CROWN_LEFT: `${g(crown, "left", 0)}`, CROWN_RIGHT: `${g(crown, "right", 0)}`,
     CROWN_ALIGN: `${g(crown, "align", "center")}`, CROWN_SCALE: `${g(crown, "scale", 1.0)}`,
-    BLEND_MODE: "screen", CAP_COLOR: capColor,
-    TEXT_SHADOW: defaultTextShadow(capColor),
-    TEXT_FILTER: defaultTextFilter(capColor),
-    GROUPS_HTML: buildGroupsHtml(plan.groups, plan.planes), PLANES_CSS: buildPlanesCss(plan.planes),
-    CUSTOM_CSS: buildPerGroupCss(plan.groups), GROUPS_JSON: buildGroupsJson(plan.groups),
+    BLEND_MODE: tokens ? tokens.blend : "screen", CAP_COLOR: capColor,
+    TEXT_SHADOW: tokens ? tokens.textShadow : defaultTextShadow(capColor),
+    TEXT_FILTER: tokens ? tokens.filterBg : defaultTextFilter(capColor),
+    // engine-only placeholders (legacy templates simply don't contain them)
+    FONT_FAMILY: tokens ? tokens.fontFamily : "Inter",
+    ACCENT: tokens ? tokens.accent : "#e3c06a",
+    TEXT_FILTER_BG: tokens ? tokens.filterBg : defaultTextFilter(capColor),
+    TEXT_FILTER_FG: tokens ? tokens.filterFg : defaultTextFilter(capColor),
+    DNA_CSS: tokens && tokens.dnaCss ? tokens.dnaCss : "",
+    MOTION_JSON: JSON.stringify(tokens ? tokens.motion : { soft: { y: 8, dur: 0.45, ease: "power2.out" }, present: { y: 6, scale: 1.04, dur: 0.22, ease: "power3.out" } }),
+    HEROES_JSON: tokens && tokens.heroes ? JSON.stringify(tokens.heroes) : "[]",
+    HERO_JSON: tokens && tokens.hero ? JSON.stringify(tokens.hero) : "null",
+    GROUPS_HTML: buildGroupsHtml(plan.groups, plan.planes, heroCfg), PLANES_CSS: buildPlanesCss(plan.planes),
+    CUSTOM_CSS: buildPerGroupCss(plan.groups, tokens), GROUPS_JSON: buildGroupsJson(plan.groups),
   };
   const cg = plan.crown_group;
   if (cg) {
@@ -152,7 +239,7 @@ function main() {
 
   for (const [k, v] of Object.entries(subs)) src = src.split(`{{${k}}}`).join(v);
   fs.writeFileSync(path.join(project, "index.html"), src);
-  console.log(`[compile] template=${plan.template} → ${path.join(project, "index.html")}`);
+  console.log(`[compile] ${dna ? `dna=${dna.name} (engine)` : `template=${plan.template}`} → ${path.join(project, "index.html")}`);
 
   // per-group FG → index_fg.html (same strategy as the Python version)
   const fgGroups = plan.groups.filter((x) => x.layer === "fg");
@@ -161,7 +248,9 @@ function main() {
     <style>
       html.fg-only body { background: #000 !important; }
       html.fg-only #fg-cover { position: absolute; inset: 0; background: #000; z-index: 1; pointer-events: none; }
-      html.fg-only .cap:not([data-layer="fg"]) { display: none !important; }
+      /* visibility (not display:none): GSAP's transform parser needs a laid-out box at
+         construction time — display:none here crashed timeline build in headless preview */
+      html.fg-only .cap:not([data-layer="fg"]) { visibility: hidden !important; }
     </style>
 `;
     let fg = src.replace("<html ", '<html class="fg-only" ');

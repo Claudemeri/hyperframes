@@ -7,7 +7,7 @@ metadata:
 
 # Embedded Captions
 
-**Two modes, picked up front.** **Standard** (default) builds a clean verbatim **rail** (lower-third subtitle carrying most text) + an **embed** climax composited *into* the scene behind the subject at the peak. **Cinematic** is pure embed — no rail, every caption composited behind the subject (hero typography, accumulation, occlusion as the effect). Most explainer / voiceover is **Standard**; **embed is the scarce, earned peak** — embedding every word is the common mistake.
+**Two modes, picked up front.** **Standard** (default) builds a clean verbatim **rail** (lower-third subtitle carrying most text) + an **embed** climax composited _into_ the scene behind the subject at the peak. **Cinematic** is pure embed — no rail, every caption composited behind the subject (hero typography, accumulation, occlusion as the effect). Most explainer / voiceover is **Standard**; **embed is the scarce, earned peak** — embedding every word is the common mistake.
 
 ---
 
@@ -17,7 +17,7 @@ The craft prose below is long; the **pipeline itself is short** — and everythi
 deterministic is computed or compiled, never hand-written:
 
 1. **Decision gate** (refuse bad clips) → **pick mode** (Standard vs Cinematic)
-2. `hyperframes init` → **`bash scripts/prepare.sh <project>`** (matte ∥ transcribe in parallel, then safe-zones — one command, nothing forgotten)
+2. `hyperframes init` → **`bash scripts/prepare.sh <project>`** (matte ∥ transcribe ∥ audio-envelope in parallel, then safe-zones v2 with scene palette/optics/lighting — one command, nothing forgotten)
 3. **author a small JSON of creative choices** (read `safe-zones.json` first):
    Standard → `standard.json` → **`make-standard.cjs`** compiles index.html + rail.html (timings from the transcript, rail pre-emption, the rail↔climax hand-off, canvas=source length — all generated, correct by construction);
    Cinematic → `plan.json` → `fill-timings.cjs` → `fit-fonts.cjs` → `make-composition.cjs`
@@ -28,7 +28,7 @@ Load-bearing rules people miss:
 
 - **rail (default) + embed (promotion).** `drop` (filler, not shown) / `rail` (verbatim lower-third subtitle, in front, carries most text) / `embed` (a peak word composited behind the subject). **Standard mode does both**, embedding only the peak(s). See **§ Caption model**.
 - **The video is delivered UNTOUCHED** — captions are the only thing added; the matte just lets the subject occlude the embed track. Never grade/recolor/scanline the footage.
-- Scripts auto-resolve `source.mp4` and the source's **native fps**; transcription uses hyperframes' **Whisper** (no API key) and falls back to an existing transcript.
+- Scripts auto-resolve `source.mp4` and the source's **native fps**; transcription prefers **WhisperX** (wav2vec2 forced alignment — word timings tight enough for the 80ms gate; via `uvx`, auto-falls back to hyperframes' whisper.cpp when unavailable; measured on the test clip: whisper.cpp placed words up to **1.3s early into pauses**, WhisperX matched the RMS energy onsets within ~0.1s).
 - Two rulebooks: **rail → [references/rail.md](references/rail.md)** (thin), **embed craft → [references/composition-craft.md](references/composition-craft.md)** (rich, embed-only). Skim by need.
 
 ---
@@ -37,13 +37,13 @@ Load-bearing rules people miss:
 
 Every spoken phrase is one of three things:
 
-| | What | How it's shown |
-|---|---|---|
-| **drop** | filler — um/uh, stutters, self-corrections | not shown |
-| **rail** | the default — ordinary spoken content (verbatim) | clean lower-third subtitle, **in front**, readable. A punch word can get an inline `emphasis` highlight (accent colour / active-word pop) — it stays on the rail. |
-| **embed** | a promoted peak — the headline beat | one big word composited **behind the subject** (matte occlusion), designed entrance + exit |
+|           | What                                             | How it's shown                                                                                                                                                    |
+| --------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **drop**  | filler — um/uh, stutters, self-corrections       | not shown                                                                                                                                                         |
+| **rail**  | the default — ordinary spoken content (verbatim) | clean lower-third subtitle, **in front**, readable. A punch word can get an inline `emphasis` highlight (accent colour / active-word pop) — it stays on the rail. |
+| **embed** | a promoted peak — the headline beat              | one big word composited **behind the subject** (matte occlusion), designed entrance + exit                                                                        |
 
-**The rail carries most of the text; embed is the scarce, earned peak** — ≤1 per beat, never two adjacent/co-visible, spaced ≥ a beat apart. A short clip → usually one embed; a long explainer → ~one per section. Embedding every word is the common mistake.
+**The rail carries most of the text; embed is the scarce, earned peak.** Scarcity is **per beat/block, not per clip**: ≤1 hero per block (thought), never two co-visible, ≥ a beat of air between hero windows (the compiler warns under 0.6s). A short clip → usually 1–2; a long explainer → ~one per section. Among multiple heroes, the **largest authored one is the APEX** (it alone gets the full lockup embed + width-fit raise); smaller ones are **MINOR peaks** that ride their column as oversized emphasis lines (fg, damped motion) — not every beat needs the matte showcase, which is exactly what keeps the apex an event. Embedding every word is still the common mistake.
 
 This is exactly what **Standard mode** builds (rail = `rail.html`, embed = the climax in `index.html`). **Cinematic mode** drops the rail and makes everything embed-style — use it only for pure-cinematic asks, never for explainer / voiceover where the words must read.
 
@@ -53,10 +53,10 @@ This is exactly what **Standard mode** builds (rail = `rail.html`, embed = the c
 
 **Mode is the user's choice — always present both options with your recommendation and let the user pick before you author.** Don't silently default. Probe the clip + content, recommend the fitting mode, state your pick + why in one line, then confirm with the user.
 
-| Mode | What it is | Recommend it for | Author in |
-|---|---|---|---|
-| **Standard** (rail + embed) | a verbatim lower-third **rail** carries the whole transcript; only the peak(s) promote to an **embed** climax behind the subject | **explainer · voiceover / talking-head · interview · keynote · tutorial · product walkthrough · news · podcast clip** — anything where the spoken words must be fully read; accessibility; dense / information-heavy speech | [modes/standard/](modes/standard/) — 54-template library |
-| **Cinematic** (pure embed) | **embed only** — no rail; every caption is composited into the scene behind the subject (hero typography, accumulation, occlusion as the effect) | **brand film · hype / teaser · social reel · music video · showcase · motivational · trailer** — short & punchy, few words, mood over comprehension; or the user says "make it cinematic / flashy / wow" or names a Cinematic template | [modes/cinematic/](modes/cinematic/) — `champion` · `cinematic-cream` · `memory-wall` · `portrait-header` |
+| Mode                        | What it is                                                                                                                                       | Recommend it for                                                                                                                                                                                                            | Author in                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Standard** (rail + embed) | a verbatim lower-third **rail** carries the whole transcript; only the peak(s) promote to an **embed** climax behind the subject                 | **explainer · voiceover / talking-head · interview · keynote · tutorial · product walkthrough · news · podcast clip** — anything where the spoken words must be fully read; accessibility; dense / information-heavy speech | [modes/standard/](modes/standard/) — 54-template library                                   |
+| **Cinematic** (pure embed)  | **embed only** — no rail; every caption is composited into the scene behind the subject (hero typography, accumulation, occlusion as the effect) | **brand film · hype / teaser · social reel · music video · showcase · motivational · trailer** — short & punchy, few words, mood over comprehension; or the user says "make it cinematic / flashy / wow" or names a DNA     | [dna/](dna/README.md) — `cream` · `ink` · `editorial` · `keynote` · `documentary` · `loud` |
 
 **Recommendation heuristic** (you suggest, the user decides): dense speech / must-read words / longer clip → **Standard**; short, stylish, few words, mood over comprehension → **Cinematic**; bright backdrop (caption-region luminance > 180) → **Standard** (the cream/`screen` Cinematic templates wash out).
 
@@ -75,6 +75,7 @@ ffmpeg -ss <t> -i <video.mp4> -vframes 1 sample.png   # at 20/50/80%
 ```
 
 Read the samples. Refuse if:
+
 - Multiple speakers / hard cuts (split & render each shot, or refuse)
 - No human subject (this skill is for talking-head)
 - Under 3 seconds, **no speech**, or face never clearly visible — `transcribe.cjs` warns when audio is near-silent (Whisper hallucinates words like "Thank you." over silence); **heed it and refuse** rather than caption fabricated words
@@ -86,7 +87,7 @@ Read the samples. Refuse if:
 
 1. **Shot-cut probe.** Sample frames at 20%, 50%, 80%. If a different subject/scene appears, **trim the clip** before the cut.
 2. **Letterbox / pillarbox probe.** Black bars on the first frame? Compute safe content rect and constrain caption placement inside it.
-3. **Luminance probe.** Sample the caption region's average luminance — `<60` → light text reads as-is, `60-180` → add the glyph scrim, `>180` → opaque text + scrim (never bare light text). **Cinematic templates are cream+`screen` and LOCKED** — use this probe to *pick a fitting template* (or switch to Standard for bright scenes), never to recolour one; **Standard** you set in the HTML per the chosen template.
+3. **Luminance probe.** Sample the caption region's average luminance — `<60` → light text reads as-is, `60-180` → add the glyph scrim, `>180` → opaque text + scrim (never bare light text). **Cinematic templates are cream+`screen` and LOCKED** — use this probe to _pick a fitting template_ (or switch to Standard for bright scenes), never to recolour one; **Standard** you set in the HTML per the chosen template.
 4. **Mode recommendation by tone (you recommend; the user picks — see Step 0).** **explainer / keynote / interview / voiceover → recommend Standard** (rail carries the words; embed only the peak(s)). **poetic / social / music-video / showcase / "make it cinematic" → recommend Cinematic.** When unsure, recommend **Standard** (pure-embed on explainer content is the common mistake) — but present both and let the user choose.
 
 ---
@@ -109,17 +110,17 @@ Step 3 differs by mode:
 ### Step 3 — Cinematic mode (pure embed)
 
 1. **Read `safe-zones.json` first.** Narration planes go in **`zones.hugLeft`/`hugRight`** — clean strips ABUTTING the silhouette (text far from the body reads as floating, not embedded; far corners are the fallback, not the default). The hero defaults to `heroAnchor`/`heroBands.best` (centered ON the subject, ~30–55% occluded). `recommendation:"fg"` moves NARRATION in front for legibility; **the hero stays embedded whenever `heroBands.feasible`** — hero-fg is the last resort.
-2. Read [modes/cinematic/cinematic-cream/spec.md](modes/cinematic/cinematic-cream/spec.md) (→ template.html header: what's LOCKED vs OPEN).
-3. **Author `<project>/cinematic.json`** — thought-BLOCKS, not raw groups: each block = lines of words (grouped 2–5 at clause boundaries) + the plane it stacks in + per-line `css` (size/weight/style only — no positions) + at most ONE line marked `"hero": true` (the promoted word; `"text"` for display form). Schema: `scripts/make-cinematic.cjs` header.
-4. **Compile**: `node scripts/make-cinematic.cjs <project>` — lowers blocks → plan.json → index.html. Generated for you: transcript-sequenced timings, accumulate-within-block, page-flip-between-blocks, the hero hand-off (lifted out, holds to its block's end), **reading order by construction** (stack order = spoken order), fg fallback per safe-zones. Then the gates run as usual. *(Hand-authoring plan.json directly remains possible for designs blocks can't express — then run `fill-timings.cjs` + `fit-fonts.cjs` + `make-composition.cjs` yourself.)*
+2. **Pick a DNA** — [dna/README.md](dna/README.md): bright hero band (luma > 150) → `ink`; else by content register (cream / editorial / keynote / documentary / loud). State your pick + why; the user decides. The DNA locks type/palette/blend/motion + hero three-act; safe-zones v2 (`palette`/`optics`/`lighting`) parameterizes it to THIS scene automatically.
+3. **Author `<project>/cinematic.json`** — `"dna": "<name>"` + thought-BLOCKS, not raw groups: each block = lines of words (grouped 2–5 at clause boundaries) + the plane it stacks in + per-line `css` (size/weight/style only — no positions) + at most ONE line marked `"hero": true` (the promoted word; `"text"` for display form). Schema: `scripts/make-cinematic.cjs` header.
+4. **Compile**: `node scripts/make-cinematic.cjs <project>` — lowers blocks → plan.json → index.html. Generated for you: transcript-sequenced timings, accumulate-within-block, page-flip-between-blocks, **the hero LOCKUP** (a hero block's pre-context, HERO and post-context stack as ONE bonded composition centered on the subject — reading order top→bottom = spoken order by construction; context floats in FRONT while the hero embeds BEHIND = the depth sandwich; a mass rule keeps the hero dominating its context), apex/minor hero split, **reading order by construction**, fg fallback per safe-zones. Then the gates run as usual. _(Hand-authoring plan.json directly remains possible for designs blocks can't express — then run `fill-timings.cjs` + `fit-fonts.cjs` + `make-composition.cjs` yourself.)_
 
 ### Step 3 — Standard mode (rail + embed)
 
 **Read [modes/standard/PIPELINE.md](modes/standard/PIPELINE.md) FIRST** — it is the contract (the `standard.json` schema + how the compiler realizes the hand-off) and overrides the library's `_anatomy.md` for this skill.
 
 1. Read the transcript; pick the **promoted word** (the headline beat → climax) — prefer a clause-final word. Everything else rides the **rail**, verbatim.
-2. **Pick up to 3 templates** that fit content + scene (each file's `## Triggers`); take their **style tokens** (font / fills / accent / climax CSS).
-3. **Author `<project>/standard.json`** — your creative choices only: template tokens, rail line grouping (2–5 words/line at clause boundaries — include the promoted word where spoken), and the climax block (`match`/`occurrence`/`text`/`top_pct`/`font_cqh`/`entrance`/`exit`). Schema: [modes/standard/PIPELINE.md](modes/standard/PIPELINE.md) § standard.json.
+2. **Pick a DNA** ([dna/README.md](dna/README.md)) — `"dna": "<name>"` in standard.json fills font / fills / accent / climax-entrance and wires the climax three-act (rail yields → per-letter RMS-coupled entrance → breathe). _(Legacy alternative: pick up to 3 of the 54 archived templates for their style tokens — still works, but DNA-first is the recommended path.)_
+3. **Author `<project>/standard.json`** — your creative choices only: the DNA name (or explicit tokens — your fields always win over the DNA), rail line grouping (2–5 words/line at clause boundaries — include the promoted word where spoken), and the climax block (`match`/`occurrence`/`text`/`top_pct`/`font_cqh`/`entrance`/`exit`). Schema: [modes/standard/PIPELINE.md](modes/standard/PIPELINE.md) § standard.json.
 4. **Compile**: `node scripts/make-standard.cjs <project>` → index.html + rail.html + a derived plan.json. The compiler pulls every word's timing from the transcript by sequence, generates rail pre-emption + the rail↔climax **hand-off** (promoted word lifted out, pre-line freeze, climax holds to end of thought, page-flip), sets canvas = source length, and line-fits the climax. **Don't hand-edit the generated HTML** — change standard.json and recompile.
 5. Render: the timing / occlusion(+hero) / overflow / hand-off gates all run (the derived plan.json lights them up); with the compiler they pass first try.
 
@@ -130,15 +131,21 @@ Step 3 differs by mode:
 `node scripts/preview-frames.cjs <project> [t…]` composites **faithful preview frames in ~2s each**
 (caption layers screenshotted at seek-time + real video frame + matte occlusion + rail overlay = what
 the final composite will look like at that moment). Default samples = each group/climax window.
-A full render costs minutes — never use it to *discover* layout problems.
+A full render costs minutes — never use it to _discover_ layout problems.
 
 Check the previews (`<project>/preview/sheet.png`) against this list — these are the failures the
 geometric gates **cannot** catch:
-1. **Washout** — light text over a bright region (window/sign/sky): unreadable → move the plane or change template/mode.
+
+1. **Washout** — light text over a bright region (window/sign/sky): unreadable → move the plane or change DNA/mode (bright scene → `ink`).
 2. **Text-on-text** — captions over the scene's own text/graphics, or two caption groups colliding.
 3. **Reading order** — on-screen vertical order must match spoken order; the hero must not sit below later words.
 4. **Hero presence** — the climax should be BIG and visibly behind the subject (~30–55% occluded), not a floating label in a margin.
 5. **Balance** — one coherent column/band, not scattered fragments; margins breathing; nothing clipped.
+
+Then the **5 positive checks** in [references/reference-bar.md](references/reference-bar.md)
+(poster test · timid test · one-glance hierarchy · scene handshake · dead-air audit) — the
+failure list keeps a render from being broken; the positive list is what makes it _designed_.
+Ship when both pass.
 
 **Fresh-eyes review (recommended for anything user-facing):** you have confirmation bias about your
 own layout. If you can spawn a subagent, give it ONLY the preview sheet + this checklist and ask for
@@ -148,17 +155,37 @@ each loop costs seconds. Render once, when the previews pass.
 
 ---
 
-## Catalog of shipped templates
+## The DNA registry — six visual languages (replaces the template catalog)
 
-| Template | Frame | Look | Spec |
-|---|---|---|---|
-| **cinematic-cream** | 16:9 + 9:16 (DNA-only) | THE Cinematic template. Inter + soft/present motion + warm-cream palette; agent composes planes + per-group typography + block-synced accumulation per scene. | [spec.md](modes/cinematic/cinematic-cream/spec.md) → template.html header |
+Both modes draw from **[dna/](dna/README.md)** — six art-directed visual languages that
+**parameterize per scene** (accent sampled from the footage, contact shadow along the
+measured light direction, depth-match blur, RMS-coupled hero amplitude):
 
-(Older templates — memory-wall / champion / portrait-header — are **superseded** and live in [modes/cinematic/_archive/](modes/cinematic/_archive/) for reference only. Don't pick them for new work.)
+| DNA             | Register       | Scene fit                                       | Voice                                                                                              |
+| --------------- | -------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **cream**       | premium-warm   | dark/mid warm scenes                            | Inter + warm cream + screen; glowing emergence hero (successor of cinematic-cream)                 |
+| **ink**         | premium        | **bright scenes (luma > 150)**                  | near-black multiply — type printed ON the wall; the bright-scene answer                            |
+| **editorial**   | editorial-luxe | introspective / fashion / poetic                | Bodoni Moda, lowercase-italic hero — magazine elegance                                             |
+| **keynote**     | tech-premium   | product / launch                                | opaque white Inter 800, dead-center stillness                                                      |
+| **documentary** | formal         | interview / serious                             | burn-in reveals, no hero — gravitas IS the style                                                   |
+| **loud**        | loud           | hype / sport / social                           | Anton + scene-sampled accent, single-unit slam + ripple; body ANNOUNCES in front (`bodyLayer: fg`) |
+| **neon**        | loud-cyber     | cyberpunk / nightlife / tech-noir (dark scenes) | electric-cyan signage, ignition flicker, the hero powers ON like a sign                            |
+| **glitch**      | loud-cyber     | digital / hacker / AI                           | RGB-split echoes snap together on landing; machine-percussive timing                               |
+| **chrome**      | loud-luxe      | Y2K / fashion-tech / music                      | liquid-metal gradient hero + one sheen sweep during the hold                                       |
+| **velocity**    | loud-sport     | sport / auto / fitness                          | every word arrives along its motion vector (streak+skew), hero passes with speed trails            |
 
-> **Note:** these are the **Cinematic** (pure-embed) templates — they composite text into the scene with no rail. For **rail + embed** (most explainer / voiceover), use **Standard mode** → the 54-template design library in [modes/standard/](modes/standard/).
+Pick by `safe-zones.json` (`heroAnchor.bandLuma`, `palette.temperature`) × content
+register — [dna/README.md](dna/README.md) has the decision rule. Authoring:
+`cinematic.json` / `standard.json` take `"dna": "<name>"`.
 
-To add a new template: see [modes/cinematic/README.md § Adding a new template](modes/cinematic/README.md).
+The engine generates the **hero three-act** from the DNA (no authoring needed):
+co-visible captions dim (setup) → per-letter entrance with amplitude ∝ spoken loudness
+(impact) → breathe + glow until exit (afterglow).
+
+(Legacy: `plan.template:"cinematic-cream"` maps to `dna:"cream"` automatically. The
+54-file Standard template library and the archived memory-wall / champion /
+portrait-header remain readable as **style-token references**, but DNA-first is the
+recommended path for all new work.)
 
 ---
 
@@ -167,12 +194,15 @@ To add a new template: see [modes/cinematic/README.md § Adding a new template](
 Before picking a template, classify the clip on 3 axes:
 
 **Tone** (what feel does the content have?)
+
 - documentary | conversational | energetic | poetic | keynote | investigative | music-video
 
 **Shot** (what's the framing?)
+
 - close-up (head + shoulders) | mid-shot (torso+) | wide (full body+) | cut-montage (mixed shots)
 
 **Platform** (where will it play?)
+
 - 9:16 portrait (TikTok/IG/Shorts) | 16:9 landscape (YouTube/web) | 1:1 square | broadcast export
 
 Cross-reference in [references/direction-catalog.md § Classification matrix](references/direction-catalog.md) → direction → Cinematic template OR Standard design.
@@ -182,7 +212,7 @@ Cross-reference in [references/direction-catalog.md § Classification matrix](re
 The full **embed-track** playbook lives in **[references/composition-craft.md](references/composition-craft.md)**:
 transcript role-annotation, phrase grouping, planes & clean-zone anchoring, zone coherence,
 climax pop & readability, edge-breathing, the occlusion 3-step judgement, and
-accumulation/persistence. It governs how a *promoted* phrase sits INTO the scene — read it
+accumulation/persistence. It governs how a _promoted_ phrase sits INTO the scene — read it
 before authoring any embed (Cinematic `plan.json` or Standard `index.html`). The default **rail**
 track has its own, much simpler spec → **[references/rail.md](references/rail.md)**.
 
@@ -190,20 +220,22 @@ track has its own, much simpler spec → **[references/rail.md](references/rail.
 
 ## Shared knowledge
 
-| Doc | What |
-|---|---|
-| [references/rail.md](references/rail.md) | **The rail track** — standard lower-third subtitle spec (the default; carries most text). |
-| [references/composition-craft.md](references/composition-craft.md) | **The embed-track playbook** — grouping, planes, climax pop, occlusion judgement, accumulation/persistence. Read before embedding. |
-| [references/aesthetic-principles.md](references/aesthetic-principles.md) | **The 18 rules.** Beat Veed AI on taste. Read first. |
-| [references/motion-vocabulary.md](references/motion-vocabulary.md) | 10 named motion primitives + tone→timing lookup |
-| [references/direction-catalog.md](references/direction-catalog.md) | 10 ship-ready aesthetics + tone×shot×platform matrix |
-| [references/anti-patterns.md](references/anti-patterns.md) | Bugs already locked out (CoreML, letter-spacing reflow, etc.) |
-| [references/scene-types.md](references/scene-types.md) | When a wall surface is usable (4 conditions) |
-| [references/layout-heuristics.md](references/layout-heuristics.md) | Plane positioning, clean-zone selection, crown 3 conditions, pillarbox math |
-| [references/typography-presets.md](references/typography-presets.md) | Font-size × column-width matrix (starting points) |
-| [references/caption-grouping.md](references/caption-grouping.md) | Word → group rules (pauses, sentence boundaries) |
-| [references/failure-modes.md](references/failure-modes.md) | Long tail of dev gotchas |
-| [references/bespoke-vs-presets.md](references/bespoke-vs-presets.md) | Why presets fail sometimes; clone-and-tweak pattern |
+| Doc                                                                      | What                                                                                                                               |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [references/rail.md](references/rail.md)                                 | **The rail track** — standard lower-third subtitle spec (the default; carries most text).                                          |
+| [references/composition-craft.md](references/composition-craft.md)       | **The embed-track playbook** — grouping, planes, climax pop, occlusion judgement, accumulation/persistence. Read before embedding. |
+| [dna/README.md](dna/README.md)                                           | **The DNA registry** — six scene-parameterized visual languages; how to pick.                                                      |
+| [references/reference-bar.md](references/reference-bar.md)               | **The taste bar** — per-register world-class references + the 5 positive checks.                                                   |
+| [references/aesthetic-principles.md](references/aesthetic-principles.md) | **The 18 rules.** Beat Veed AI on taste. Read first.                                                                               |
+| [references/motion-vocabulary.md](references/motion-vocabulary.md)       | 10 named motion primitives + tone→timing lookup                                                                                    |
+| [references/direction-catalog.md](references/direction-catalog.md)       | 10 ship-ready aesthetics + tone×shot×platform matrix                                                                               |
+| [references/anti-patterns.md](references/anti-patterns.md)               | Bugs already locked out (CoreML, letter-spacing reflow, etc.)                                                                      |
+| [references/scene-types.md](references/scene-types.md)                   | When a wall surface is usable (4 conditions)                                                                                       |
+| [references/layout-heuristics.md](references/layout-heuristics.md)       | Plane positioning, clean-zone selection, crown 3 conditions, pillarbox math                                                        |
+| [references/typography-presets.md](references/typography-presets.md)     | Font-size × column-width matrix (starting points)                                                                                  |
+| [references/caption-grouping.md](references/caption-grouping.md)         | Word → group rules (pauses, sentence boundaries)                                                                                   |
+| [references/failure-modes.md](references/failure-modes.md)               | Long tail of dev gotchas                                                                                                           |
+| [references/bespoke-vs-presets.md](references/bespoke-vs-presets.md)     | Why presets fail sometimes; clone-and-tweak pattern                                                                                |
 
 **Read the aesthetic principles and direction catalog FIRST.** Everything else is implementation detail.
 
@@ -214,7 +246,7 @@ track has its own, much simpler spec → **[references/rail.md](references/rail.
 - **Face must never be 100%-covered continuously** — every 0.3s window, face bbox ≥30% uncovered.
 - **WCAG contrast** — final render lints; fix palette if it fails.
 - **Deterministic** — no `Math.random()`, no `Date.now()`, no `repeat:-1`.
-- **Never grade/recolor the video.** The footage ships untouched — captions are the only addition. No full-frame scanlines / duotone / darken / vignette over the a-roll. Cyberpunk/CRT texture belongs *inside* a caption element, not over the whole frame.
+- **Never grade/recolor the video.** The footage ships untouched — captions are the only addition. No full-frame scanlines / duotone / darken / vignette over the a-roll. Cyberpunk/CRT texture belongs _inside_ a caption element, not over the whole frame.
 - **Rail-first for talking-head / explainer.** Don't embed the whole transcript — most text is the rail; embed only peaks. Embedding everything is the default mistake.
 - **Embed is scarce + spaced.** ≤1 embed per sentence/beat, never two adjacent or co-visible, ≥ a beat apart, at most one `apex`. climax = per-beat peak, **not** "the single payoff of the entire clip."
 - **Matte = the subject (PP-MattingV2 human matting, Apache-2.0).** It segments people, not props — a gripped mic/cup is best-effort and may not be fully captured, and bright incidental objects can leak in. Sample `frames_fg/` and sanity-check before relying on tight prop occlusion.
@@ -231,7 +263,7 @@ track has its own, much simpler spec → **[references/rail.md](references/rail.
 
 ## Dependencies
 
-- **hyperframes**, built (`packages/cli/dist/cli.js`). Scripts auto-resolve the checkout: `HYPERFRAMES_ROOT` env → repo root if this skill ships *inside* hyperframes → `~/Downloads/hyperframes`. Build with `bun install && bun run build`.
+- **hyperframes**, built (`packages/cli/dist/cli.js`). Scripts auto-resolve the checkout: `HYPERFRAMES_ROOT` env → repo root if this skill ships _inside_ hyperframes → `~/Downloads/hyperframes`. Build with `bun install && bun run build`.
 - **No Python — Node-only.** Everything runs on the toolchain hyperframes already ships: PP-MattingV2 matting via **`onnxruntime-node`**, image/alpha math via **`sharp`**, layout/occlusion/overflow via **`puppeteer`**, plus **`ffmpeg`**. The scripts auto-resolve these from the hyperframes checkout — nothing extra to install.
 - **Transcription = hyperframes' Whisper** (whisper.cpp — native C++, no API key, no Python). `transcribe.cjs` wraps `hyperframes transcribe`; hyperframes auto-installs whisper.cpp (Homebrew or source build) and the model on first run. Falls back to an existing word-level `transcript.json` if present.
 - **Source video** — `matte.cjs` / `transcribe.cjs` auto-resolve `source.mp4` (or glob the clip / read `hyperframes.json`), so `hyperframes init --video X.mp4` needs no manual rename.

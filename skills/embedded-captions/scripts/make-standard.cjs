@@ -3,51 +3,40 @@
  * make-standard.cjs — compile standard.json + transcript.json → index.html + rail.html
  * (STANDARD MODE). The agent authors a small JSON of creative choices; everything
  * deterministic is GENERATED, so whole bug classes are impossible by construction:
- *   - word/group timings come from the transcript BY SEQUENCE (duplicate words resolve
- *     by position — no hand-copied times, no drift)
+ *   - word/group timings come from the transcript BY SEQUENCE (no hand-copied times)
  *   - rail lines pre-empt: each line's exit completes before the next line's first word
- *   - the PROMOTED word is lifted OUT of the rail (never duplicated); the rail line
+ *   - every PROMOTED word is lifted OUT of the rail (never duplicated); its rail line
  *     freezes at the pre-part, the climax holds across the page-flip to the end of its
  *     thought, the rail resumes fresh — the canonical hand-off, generated every time
- *   - the canvas duration = the SOURCE clip length (no foreground-only tail)
- *   - climax line-fit: the font shrinks if the text would overflow the frame
- *   - seek-safe GSAP only (no Math.random/Date.now/CSS keyframes), one paused timeline
- *     registered on window.__timelines.main, in BOTH files
- * Also emits a derived plan.json (climax as a hero group) so the existing timing +
+ *   - MULTI-CLIMAX: `climaxes: [...]` promotes one peak per beat (scarcity per block,
+ *     not per clip). Windows never overlap (out_i ≤ in_{i+1} − 0.25). The largest
+ *     font_cqh is the APEX (per-letter + glow + breathe privileges); smaller ones are
+ *     MINOR peaks (whole-unit entrance, damped amplitude).
+ *   - the canvas duration = the SOURCE clip length; climax line-fit vs frame width
+ *   - seek-safe GSAP only, one paused timeline on window.__timelines.main, BOTH files
+ * Also emits a derived plan.json (each climax as a hero group) so the timing +
  * occlusion gates (incl. the hero-weak advisory) run for Standard automatically.
  *
  *   node make-standard.cjs <project-dir>
  *
- * standard.json schema (authored by the agent; see modes/standard/PIPELINE.md):
+ * standard.json schema (see modes/standard/PIPELINE.md):
  * {
- *   "template": "didone",                  // which library template the tokens came from
+ *   "dna": "keynote",                      // DNA fills font/fills/accent/entrance defaults
  *   "width": 1920, "height": 1080, "fps": 30,
- *   "font": "Bodoni Moda",                 // climax font — LITERAL family name
- *   "rail_font": null,                     // optional rail override (decorative display faces)
- *   "cfill": "#f4efe6", "cacc": "#caa14a", // fill + active-word accent
- *   "climax_css": "font-style:italic;",    // optional extra CSS on .climax (template tokens)
- *   "rail_css": "",                        // optional extra CSS on .line
- *   "rail": {
- *     "bottom_pct": 9, "width_pct": 90, "font_cqh": 6.4,
- *     "lines": [["You","need","to"], ["judge","us","by","the","actions"], ["that","we","take."]]
- *     // ALL spoken words you want captioned, in spoken order, grouped into lines
- *     // (2-5 words/line at clause/breath boundaries). Include the promoted word where
- *     // it is spoken — the compiler lifts it out and generates the hand-off.
- *   },
- *   "climax": {
- *     "match": "actions",                  // the promoted word as it appears in rail.lines
- *     "occurrence": 1,                     // which occurrence in the flattened lines (duplicates)
- *     "text": "ACTIONS",                   // display form (often uppercase)
- *     "top_pct": 37, "font_cqh": 44,
- *     "entrance": "rise",                  // rise | scale-settle | pop
- *     "exit": "rise-off",                  // rise-off | fade | shrink-off
- *     "hold": "thought"                    // "thought" (to end of sentence) | seconds (number)
- *   }
+ *   "font": null, "rail_font": null, "cfill": null, "cacc": null,   // explicit overrides win
+ *   "climax_css": "", "rail_css": "",
+ *   "rail": { "bottom_pct": 9, "width_pct": 90, "font_cqh": 6.4,
+ *     "lines": [["You","need","to"], ["judge","us","by","the","actions"], ...] },
+ *   "climaxes": [                          // 1..N — one per beat; legacy "climax": {} still works
+ *     { "match": "actions", "occurrence": 1, "text": "ACTIONS",
+ *       "top_pct": 37, "font_cqh": 44, "entrance": "rise", "exit": "rise-off", "hold": "thought" }
+ *   ]
  * }
  */
 const path = require("path");
 const fs = require("fs");
 const cp = require("child_process");
+const dnaLib = require("./lib-dna.cjs");
 
 const norm = (s) => String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9']/g, "");
 const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -90,12 +79,23 @@ function main() {
   const W = S.width || 1920, H = S.height || 1080, FPS = S.fps || 30;
   const srcDur = sourceDurationSec(project);
   const DUR = +(srcDur || (trWords[trWords.length - 1].end + 0.5)).toFixed(3);
-  const FONT = S.font || "Inter";
+  // DNA tokens fill the defaults (explicit S.* fields win).
+  let dna = null, dnaAccent = null;
+  if (S.dna) {
+    dna = dnaLib.load(S.dna);
+    const sz0 = (() => { try { return JSON.parse(fs.readFileSync(path.join(project, "safe-zones.json"), "utf8")); } catch (e) { return {}; } })();
+    dnaAccent = dna.palette.accent === "scene"
+      ? ((sz0.palette && sz0.palette.accentSuggestion) || dna.palette.accent_fallback)
+      : dna.palette.accent;
+    console.log(`[make-standard] DNA "${dna.name}" (${dna.register}) — accent ${dnaAccent}`);
+  }
+  const FONT = S.font || (dna ? dna.font.family : "Inter");
   const RFONT = S.rail_font || FONT;
-  const CFILL = S.cfill || "#f3efe6";
-  const CACC = S.cacc || "#e3c06a";
+  const CFILL = S.cfill || (dna ? dna.palette.cap_color : "#f3efe6");
+  const CACC = S.cacc || dnaAccent || "#e3c06a";
   const rail = S.rail || {};
-  const cl = S.climax || null;
+  const clList = Array.isArray(S.climaxes) ? S.climaxes.slice() : (S.climax ? [S.climax] : []);
+  if (dna && dna.hero) clList.forEach((c) => { if (!c.entrance) c.entrance = dna.hero.entrance; });
   const lines = (rail.lines || []).map((ws) => ws.map((t) => String(t)));
   if (!lines.length) die("rail.lines is empty");
 
@@ -114,26 +114,68 @@ function main() {
   }));
   if (unmatched.length) die(`words not found in transcript (in order): ${unmatched.join(" ")} — fix rail.lines to match the transcript verbatim`);
 
-  // ── 2. locate the promoted word; lift it out (hand-off by construction) ─────
-  let promo = null;
-  if (cl && cl.match) {
-    let want = cl.occurrence || 1, seen = 0;
-    outer: for (const ln of L) for (let wi = 0; wi < ln.words.length; wi++) {
-      if (norm(ln.words[wi].text) === norm(cl.match)) { seen++; if (seen === want) { promo = { ln, wi, w: ln.words[wi] }; break outer; } }
-    }
-    if (!promo) die(`climax.match "${cl.match}" (occurrence ${cl.occurrence || 1}) not found in rail.lines`);
+  // COMPLETENESS GATE — the rail is verbatim by definition; the sequence matcher's
+  // lookahead must not silently skip transcript words the author forgot. Declared
+  // filler goes in standard.json "drops": [].
+  {
+    const consumed = new Set();
+    for (const ln of L) for (const w of ln.words) if (w.ti != null) consumed.add(w.ti);
+    const dropOk = new Set((S.drops || []).map(norm));
+    const FILLER = new Set(["um", "uh", "er", "ah", "hmm", "mm"]);
+    const skipped = trWords.map((w, i) => ({ w, i }))
+      .filter(({ w, i }) => !consumed.has(i) && !dropOk.has(norm(w.text)) && !FILLER.has(norm(w.text)));
+    if (skipped.length)
+      die(`VERBATIM VIOLATION — ${skipped.length} transcript word(s) never authored: ` +
+        `${skipped.map(({ w }) => `"${w.text}"`).join(" ")} — add them to rail.lines, or declare true filler in "drops": []`);
   }
 
-  // split the promoted line into pre / post segments; the promoted word joins NEITHER
-  const segs = []; // {words:[..], freezeUntil?:t, kind:"normal"|"pre"|"post"}
+  // ── 2. locate every promoted word; lift each out (hand-off by construction) ─
+  // match supports PHRASES ("pixel size", "skin food") — a peak is a semantic unit,
+  // not necessarily one token; the whole phrase lifts as the climax.
+  const ARTICLES = new Set(["the", "a", "an", "this", "that", "these", "those", "my", "our", "his", "her", "their", "its"]);
+  const promos = [];
+  for (const c of clList) {
+    if (!c.match) die("every climax needs a `match` word/phrase");
+    const toks = String(c.match).trim().split(/\s+/).map(norm);
+    let want = c.occurrence || 1, seen = 0, found = null;
+    outer: for (const ln of L) for (let wi = 0; wi + toks.length <= ln.words.length; wi++) {
+      let ok = true;
+      for (let k = 0; k < toks.length; k++) if (norm(ln.words[wi + k].text) !== toks[k]) { ok = false; break; }
+      if (ok) { seen++; if (seen === want) { found = { ln, wi, wiEnd: wi + toks.length - 1, words: ln.words.slice(wi, wi + toks.length), cfg: c }; break outer; } }
+    }
+    if (!found) die(`climax.match "${c.match}" (occurrence ${c.occurrence || 1}) not found in rail.lines (phrase must sit within ONE line)`);
+    // never strand a determiner: "the | STARS" leaves an orphan "the" that vanishes the
+    // moment the peak lifts — absorb a leading article into the promoted phrase
+    if (found.wi > 0 && ARTICLES.has(norm(found.ln.words[found.wi - 1].text))) {
+      const before = found.ln.words.slice(0, found.wi - 1);
+      if (before.length === 0) { // the article IS the line start — a true orphan if left behind
+        found.wi -= 1;
+        found.words = found.ln.words.slice(found.wi, found.wiEnd + 1);
+        if (c.text) c.text = found.words[0].text.charAt(0).toUpperCase() + found.words[0].text.slice(1) + " " + c.text;
+        console.log(`[make-standard] absorbed leading "${found.words[0].text}" into the climax (never strand a determiner)`);
+      }
+    }
+    found.w = found.words[0]; found.wLast = found.words[found.words.length - 1];
+    promos.push(found);
+  }
+  promos.sort((a, b) => a.w.start - b.w.start);
+
+  // split each promoted line around ALL its promo SPANS; promoted words join NO segment
+  const segs = [];
   for (const ln of L) {
-    if (!promo || ln !== promo.ln) { segs.push({ words: ln.words, kind: "normal" }); continue; }
-    const pre = ln.words.slice(0, promo.wi), post = ln.words.slice(promo.wi + 1);
-    if (pre.length) segs.push({ words: pre, kind: "pre" });
+    const linePromos = promos.filter((pp) => pp.ln === ln).sort((a, b) => a.wi - b.wi);
+    if (!linePromos.length) { segs.push({ words: ln.words, kind: "normal" }); continue; }
+    let cur = 0;
+    for (const pp of linePromos) {
+      const pre = ln.words.slice(cur, pp.wi);
+      if (pre.length) segs.push({ words: pre, kind: "pre" });
+      cur = pp.wiEnd + 1;
+    }
+    const post = ln.words.slice(cur);
     if (post.length) segs.push({ words: post, kind: "post" });
   }
   const segsT = segs.filter((s) => s.words.length);
-  if (!segsT.length) die("rail has no words left after lifting the climax — add narration lines");
+  if (!segsT.length) die("rail has no words left after lifting the climaxes — add narration lines");
 
   // ── 3. timing: line enter/exit with pre-emption; hand-off freeze + page-flip ─
   const EXIT_D = 0.22, ENTER_D = 0.22, LEAD = 0.15;
@@ -144,47 +186,57 @@ function main() {
   }
   for (let i = 0; i < segsT.length; i++) {
     const s = segsT[i], nx = segsT[i + 1];
-    // default: linger after last word, but ALWAYS clear before the next line needs the slot
     let exitAt = s.last + 1.1;
     if (nx) exitAt = Math.min(exitAt, nx.enter - EXIT_D - 0.02);
-    // hand-off freeze: the PRE segment holds (frozen) until the page-flip moment —
-    // the first word AFTER the promoted word (post segment or next line)
+    // hand-off freeze: a PRE segment holds (frozen) until the page-flip moment
     if (s.kind === "pre" && nx) exitAt = nx.enter - EXIT_D - 0.02;
     s.exit = Math.max(s.enter + ENTER_D + 0.1, Math.min(exitAt, DUR - 0.05));
   }
 
-  // climax window: enters when spoken; holds to end of THOUGHT (sentence end in the
-  // transcript), so it anchors across the rail's page-flip — then exits.
-  let climax = null;
-  if (promo) {
-    const t0 = promo.w.start;
+  // ── 4. climax windows: enter when spoken; hold to end of THOUGHT; never overlap ─
+  const climaxes = promos.map((pp, i) => {
+    const c = pp.cfg;
+    const t0 = pp.w.start;
     let tEnd;
-    if (typeof cl.hold === "number") tEnd = t0 + cl.hold;
-    else { // "thought": scan transcript forward for sentence-final punctuation
-      tEnd = promo.w.end + 2.2;
-      for (let j = promo.w.ti; j < trWords.length; j++) {
+    if (typeof c.hold === "number") tEnd = t0 + c.hold;
+    else {
+      tEnd = pp.w.end + 2.2;
+      for (let j = pp.wLast.ti; j < trWords.length; j++) {
         if (/[.!?…]$/.test(String(trWords[j].text).trim())) { tEnd = trWords[j].end + 0.35; break; }
         if (j === trWords.length - 1) tEnd = trWords[j].end + 0.35;
       }
     }
-    const EXIT_C = 0.5;
-    climax = { text: cl.text || promo.w.text.toUpperCase(), in: Math.max(0, t0 - 0.02),
-      out: Math.min(Math.max(tEnd, t0 + 1.0), DUR - 0.05), exitD: EXIT_C,
-      top: cl.top_pct ?? 37, entrance: cl.entrance || "rise", exit: cl.exit || "rise-off" };
-    // line-fit: shrink font_cqh if the climax text would overflow the frame width
-    let cqh = cl.font_cqh ?? 44;
+    return { id: `climax-${i}`, text: c.text || pp.words.map((w) => w.text).join(" ").toUpperCase(), in: Math.max(0, t0 - 0.02),
+      out: Math.min(Math.max(tEnd, t0 + 1.0), DUR - 0.05), exitD: 0.5,
+      top: c.top_pct ?? 37, entrance: c.entrance || "rise", exit: c.exit || "rise-off",
+      cqh: c.font_cqh ?? 44, promo: pp };
+  });
+  // scarcity: peaks never co-visible — earlier window yields to the next peak's entrance
+  for (let i = 0; i < climaxes.length - 1; i++) {
+    const clamped = Math.min(climaxes[i].out, Math.max(climaxes[i].in + 0.8, climaxes[i + 1].in - 0.25));
+    if (clamped < climaxes[i].out - 0.01) console.log(`[make-standard] climax "${climaxes[i].text}" hold clamped to ${clamped.toFixed(2)}s — the next peak needs the stage`);
+    climaxes[i].out = clamped;
+  }
+  // APEX = largest cqh; minors are damped (whole-unit, no glow/breathe, amp ×0.7)
+  const apexCqh = Math.max(...climaxes.map((c) => c.cqh));
+  climaxes.forEach((c) => { c.minor = c.cqh < apexCqh - 1e-6; });
+  // a MINOR peak is still a peak — pre-pass floor at 3× the rail type (a 13cqh word
+  // over a 5.8cqh rail reads as a label, not a beat). The real-measure pass below
+  // raises minors further to 0.55× the apex's FINAL size.
+  const railCqh0 = (S.rail && S.rail.font_cqh) || 6.4;
+  for (const c of climaxes) if (c.minor && c.cqh < railCqh0 * 3) {
+    console.log(`[make-standard] minor climax "${c.text}" ${c.cqh}cqh < 3× rail — floored to ${Math.ceil(railCqh0 * 3)}cqh`);
+    c.cqh = Math.ceil(railCqh0 * 3);
+  }
+  // ADV line-fit per climax
+  for (const c of climaxes) {
     const adv = ADV[FONT.toLowerCase()] ?? 0.56;
-    const estW = (climax.text.replace(/\s/g, "").length + (climax.text.split(/\s+/).length - 1) * 0.5) * adv * (cqh / 100 * H);
+    const estW = (c.text.replace(/\s/g, "").length + (c.text.split(/\s+/).length - 1) * 0.5) * adv * (c.cqh / 100 * H);
     const maxW = W * 0.96;
-    if (estW > maxW) { cqh = Math.max(8, Math.floor(cqh * maxW / estW)); console.log(`[make-standard] climax "${climax.text}" would overflow — font ${cl.font_cqh ?? 44}cqh → ${cqh}cqh`); }
-    climax.cqh = cqh;
+    if (estW > maxW) { const ncqh = Math.max(8, Math.floor(c.cqh * maxW / estW)); console.log(`[make-standard] climax "${c.text}" would overflow — font ${c.cqh}cqh → ${ncqh}cqh`); c.cqh = ncqh; }
   }
 
-  // safe-zones drives two climax decisions (the asymmetry the cold-agent fleet exposed —
-  // make-cinematic already did this; make-standard didn't, costing occlusion-gate rounds):
-  //  (1) verdict "fg" (subject fills the frame) → a behind-subject embed is impossible;
-  //      render the climax in FRONT (caption_layer:fg, now honored by render-and-composite).
-  //  (2) bright band under the hero → bare cream text washes out → scrim + heavy stroke.
+  // safe-zones → fg verdict + bright-band treatment (scene-level, applies to all peaks)
   let fgVerdict = false, heroBright = false, heroBandsS = null;
   try {
     const sz = JSON.parse(fs.readFileSync(path.join(project, "safe-zones.json"), "utf8"));
@@ -192,82 +244,136 @@ function main() {
     heroBandsS = sz.heroBands || null;
     const bl = sz.heroAnchor && sz.heroAnchor.bandLuma;
     if (bl != null && bl > 160) heroBright = true;
-  } catch (e) { /* no safe-zones — behave as before */ }
-  // The hero WANTS occlusion (~30–55% IS the embed). fg is the LAST resort: only when no
-  // height band achieves ≤62% predicted occlusion. A frame-filling subject usually still
-  // has a feasible band over the hairline — keep the cinematic feel.
+  } catch (e) {}
   let heroFeasible = heroBandsS ? heroBandsS.feasible : !fgVerdict;
-  const fgClimax = climax && !heroFeasible;
-  if (climax && heroFeasible && heroBandsS && heroBandsS.profile && heroBandsS.best) {
-    const near = heroBandsS.profile.reduce((a, b) => Math.abs(b.topPct - climax.top) < Math.abs(a.topPct - climax.top) ? b : a);
-    if (near.occPct > 62) {
-      console.log(`[make-standard] climax top ${climax.top}% sits in a ${near.occPct}%-occluded band → moved to ${heroBandsS.best.topPct}% (predicted ${heroBandsS.best.occPct}%) — the hero stays EMBEDDED`);
-      climax.top = +(heroBandsS.best.topPct + 6.5).toFixed(1); // band TOP edge → hero anchors at band CENTER (translate -50%)
+  const fgClimax = climaxes.length > 0 && !heroFeasible;
+  if (fgClimax) console.log(`[make-standard] no hero band ≤62% predicted occlusion → climaxes rendered in FRONT (fg = last resort).`);
+  if (climaxes.length && heroBright) console.log(`[make-standard] hero band is bright (washout risk) → climaxes get a scrim + heavy stroke.`);
+  for (const c of climaxes) {
+    if (heroFeasible && heroBandsS && heroBandsS.profile && heroBandsS.best) {
+      const near = heroBandsS.profile.reduce((a, b) => Math.abs(b.topPct - c.top) < Math.abs(a.topPct - c.top) ? b : a);
+      if (near.occPct > 62) {
+        console.log(`[make-standard] climax "${c.text}" top ${c.top}% sits in a ${near.occPct}%-occluded band → moved to ${heroBandsS.best.topPct}%`);
+        c.top = +(heroBandsS.best.topPct + 6.5).toFixed(1);
+      }
     }
-  }
-  if (fgClimax) console.log(`[make-standard] no hero band ≤62% predicted occlusion → climax rendered in FRONT (fg = last resort). Or drop "climax" from standard.json for rail-only.`);
-  if (climax && heroBright) console.log(`[make-standard] hero band is bright (washout risk) → climax gets a scrim + heavy stroke.`);
-  if (climax) {
-    // anchor = text CENTER (translate -50%): clamp so the glyphs never leave the frame
-    const halfPct = climax.cqh * 1.12 / 2 + 0.6;
-    const clamped = Math.min(100 - halfPct, Math.max(halfPct, climax.top));
-    if (Math.abs(clamped - climax.top) > 0.2) { console.log(`[make-standard] climax top ${climax.top}% would clip (text half-height ${halfPct.toFixed(1)}%) → ${clamped.toFixed(1)}%`); climax.top = +clamped.toFixed(1); }
+    const halfPct = c.cqh * 1.12 / 2 + 0.6;
+    const clamped = Math.min(100 - halfPct, Math.max(halfPct, c.top));
+    if (Math.abs(clamped - c.top) > 0.2) { console.log(`[make-standard] climax "${c.text}" top ${c.top}% would clip → ${clamped.toFixed(1)}%`); c.top = +clamped.toFixed(1); }
   }
 
-  // ── 4. emit index.html (climax BEHIND subject via matte, unless fg verdict) ──
+  // ── 5. emit index.html (climaxes BEHIND subject via matte, unless fg verdict) ─
+  const hero = dna && dna.hero ? dna.hero : null;
+  // scene-resolved climax shadow (same source as the cinematic engine) — the legacy
+  // 48px dark halo read as a smoke cloud behind the glyphs on bright scenes
+  let climaxShadow = "0 2px 10px rgba(0,0,0,.38)";
+  try { if (dna) { const tk = dnaLib.resolveTokens(dna, project, {}); if (tk && tk.textShadow) climaxShadow = tk.textShadow; } } catch (e) {}
+  const heroGlow = hero ? hero.glow || 0 : 0;
+  const heroBreathe = hero ? hero.breathe || 0 : 0;
+  const dnaPerLetter = !!(hero && hero.perLetter);
+  // per-climax loudness amplitude (RMS percentile of its window)
+  for (const c of climaxes) {
+    const impact = dnaLib.heroImpact(project, c.in, Math.min(c.in + 0.7, c.out));
+    c.amp = +((0.75 + impact * 0.5) * (c.minor ? 0.7 : 1)).toFixed(3);
+  }
+
   function buildIndexHtml() {
-  const climaxHtml = climax
-    ? `<div id="climax" class="cap climax"><span class="w">${esc(climax.text)}</span></div>`
-    : "";
-  const climaxCss = climax ? `
-  .climax{position:absolute;left:50%;top:${climax.top}%;transform:translate(-50%,-50%);white-space:nowrap;
-    font-family:'${FONT}',sans-serif;${(S.climax_css || "").trim()}
-    line-height:1.12;font-size:${climax.cqh}cqh;color:${CFILL};
+    const heroCaseCss = hero && hero.case && hero.case !== "none" ? `text-transform:${hero.case};` : "";
+    const heroTrackCss = hero && hero.tracking ? `letter-spacing:${hero.tracking};` : "";
+    const heroExtraCss = hero && hero.css ? hero.css : "";
+    const sharedCss = climaxes.length ? `
+  .climax{position:absolute;left:50%;transform:translate(-50%,-50%);white-space:nowrap;
+    font-family:'${FONT}',sans-serif;${heroCaseCss}${heroTrackCss}${heroExtraCss}${(S.climax_css || "").trim()}
+    line-height:1.12;color:${CFILL};
     ${heroBright
-      ? "text-shadow:0 2px 12px rgba(0,0,0,.92),0 0 34px rgba(0,0,0,.88);-webkit-text-stroke:3px rgba(0,0,0,.7);"
-      : "text-shadow:0 2px 13px rgba(0,0,0,.55),0 0 48px rgba(0,0,0,.4);-webkit-text-stroke:1px rgba(0,0,0,.45);"}
+      ? "text-shadow:0 1px 6px rgba(0,0,0,.6);-webkit-text-stroke:2px rgba(0,0,0,.55);"
+      : `text-shadow:${climaxShadow};`}
     paint-order:stroke fill}
-  .climax .w{display:inline-block;opacity:0}` : "";
-  const entrances = {
-    "rise": `gsap.fromTo(el,{opacity:0,yPercent:48},{opacity:1,yPercent:0,duration:.9,ease:'power3.out'})`,
-    "scale-settle": `gsap.fromTo(el,{opacity:0,scale:1.16},{opacity:1,scale:1,duration:.7,ease:'power3.out'})`,
-    "pop": `gsap.fromTo(el,{opacity:0,scale:.55},{opacity:1,scale:1,duration:.5,ease:'back.out(1.6)'})`,
-  };
-  const exits = {
-    "rise-off": `gsap.to(el,{opacity:0,yPercent:-42,duration:${climax ? climax.exitD : 0.5},ease:'power2.in'})`,
-    "fade": `gsap.to(el,{opacity:0,duration:${climax ? climax.exitD : 0.5},ease:'power2.in'})`,
-    "shrink-off": `gsap.to(el,{opacity:0,scale:.8,duration:${climax ? climax.exitD : 0.5},ease:'power2.in'})`,
-  };
-  const indexHtml = `<!doctype html><html lang="en"><head><meta charset="UTF-8">
+  .climax .w{display:inline-block;opacity:0}
+  .climax .w .l{display:inline-block;will-change:transform,opacity}
+  .climax-glow{filter:blur(0.06em);opacity:0}` : "";
+    const perCss = climaxes.map((c) =>
+      // text-indent mirrors letter-spacing so a tracked word stays optically centered
+      // (the trailing letter-space otherwise shifts the glyphs half a gap left)
+      `\n  #${c.id},#${c.id}-glow{top:${c.top}%;font-size:${c.cqh}cqh;${c.track ? `letter-spacing:${c.track}em;text-indent:${c.track}em;` : ""}}`).join("");
+    const divs = climaxes.map((c) => {
+      const perLetter = dnaPerLetter && !c.minor;
+      const span = perLetter
+        ? `<span class="w">${[...c.text].map((ch) => ch === " " ? " " : `<span class="l">${esc(ch)}</span>`).join("")}</span>`
+        : `<span class="w">${esc(c.text)}</span>`;
+      const glowDiv = (!c.minor && heroGlow > 0)
+        ? `<div id="${c.id}-glow" class="cap climax climax-glow" aria-hidden="true"><span class="w">${esc(c.text)}</span></div>`
+        : "";
+      return `${glowDiv}<div id="${c.id}" class="cap climax">${span}</div>`;
+    }).join("\n      ");
+    const entrances = (c) => ({
+      "rise":         `gsap.fromTo(el,{yPercent:${(12 * c.amp).toFixed(1)}},{yPercent:0,duration:.6,ease:'power2.out'})`,
+      "scale-settle": `gsap.fromTo(el,{scale:${(1 + 0.10 * c.amp).toFixed(3)}},{scale:1,duration:.5,ease:'expo.out'})`,
+      "settle":       `gsap.fromTo(el,{scale:${(1 + 0.10 * c.amp).toFixed(3)}},{scale:1,duration:.5,ease:'expo.out'})`,
+      "emergence":    `gsap.fromTo(el,{scale:${Math.max(0.74, 1 - 0.18 * c.amp).toFixed(3)}},{scale:1,duration:.55,ease:'expo.out'})`,
+      "slam":         `gsap.fromTo(el,{scale:${(1 + 0.22 * c.amp).toFixed(3)}},{scale:1,duration:.16,ease:'back.out(2.2)'})`,
+      "wipe-up":      `gsap.fromTo(el,{clipPath:'inset(100% 0% 0% 0%)'},{clipPath:'inset(0% 0% 0% 0%)',duration:.45,ease:'expo.out'})`,
+      "pop":          `gsap.fromTo(el,{scale:.55},{scale:1,duration:.5,ease:'back.out(1.6)'})`,
+    })[c.entrance] || `gsap.fromTo(el,{yPercent:${(12 * c.amp).toFixed(1)}},{yPercent:0,duration:.6,ease:'power2.out'})`;
+    const exits = (c) => ({
+      "rise-off": `gsap.to(el,{opacity:0,yPercent:-42,duration:${c.exitD},ease:'power2.in'})`,
+      "fade": `gsap.to(el,{opacity:0,duration:${c.exitD},ease:'power2.in'})`,
+      "shrink-off": `gsap.to(el,{opacity:0,scale:.8,duration:${c.exitD},ease:'power2.in'})`,
+    })[c.exit] || `gsap.to(el,{opacity:0,duration:${c.exitD},ease:'power2.in'})`;
+    const js = climaxes.map((c) => {
+      const perLetter = dnaPerLetter && !c.minor;
+      const letterJs = perLetter
+        ? `      tl.set(w,{opacity:1},${c.in.toFixed(3)});
+      [...document.querySelectorAll('#${c.id} .l')].forEach(function(l,i){tl.fromTo(l,{opacity:0,y:'0.16em',scale:1.05},{opacity:1,y:0,scale:1,duration:.3,ease:'power4.out',overwrite:'auto'},${c.in.toFixed(3)}+i*${(hero && hero.letterStagger) || 0.014});});`
+        : `      tl.fromTo(w,{opacity:0,y:10,scale:1.06},{opacity:1,y:0,scale:1,duration:.3,ease:'power4.out',overwrite:'auto'},${c.in.toFixed(3)});`;
+      const glowJs = (!c.minor && heroGlow > 0)
+        ? `      var gw=document.querySelector('#${c.id}-glow');
+      tl.set(gw.querySelector('.w'),{opacity:1},${c.in.toFixed(3)});
+      tl.fromTo(gw,{opacity:0},{opacity:${Math.min(0.5, heroGlow * c.amp).toFixed(3)},duration:.5,ease:'power2.out'},${(c.in + (c.entrance === "slam" ? 0.17 : 0.08)).toFixed(3)});
+      tl.to(gw,{opacity:0,duration:.4,ease:'power2.in'},${(c.out - c.exitD).toFixed(3)});`
+        : "";
+      const breatheJs = (!c.minor && heroBreathe > 0 && (c.out - c.in) > 1.4)
+        ? `      tl.fromTo(el,{scale:1},{scale:${(1 + heroBreathe).toFixed(4)},duration:${(c.out - c.in - 1.2).toFixed(3)},ease:'sine.inOut',overwrite:'auto'},${(c.in + 0.7).toFixed(3)});`
+        : "";
+      return `    (function(){var el=document.querySelector('#${c.id}');
+      var w=document.querySelector('#${c.id} .w');
+      tl.set(el,{opacity:1},${Math.max(0, c.in - 0.01).toFixed(3)});
+      tl.add(${entrances(c)}, ${c.in.toFixed(3)});
+${letterJs}
+${glowJs}
+${breatheJs}
+      tl.add(${exits(c)}, ${(c.out - c.exitD).toFixed(3)});
+      tl.set(el,{opacity:0},${c.out.toFixed(3)});
+    })();`;
+    }).join("\n");
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{width:${W}px;height:${H}px;overflow:hidden;background:#000}
   #a-roll{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
-  #stage{position:absolute;inset:0;z-index:2;container-type:size;pointer-events:none}${climaxCss}
+  #stage{position:absolute;inset:0;z-index:2;container-type:size;pointer-events:none}${sharedCss}${perCss}
 </style></head><body>
   <div id="root" data-composition-id="main" data-start="0" data-duration="${DUR}" data-width="${W}" data-height="${H}">
     <video id="a-roll" src="source.mp4" muted playsinline data-start="0" data-duration="${DUR}" data-track-index="0"></video>
-    <div id="stage">${climaxHtml}</div>
+    <div id="stage">
+      ${divs}
+    </div>
     <audio id="a-roll-audio" src="source.mp4" data-start="0" data-duration="${DUR}" data-track-index="3" data-volume="1"></audio>
   </div>
   <script>
     window.__timelines=window.__timelines||{};
     const tl=gsap.timeline({paused:true});
     tl.add(function(){},0);
-${climax ? `    (function(){const el=document.querySelector('#climax .w');
-      tl.add(${entrances[climax.entrance] || entrances.rise}, ${climax.in.toFixed(3)});
-      tl.add(${exits[climax.exit] || exits["rise-off"]}, ${(climax.out - climax.exitD).toFixed(3)});
-    })();` : ""}
+${js}
     tl.add(function(){},${DUR});
     window.__timelines["main"]=tl;
   </script>
 </body></html>\n`;
-  return indexHtml;
   }
   let indexHtml = buildIndexHtml();
 
-  // ── 5. emit rail.html (verbatim rail, transparent; karaoke accent; hand-off) ─
+  // ── 6. emit rail.html (verbatim rail, transparent; karaoke accent; hand-off) ─
   const lineDivs = segsT.map((s, i) =>
     `      <div id="line-${i}" class="cap line"><span class="grade-pad">${s.words.map((w, wi) =>
       `<span class="w" data-i="${wi}">${esc(w.text)}</span>`).join(" ")}</span></div>`).join("\n");
@@ -285,6 +391,12 @@ ${climax ? `    (function(){const el=document.querySelector('#climax .w');
       `      tl.set(LN[${i}],{opacity:0},${(s.exit + EXIT_D + 0.01).toFixed(3)});\n` +
       `      tl.set(W[${i}],{opacity:0},${(s.exit + EXIT_D + 0.01).toFixed(3)});\n`;
   }).join("");
+  // act 1 per climax — the rail yields for the peak's LANDING only (in−0.35 → in+0.9),
+  // then recovers DURING the hold: the rail is the verbatim track and must stay
+  // readable (on short clips dense with climaxes a full-hold dim left it ghosted
+  // nearly throughout — a real QA catch on a 6s two-peak case).
+  const dimJs = climaxes.map((c) => `      tl.to(document.querySelector('.rail'),{opacity:${Math.max(0.45, (hero && hero.dimOthers) != null ? hero.dimOthers : 0.55).toFixed(2)},duration:.3,ease:'power2.out',overwrite:'auto'},${Math.max(0, c.in - 0.35).toFixed(3)});
+      tl.to(document.querySelector('.rail'),{opacity:1,duration:.35,ease:'power2.out',overwrite:'auto'},${Math.min(c.in + 0.9, Math.max(0, c.out - 0.25)).toFixed(3)});\n`).join("");
   const railHtml = `<!doctype html><html lang="en"><head><meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <style>
@@ -312,46 +424,124 @@ ${lineDivs}
     const LN=[...document.querySelectorAll('.line')];
     const W=LN.map(function(l){return [...l.querySelectorAll('.w')]});
     tl.add(function(){},0);
-${railJs}      tl.add(function(){},${DUR});
+${railJs}${dimJs}      tl.add(function(){},${DUR});
     window.__timelines["main"]=tl;
   </script>
 </body></html>\n`;
 
-  // ── 6. derived plan.json → existing timing/occlusion gates run for Standard ──
-  // (hero:true → the hero-weak advisory applies to the climax placement.)
+  // ── 7. derived plan.json → timing/occlusion gates run for Standard ──────────
   const plan = {
-    mode: "standard", template: S.template || "standard", compiled_by: "make-standard.cjs",
+    mode: "standard", template: S.template || "standard", ...(S.dna ? { dna: S.dna } : {}), compiled_by: "make-standard.cjs",
     width: W, height: H, fps: FPS, duration: DUR,
     ...(fgClimax ? { caption_layer: "fg" } : {}),
-    groups: climax ? [{ id: "climax", hero: true, in: climax.in, out: climax.out, layer: fgClimax ? "fg" : "bg",
-      words: [{ text: climax.text, start: promo.w.start, end: Math.min(promo.w.end, DUR - 0.05), ti: promo.w.ti }] }] : [],
+    groups: climaxes.map((c) => ({ id: c.id, hero: true, ...(c.minor ? { minor: true } : {}),
+      in: c.in, out: c.out, layer: fgClimax ? "fg" : "bg",
+      words: c.promo.words.map((w) => ({ text: w.text, start: w.start, end: Math.min(w.end, DUR - 0.05), ti: w.ti })) })),
   };
 
   fs.writeFileSync(path.join(project, "plan.json"), JSON.stringify(plan, null, 2));
   fs.writeFileSync(path.join(project, "index.html"), indexHtml);
   fs.writeFileSync(path.join(project, "rail.html"), railHtml);
 
-  // REAL-measure line-fit: the ADV estimate above is a guess (fonts/letter-spacing vary);
-  // measure the actual climax bbox once in Chromium and re-emit if it overflows. This is
-  // what makes "cropped text" impossible regardless of font metrics.
-  if (climax) {
-    const midT = ((climax.in + Math.min(climax.out, climax.in + 1.2)) / 2).toFixed(2);
-    cp.spawnSync("node", [path.join(__dirname, "measure-layout.cjs"), project, String(midT)], { stdio: "ignore", timeout: 60000 });
+  // REAL-measure line-fit per climax: measure each peak's bbox in Chromium; re-emit on overflow.
+  if (climaxes.length) {
+    const times = climaxes.map((c) => ((c.in + Math.min(c.out, c.in + 1.2)) / 2).toFixed(2));
+    cp.spawnSync("node", [path.join(__dirname, "measure-layout.cjs"), project, ...times], { stdio: "ignore", timeout: 90000 });
     try {
       const lay = JSON.parse(fs.readFileSync(path.join(project, "_layout.json"), "utf8"));
-      const cap = ((lay.samples && lay.samples[0] && lay.samples[0].caps) || []).find((c) => c.id === "climax");
+      let reEmit = false;
       const maxW = W * 0.96;
-      if (cap && cap.cap_bbox && cap.cap_bbox.w > maxW) {
-        const newCqh = Math.max(8, Math.floor(climax.cqh * maxW / cap.cap_bbox.w));
-        console.log(`[make-standard] climax REAL width ${Math.round(cap.cap_bbox.w)}px > ${Math.round(maxW)}px → ${climax.cqh}cqh → ${newCqh}cqh (re-emit)`);
-        climax.cqh = newCqh;
-        indexHtml = buildIndexHtml();
-        fs.writeFileSync(path.join(project, "index.html"), indexHtml);
-        try { fs.unlinkSync(path.join(project, "_layout.json")); } catch (e) {}
+      const measuredCap = (i) => {
+        const sample = (lay.samples || []).reduce((a, b) => Math.abs(b.t - +times[i]) < Math.abs((a ? a.t : 1e9) - +times[i]) ? b : a, null);
+        return sample && (sample.caps || []).find((x) => x.id === climaxes[i].id);
+      };
+      // pass 1 — APEXES first: their final size sets the minors' floor.
+      // A peak is a FRAME EVENT: anything under 88% of usable width is raised toward a
+      // 93% fill (the old <72% trigger left a dead zone where 75–88%-wide words never
+      // grew). Height cap = sizeRange[1] × 1.25 — a std apex bursts a rail, not a body
+      // composition, so it earns more height than the cinematic cap; clamped to 46cqh
+      // so short words stop at monumental, not absurd. Formal register keeps ×1.0.
+      for (let i = 0; i < climaxes.length; i++) {
+        const c = climaxes[i];
+        if (c.minor) continue;
+        const cap = measuredCap(i);
+        if (!cap || !cap.cap_bbox) continue;
+        if (cap.cap_bbox.w > maxW) {
+          const newCqh = Math.max(8, Math.floor(c.cqh * maxW / cap.cap_bbox.w));
+          console.log(`[make-standard] climax "${c.text}" REAL width ${Math.round(cap.cap_bbox.w)}px > ${Math.round(maxW)}px → ${c.cqh}cqh → ${newCqh}cqh (re-emit)`);
+          c.cqh = newCqh; reEmit = true;
+        } else if (cap.cap_bbox.w < maxW * 0.88) {
+          const r1 = dna && dna.hero && dna.hero.sizeRange ? dna.hero.sizeRange[1] : 0.34;
+          const cqhCap = Math.min(46, Math.round(r1 * (dna && dna.register === "formal" ? 100 : 125)));
+          const fit = Math.floor(c.cqh * (maxW * 0.93) / cap.cap_bbox.w);
+          const newCqh = Math.min(cqhCap, fit);
+          if (newCqh > c.cqh * 1.05 || fit > cqhCap) {
+            if (newCqh > c.cqh) console.log(`[make-standard] apex "${c.text}" TIMID (${Math.round(cap.cap_bbox.w)}px of ${Math.round(maxW)}px) → ${c.cqh}cqh → ${newCqh}cqh (width-fit, cap ${cqhCap})`);
+            // SHORT-WORD FILL: when the height cap binds before the width target, the
+            // word fills the frame with TRACKING instead (film-title craft — HER, DUNE:
+            // letterspace until the word owns the width; ≤0.32em so it stays a word).
+            const wAtCap = cap.cap_bbox.w * newCqh / c.cqh;
+            // never letterspace lowercase (tracked lowercase falls apart — caps only)
+            const capsy = (dna && dna.hero && dna.hero.case === "uppercase") || String(c.text) === String(c.text).toUpperCase();
+            if (fit > cqhCap && wAtCap < maxW * 0.85 && capsy) {
+              const fontPx = newCqh / 100 * H;
+              // letter-spacing adds a gap after EVERY char (N gaps) and the centering
+              // text-indent adds one more — budget N+1 gaps or the word leaves the frame
+              const gaps = String(c.text).length + 1;
+              const tr = +Math.min(0.32, (maxW * 0.88 - wAtCap) / (gaps * fontPx)).toFixed(3);
+              if (tr >= 0.04) {
+                c.track = tr;
+                console.log(`[make-standard] apex "${c.text}" short word at height cap (${Math.round(wAtCap)}px of ${Math.round(maxW)}px) → tracked +${tr}em to fill`);
+              }
+            }
+            c.cqh = newCqh; reEmit = true;
+          }
+        }
       }
+      // pass 2 — MINORS ride the apex: floor at max(3× rail, 0.55× apex-final). A
+      // minor is a damped BEAT in the same family as the apex, not a label; measured
+      // width caps the raise so long phrases never spill the frame.
+      const apexFinal = Math.max(...climaxes.filter((x) => !x.minor).map((x) => x.cqh), 0);
+      for (let i = 0; i < climaxes.length; i++) {
+        const c = climaxes[i];
+        const cap = measuredCap(i);
+        if (!c.minor) continue;
+        if (cap && cap.cap_bbox && cap.cap_bbox.w > maxW) {
+          const newCqh = Math.max(8, Math.floor(c.cqh * maxW / cap.cap_bbox.w));
+          console.log(`[make-standard] climax "${c.text}" REAL width ${Math.round(cap.cap_bbox.w)}px > ${Math.round(maxW)}px → ${c.cqh}cqh → ${newCqh}cqh (re-emit)`);
+          c.cqh = newCqh; reEmit = true;
+          continue;
+        }
+        const floor = Math.max(Math.ceil(railCqh0 * 3), Math.round(apexFinal * 0.55));
+        if (c.cqh >= floor) continue;
+        let target = floor;
+        if (cap && cap.cap_bbox && cap.cap_bbox.w > 0) {
+          const wAt = cap.cap_bbox.w * target / c.cqh;
+          if (wAt > maxW * 0.94) target = Math.max(c.cqh, Math.floor(c.cqh * (maxW * 0.94) / cap.cap_bbox.w));
+        }
+        if (target > c.cqh) {
+          console.log(`[make-standard] minor "${c.text}" ${c.cqh}cqh rides the apex (${apexFinal}cqh) → ${target}cqh (0.55× family)`);
+          c.cqh = target; reEmit = true;
+        }
+      }
+      if (reEmit) {
+        // sizes changed → re-clamp vertical span so no peak clips the frame edge
+        for (const c of climaxes) {
+          const halfPct = c.cqh * 1.12 / 2 + 0.6;
+          const clamped = Math.min(100 - halfPct, Math.max(halfPct, c.top));
+          if (Math.abs(clamped - c.top) > 0.2) {
+            console.log(`[make-standard] climax "${c.text}" top ${c.top}% would clip at ${c.cqh}cqh → ${clamped.toFixed(1)}%`);
+            c.top = +clamped.toFixed(1);
+          }
+        }
+        indexHtml = buildIndexHtml(); fs.writeFileSync(path.join(project, "index.html"), indexHtml);
+      }
+      try { fs.unlinkSync(path.join(project, "_layout.json")); } catch (e) {}
     } catch (e) { /* measurement unavailable — estimate already applied */ }
   }
-  console.log(`[make-standard] ${segsT.length} rail line(s)${promo ? `, climax "${climax.text}" [${climax.in.toFixed(2)}–${climax.out.toFixed(2)}s] (hand-off generated)` : " (no climax)"}, canvas ${DUR}s`);
+  const apexN = climaxes.filter((c) => !c.minor).length;
+  console.log(`[make-standard] ${segsT.length} rail line(s)${climaxes.length ? `, ${climaxes.length} climax(es): ${climaxes.map((c) => `"${c.text}"[${c.in.toFixed(2)}–${c.out.toFixed(2)}s${c.minor ? " minor" : " APEX"}]`).join(" · ")}` : " (no climax)"}, canvas ${DUR}s`);
+  if (apexN > 1) console.log(`[make-standard] note: ${apexN} climaxes share the apex size — consider differentiating font_cqh so one peak rules`);
   console.log(`[make-standard] → index.html + rail.html + plan.json (gates will check timing/occlusion/hand-off)`);
 }
 main();

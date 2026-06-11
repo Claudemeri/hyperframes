@@ -145,6 +145,14 @@ async function main() {
       await new Promise((res) => setTimeout(res, 200));
     }
     if (!ready) { console.error("[measure] GSAP timeline never registered"); process.exit(4); }
+    // Inject the skill's bundled @font-face set so headless Chromium measures the SAME
+    // glyph metrics the renderer will use. Without this, Inter/etc fall back to system
+    // fonts here while the real render uses the true (often wider) face → wrapped line
+    // counts differ → slot layout / occlusion verdicts are measured on the wrong text.
+    try {
+      const fontsCss = path.join(__dirname, "..", "modes", "standard", "fonts", "fonts.css");
+      if (fs.existsSync(fontsCss)) await page.addStyleTag({ content: fs.readFileSync(fontsCss, "utf8") });
+    } catch (e) { /* best-effort — fonts.css missing just reverts to old behavior */ }
     // let webfonts settle so measured glyph metrics match the render
     await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
 

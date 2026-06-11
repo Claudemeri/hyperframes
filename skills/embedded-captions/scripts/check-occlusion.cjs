@@ -58,8 +58,9 @@ async function main() {
   // Hero groups (the ONE big promoted word) are SUPPOSED to sit ON the subject — for them
   // occlusion is a TARGET (~30–55%), not "minimize". Collect their ids for the advisory below.
   const heroIds = new Set();
-  for (const g of (plan.groups || [])) if (g && (g.hero === true || /^(hero|crown)$/i.test(g.plane || ""))) heroIds.add(g.id);
-  if (plan.crown_group && plan.crown_group.id) heroIds.add(plan.crown_group.id);
+  const heroIn = {};
+  for (const g of (plan.groups || [])) if (g && (g.hero === true || /^(hero|crown)$/i.test(g.plane || ""))) { heroIds.add(g.id); heroIn[g.id] = g.in; }
+  if (plan.crown_group && plan.crown_group.id) { heroIds.add(plan.crown_group.id); heroIn[plan.crown_group.id] = plan.crown_group.in; }
   const M = 2; // frame-edge tolerance (px) — matches check-overflow.cjs
   const frameW = layout.width, frameH = layout.height;
 
@@ -74,7 +75,10 @@ async function main() {
       for (const w of (cap.words || [])) {
         if ((w.opacity ?? 1) < 0.3) continue;
         wordsData.push({ text: w.text, occlusion: occlusionForRect(mask, w.x, w.y, w.w, w.h) });
-        // Frame-edge overflow — clipped text is always wrong; track worst per cap.
+        // Frame-edge overflow — clipped SETTLED text is always wrong; a hero's first
+        // 0.5s is its entrance TRANSIENT (slam over-scale, streak fly-in pass through
+        // off-frame states by design) — judge overflow on the hold, not mid-flight.
+        if (heroIds.has(cap.id) && heroIn[cap.id] != null && sample.t < heroIn[cap.id] + 0.5) continue;
         const off = { left: Math.max(0, Math.round(-w.x - M)), right: Math.max(0, Math.round(w.x + w.w - frameW - M)),
                       top: Math.max(0, Math.round(-w.y - M)), bottom: Math.max(0, Math.round(w.y + w.h - frameH - M)) };
         const score = off.left + off.right + off.top + off.bottom;

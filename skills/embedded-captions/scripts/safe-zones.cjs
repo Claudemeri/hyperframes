@@ -150,7 +150,13 @@ function analyze(occ, GW, GH, W, H, lum) {
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { tot++; if (occCell[y * GW + x]) occN++; }
     if (tot === 0 || occN / tot > 0.08) return null;
     const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, area: (x1 - x0) * (y1 - y0) };
-    return toZone(r);
+    const z2 = toZone(r);
+    // GLYPHS must hug, not just the plane: in a wide column, text aligned to the far
+    // edge parks the words a third of the frame away from the subject. Align TOWARD
+    // the silhouette: right-side column → text-align:left (text starts beside the
+    // subject); left-side column → text-align:right.
+    if (z2) z2.align = side === "right" ? "left" : "right";
+    return z2;
   };
   zones.hugLeft = hug("left");
   zones.hugRight = hug("right");
@@ -182,6 +188,126 @@ function analyze(occ, GW, GH, W, H, lum) {
     subject: { colMinPct: +(colMin / GW * 100).toFixed(1), colMaxPct: +((colMax + 1) / GW * 100).toFixed(1), clearerSide },
     zones, heroAnchor, heroBands, recommendation: embeddable ? "embed" : "fg",
   };
+}
+
+// ── SCENE OPTICS + PALETTE (v2) ──────────────────────────────────────────────
+// Deterministic scene measurements that drive the DNA tokens, so "design that fits
+// the scene" is a pipeline product, not agent inspiration:
+//   palette  — dominant scene colors + a READABLE accent suggestion (sampled, then
+//              clamped to usable saturation/lightness) + warm/cool temperature
+//   optics   — background vs subject sharpness (Laplacian proxy) → suggested text
+//              blur so embed type matches the scene's depth-of-field
+//   lighting — bright-side estimate → contact-shadow direction for embed type
+
+function rgb2hsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d > 0) {
+    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return { h, s: mx === 0 ? 0 : d / mx, v: mx };
+}
+function hsv2hex(h, s, v) {
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  const f = (n) => Math.round((n + m) * 255).toString(16).padStart(2, "0");
+  return `#${f(r)}${f(g)}${f(b)}`;
+}
+
+// dominant colors + accent suggestion from the BACKGROUND cells of a mid frame
+async function scenePalette(bgPath, occCell, GW, GH) {
+  const { data, info } = await sharp(bgPath).resize(GW, GH, { fit: "fill" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const ch = info.channels;
+  const cells = [];
+  for (let c = 0; c < GW * GH; c++) {
+    if (occCell && occCell[c]) continue; // background only
+    cells.push([data[c * ch], data[c * ch + 1], data[c * ch + 2]]);
+  }
+  if (!cells.length) return null;
+  // dominant: quantize to 3 bits/channel, top buckets by count
+  const buckets = new Map();
+  for (const [r, g, b] of cells) {
+    const k = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
+    const e = buckets.get(k) || { n: 0, r: 0, g: 0, b: 0 };
+    e.n++; e.r += r; e.g += g; e.b += b; buckets.set(k, e);
+  }
+  const hex = (e) => "#" + [e.r, e.g, e.b].map((x) => Math.round(x / e.n).toString(16).padStart(2, "0")).join("");
+  const dominant = [...buckets.values()].sort((a, b) => b.n - a.n).slice(0, 3).map((e) => ({ hex: hex(e), sharePct: +(e.n / cells.length * 100).toFixed(1) }));
+  // chromatic accent: hue histogram over saturated cells, weighted s·v
+  const bins = Array.from({ length: 12 }, () => ({ w: 0, h: 0, s: 0, v: 0, n: 0 }));
+  let warmW = 0, coolW = 0;
+  for (const [r, g, b] of cells) {
+    const { h, s, v } = rgb2hsv(r, g, b);
+    if ((h <= 90 || h >= 330)) warmW += s * v; else if (h >= 150 && h <= 300) coolW += s * v;
+    if (s < 0.18 || v < 0.12 || v > 0.97) continue;
+    const bi = Math.floor(h / 30) % 12, w = s * v;
+    const B = bins[bi]; B.w += w; B.h += h * w; B.s += s * w; B.v += v * w; B.n++;
+  }
+  const top = bins.reduce((a, b) => (b.w > a.w ? b : a));
+  let accent = null;
+  if (top.w > 0.5 && top.n >= 3) {
+    const h = top.h / top.w, s = top.s / top.w, v = top.v / top.w;
+    // clamp to a readable accent: saturated enough to read as a choice, light enough to sit on video
+    accent = hsv2hex(h, Math.min(0.78, Math.max(0.5, s * 1.2)), Math.min(0.8, Math.max(0.55, v * 1.15)));
+  }
+  const temperature = warmW > coolW * 1.25 ? "warm" : coolW > warmW * 1.25 ? "cool" : "neutral";
+  return { dominant, accentSuggestion: accent, temperature };
+}
+
+// Laplacian-stdev sharpness proxy of a region crop (full-res)
+async function regionSharpness(imgPath, rect, W, H) {
+  const x = Math.max(0, Math.min(W - 2, Math.round(rect.x))), y = Math.max(0, Math.min(H - 2, Math.round(rect.y)));
+  const w = Math.max(2, Math.min(W - x, Math.round(rect.w))), h = Math.max(2, Math.min(H - y, Math.round(rect.h)));
+  // two passes: crop to a buffer FIRST, then convolve+stats on the crop — sharp's
+  // internal pipeline ordering otherwise convolves/stats the full frame and the two
+  // regions measure identical.
+  const crop = await sharp(imgPath).extract({ left: x, top: y, width: w, height: h }).png().toBuffer();
+  const st = await sharp(crop).greyscale()
+    .convolve({ width: 3, height: 3, kernel: [0, 1, 0, 1, -4, 1, 0, 1, 0], scale: 1, offset: 128 })
+    .stats();
+  return st.channels[0].stdev;
+}
+
+async function sceneOptics(project, bgPath, fgPath, zones, subjectBox, W, H) {
+  let bgSharp = null, subjSharp = null;
+  const bigZone = zones && zones.largest && zones.largest.px;
+  try { if (bigZone && bigZone.w >= 64 && bigZone.h >= 64) bgSharp = await regionSharpness(bgPath, bigZone, W, H); } catch (e) {}
+  try { if (subjectBox && subjectBox.w >= 64) subjSharp = await regionSharpness(bgPath, subjectBox, W, H); } catch (e) {}
+  let suggestedTextBlurPx = 0, ratio = null;
+  if (bgSharp != null && subjSharp != null && subjSharp > 1) {
+    ratio = +(bgSharp / subjSharp).toFixed(3);
+    // strong bokeh → text in that depth plane should soften to match
+    suggestedTextBlurPx = ratio < 0.35 ? 1.6 : ratio < 0.55 ? 1.0 : ratio < 0.8 ? 0.5 : 0;
+  }
+  return { bgSharpness: bgSharp != null ? +bgSharp.toFixed(2) : null, subjSharpness: subjSharp != null ? +subjSharp.toFixed(2) : null, sharpnessRatio: ratio, suggestedTextBlurPx };
+}
+
+// bright-side estimate from the luminance grid → contact-shadow vector (shadow falls AWAY from light)
+function sceneLighting(lum, occCell, GW, GH) {
+  if (!lum) return null;
+  let sw = 0, sx = 0, sy = 0, n = 0, mean = 0;
+  for (let c = 0; c < GW * GH; c++) { if (!occCell[c]) { mean += lum[c]; n++; } }
+  if (!n) return null;
+  mean /= n;
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const c = y * GW + x;
+    if (occCell[c]) continue;
+    const w = Math.max(0, lum[c] - mean);
+    sw += w; sx += w * (x / GW - 0.5); sy += w * (y / GH - 0.5);
+  }
+  if (sw < 1) return { lightFrom: "flat", shadow: { dx: 0, dy: 3 } };
+  const lx = sx / sw, ly = sy / sw; // light centroid offset from center, −0.5..0.5
+  const mag = Math.hypot(lx, ly);
+  if (mag < 0.04) return { lightFrom: "frontal", shadow: { dx: 0, dy: 3 } };
+  // shadow direction = opposite the light, scaled to a subtle px offset
+  const s = Math.min(1, mag / 0.25);
+  const dx = Math.round(-lx / mag * 4 * s), dy = Math.round(Math.max(1, -ly / mag * 4 * s + 2));
+  const compass = (Math.abs(lx) > Math.abs(ly) * 1.8) ? (lx > 0 ? "right" : "left")
+    : (Math.abs(ly) > Math.abs(lx) * 1.8) ? (ly > 0 ? "below" : "above")
+    : `${ly > 0 ? "lower" : "upper"}-${lx > 0 ? "right" : "left"}`;
+  return { lightFrom: compass, shadow: { dx, dy } };
 }
 
 // split the transcript into sentence windows (punctuation, or a > 0.7s gap)
@@ -270,13 +396,35 @@ async function main() {
     return;
   }
 
-  const global = analyze(occWindow(-1e9, 1e9), GW, GH, W, H, lumWindow(-1e9, 1e9));
+  const globalOcc = occWindow(-1e9, 1e9);
+  const globalLum = lumWindow(-1e9, 1e9);
+  const global = analyze(globalOcc, GW, GH, W, H, globalLum);
   const windows = sentenceWindows(project).map((s) => {
     const a = analyze(occWindow(s.in, s.out), GW, GH, W, H, lumWindow(s.in, s.out));
     return { in: s.in, out: s.out, text: s.text.slice(0, 48), coverage: a.coverage, recommendation: a.recommendation, clearerSide: a.subject.clearerSide, zones: a.zones };
   });
 
-  const out = { width: W, height: H, fps, grid: { cols: GW, rows: GH }, ...global, windows };
+  // ── v2: palette / optics / lighting from the mid frame + global grids ───────
+  let palette = null, optics = null, lighting = null;
+  try {
+    const occCellG = new Uint8Array(GW * GH);
+    for (let c = 0; c < GW * GH; c++) occCellG[c] = globalOcc[c] >= THRESH ? 1 : 0;
+    const midName = frames[Math.floor(frames.length / 2)];
+    const midBg = path.join(bgDir, midName);
+    if (hasBg && fs.existsSync(midBg)) {
+      palette = await scenePalette(midBg, occCellG, GW, GH);
+      // subject bbox in px from the global occupancy grid
+      let cx0 = GW, cx1 = -1, cy0 = GH, cy1 = -1;
+      for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) if (occCellG[y * GW + x]) {
+        if (x < cx0) cx0 = x; if (x > cx1) cx1 = x; if (y < cy0) cy0 = y; if (y > cy1) cy1 = y;
+      }
+      const subjectBox = cx1 >= 0 ? { x: cx0 / GW * W, y: cy0 / GH * H, w: (cx1 - cx0 + 1) / GW * W, h: (cy1 - cy0 + 1) / GH * H } : null;
+      optics = await sceneOptics(project, midBg, path.join(fgDir, midName), global.zones, subjectBox, W, H);
+      lighting = sceneLighting(globalLum, occCellG, GW, GH);
+    }
+  } catch (e) { console.error(`[safe-zones] scene optics skipped — ${e.message}`); }
+
+  const out = { width: W, height: H, fps, grid: { cols: GW, rows: GH }, ...global, palette, optics, lighting, windows };
   fs.writeFileSync(path.join(project, "safe-zones.json"), JSON.stringify(out, null, 2));
 
   const z = (n, zn) => zn ? `${n}: ${zn.wPct}%×${zn.hPct}% @ (${zn.xPct}%,${zn.yPct}%) [${zn.areaPct}%${zn.meanLuma != null ? ` · luma ${zn.meanLuma}${zn.bright ? " ⚠BRIGHT" : ""}` : ""}]` : `${n}: —`;
@@ -290,6 +438,9 @@ async function main() {
   } else {
     console.log(`[safe-zones] ⚠ FG — subject fills the frame; use caption_layer:"fg" (no clean region to embed behind).`);
   }
+  if (palette) console.log(`[safe-zones] 🎨 palette: dominant ${palette.dominant.map((d) => d.hex).join(" ")} · accent suggestion ${palette.accentSuggestion || "— (no chromatic anchor; use the DNA default)"} · ${palette.temperature}`);
+  if (optics && optics.sharpnessRatio != null) console.log(`[safe-zones] 🔭 depth: bg/subject sharpness ${optics.sharpnessRatio} → embed text blur ${optics.suggestedTextBlurPx}px${optics.suggestedTextBlurPx ? " (match the scene's depth-of-field)" : " (scene is uniformly sharp)"}`);
+  if (lighting) console.log(`[safe-zones] 💡 light from ${lighting.lightFrom} → contact shadow offset (${lighting.shadow.dx}px, ${lighting.shadow.dy}px)`);
   if (windows.length) {
     console.log(`[safe-zones] per-sentence windows (place each group using ITS window's zones):`);
     for (const w of windows)

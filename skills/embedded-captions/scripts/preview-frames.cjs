@@ -56,10 +56,18 @@ async function shotAt(browser, file, W, H, t) {
     }
     await page.goto(`file://${file}`, { waitUntil: "load", timeout: 15000 });
     const t0 = Date.now();
-    while (Date.now() - t0 < 10000) {
-      if (await page.evaluate(() => !!(window.__timelines && window.__timelines.main))) break;
+    let tlReady = false;
+    while (Date.now() - t0 < 15000) {
+      tlReady = await page.evaluate(() => !!(window.__timelines && window.__timelines.main));
+      if (tlReady) break;
       await new Promise((r) => setTimeout(r, 120));
     }
+    if (!tlReady) throw new Error(`timeline never registered in ${path.basename(file)}`);
+    // bundled @font-face → previews show the REAL faces (same set the renderer embeds)
+    try {
+      const fontsCss = path.join(__dirname, "..", "modes", "standard", "fonts", "fonts.css");
+      if (fs.existsSync(fontsCss)) await page.addStyleTag({ content: fs.readFileSync(fontsCss, "utf8") });
+    } catch (e) {}
     await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
     await page.evaluate((t) => {
       const v = document.getElementById("a-roll"); if (v) v.style.display = "none"; // transparent hole for the bg frame
@@ -79,6 +87,8 @@ async function main() {
   if (!fs.existsSync(idx)) { console.error("[preview] no index.html — compile first"); process.exit(1); }
   const railP = path.join(project, "rail.html");
   const hasRail = fs.existsSync(railP);
+  const fgP = path.join(project, "index_fg.html");
+  const hasFg = fs.existsSync(fgP); // hybrid: fg caps render ABOVE the matte (like the real composite)
 
   let fps = 24;
   try { const f = parseFloat(String(fs.readFileSync(path.join(project, "matte.fps"), "utf8")).replace(/[^\d.]/g, "")); if (f > 0) fps = f; } catch (e) {}
@@ -124,6 +134,7 @@ async function main() {
       // global caption_layer:"fg" → captions sit ON TOP of the subject; the matte
       // must NOT be stacked over them (the render skips the overlay too).
       if (!globalFg && fs.existsSync(fg)) layers.push({ input: fg });             // subject occludes embed
+      if (hasFg) layers.push({ input: await shotAt(browser, fgP, W, H, t), blend: "screen" }); // hybrid fg caps in front (screen, like the real ffmpeg pass)
       if (hasRail) layers.push({ input: await shotAt(browser, railP, W, H, t) }); // rail in front
       const out = path.join(outDir, `t${String(t).replace(".", "_")}.png`);
       await sharp(bg).composite(layers).png().toFile(out);

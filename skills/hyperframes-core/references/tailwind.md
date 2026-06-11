@@ -87,6 +87,8 @@ Prefer complete class tokens in HTML, data variants, or explicit CSS:
 <div data-tone="blue" class="bg-blue-500 data-[tone=rose]:bg-rose-500"></div>
 ```
 
+If a generated class is unavoidable, make sure the full class token appears in a `text/tailwindcss` block before validation.
+
 ## Video-Specific Guardrails
 
 v4 + render-mode footguns. Every bullet is a hard rule:

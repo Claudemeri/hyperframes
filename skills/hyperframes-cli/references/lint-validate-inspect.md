@@ -46,6 +46,12 @@ Static lint is fast but blind to runtime failures. `validate` loads the composit
 - Failed network requests (media-file `ERR_ABORTED` filtered out)
 - WCAG AA contrast violations on visible text — sampled at 5 timestamps across the timeline. Disable with `--no-contrast`.
 
+**Fixing contrast warnings** — thresholds are 4.5:1 for normal text, 3:1 for large text (24px+, or 19px+ bold):
+
+- On dark backgrounds, brighten the failing color until it clears the threshold; on light backgrounds, darken it.
+- Stay within the palette family — don't invent a new color, adjust the existing one.
+- Re-run `validate` until clean.
+
 Run `validate` before `inspect` when an animation has scripts, fetched data, or theming. Combine with `render --strict` in CI.
 
 ## inspect

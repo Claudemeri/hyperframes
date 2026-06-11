@@ -116,7 +116,7 @@ This maps the skill's full surface (see the `description`) to its references —
 ## Output checklist → `hyperframes-cli`
 
 - [ ] `npx hyperframes lint` and `npx hyperframes validate` pass (block on results)
-- [ ] design adherence verified if a spec (`frame.md` / `design.md`) exists
+- [ ] design adherence verified if a spec (`frame.md` / `design.md`) exists — checklist in `hyperframes-creative/references/design-adherence.md`
 - [ ] `npx hyperframes inspect` passes, or every overflow is intentionally marked
 - [ ] contrast warnings addressed; for multi-scene work, review the animation map (`hyperframes-animation/scripts/animation-map.mjs`)
 - [ ] deliver the preview; render to MP4 only on explicit request

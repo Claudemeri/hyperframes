@@ -44,6 +44,7 @@ Build the visible end-state in static HTML and CSS first, then animate from/to t
 - Use `position: absolute` for layers and decorative elements, not as the default content-layout strategy.
 - Prefer transforms and opacity for animation.
 - Keep text inside its intended container. For dynamic text, use `max-width`, wrapping, or `window.__hyperframes.fitTextFontSize(text, { maxWidth, fontFamily, fontWeight })`.
+- For text measurement without DOM reflow, use `window.__hyperframes.pretext`: `pretext.prepare(text, font)` then `pretext.layout(prepared, maxWidth, lineHeight)`. Pure arithmetic, ~0.0002 ms per call — safe for per-frame text reflow, shrinkwrap containers, and computing layout before render. `fitTextFontSize` is built on it.
 - **Do not** use `<br>` in body text. Forced breaks ignore the actual rendered font width and produce an extra break when the line already wraps naturally, causing overlap. Let text wrap via `max-width`. Exception: short display titles where each word is deliberately on its own line.
 
 ## Why This Matters

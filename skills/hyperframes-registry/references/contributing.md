@@ -152,6 +152,8 @@ git push origin feat/registry-{name}
 gh pr create --title "feat(registry): {name}" --body "preview: {hyperframes.dev-url}"
 ```
 
+**If you don't have a GitHub account:** you need one to open a PR. Sign up at https://github.com/signup, then run `gh auth login`.
+
 ## Quality Gate
 
 - [ ] `hyperframes lint` → 0 errors

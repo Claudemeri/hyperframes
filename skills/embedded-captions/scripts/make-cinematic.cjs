@@ -109,6 +109,13 @@ function main() {
         `${skipped.map(({ w }) => `"${w.text}"`).join(" ")} — add them to a line, or declare true filler in "drops": []`);
   }
 
+  // text override + multiple words double-renders (override replaces word 1, words
+  // 2..n still draw) — caught cold by a clean-room agent; illegal for ANY hero line.
+  for (const b of blocks) for (const ln of (b.lines || [])) {
+    if (ln.hero && ln.text && (ln.words || []).length > 1)
+      die(`hero line ["${(ln.words || []).join('" "')}"] has BOTH multiple words and a "text" override — drop "text" (words render verbatim; DNA case applies) or promote a single word.`);
+  }
+
   // ── block windows: in = first word −lead; out = page-flip = next block's first word −0.28 (or +1.2 hold) ──
   const LEAD = 0.18;
   const bw = blocks.map((b) => {
@@ -148,10 +155,10 @@ function main() {
 
   // ── planes: agent's + auto LOCKUP planes (one per hero block) ───────────────
   // The LOCKUP is the layout answer to "the sentence reads broken around the hero":
-  // a hero block's lines do NOT scatter into the narration column — pre-context,
-  // HERO, and post-context stack as ONE bonded composition centered on the subject
-  // (reading order top→bottom = spoken order, by construction). Context lines float
-  // in FRONT (fg) while the hero embeds BEHIND — the depth sandwich.
+  // a hero block's lines do NOT scatter into the narration column — kicker, HERO and
+  // tail compose as ONE bonded ORBIT (context anchored at the hero's edges, diagonal
+  // read). DEPTH: context EMBEDS (bg) with the hero — one shared depth; per-line
+  // `layer:"fg"` is the escape hatch when the matte eats a context line (gate tells you).
   const planes = {};
   for (const [k, v] of Object.entries(C.planes || {})) {
     if (v == null) continue;
@@ -236,9 +243,13 @@ function main() {
         if (ov > bestOv) { bestOv = ov; best = z; }
       }
       if (!best) continue;
-      if (best.meanLuma > 150) planeComp[pk] = " mix-blend-mode: normal; text-shadow: 0 1px 6px rgba(0,0,0,.65), 0 2px 16px rgba(0,0,0,.4);";
-      else if (best.meanLuma > 95) planeComp[pk] = " text-shadow: 0 1px 5px rgba(0,0,0,.6), 0 2px 14px rgba(0,0,0,.35);";
-      if (planeComp[pk]) console.log(`[make-cinematic] plane "${pk}" zone luma ${best.meanLuma} → legibility compensation (${best.meanLuma > 150 ? "opaque+scrim" : "scrim"})`);
+      // gate on the time PEAK too — a dark wall swept by a bright moving object
+      // (handheld drift, screens) averages "clean" but peaks hot, and text there
+      // washes out exactly when the bright thing passes (real cold-start case)
+      const pkL = best.peakLuma != null ? best.peakLuma : best.meanLuma;
+      if (best.meanLuma > 150 || pkL > 175) planeComp[pk] = " mix-blend-mode: normal; text-shadow: 0 1px 6px rgba(0,0,0,.65), 0 2px 16px rgba(0,0,0,.4);";
+      else if (best.meanLuma > 95 || pkL > 135) planeComp[pk] = " text-shadow: 0 1px 5px rgba(0,0,0,.6), 0 2px 14px rgba(0,0,0,.35);";
+      if (planeComp[pk]) console.log(`[make-cinematic] plane "${pk}" zone luma ${best.meanLuma} (peak ${pkL}) → legibility compensation (${best.meanLuma > 150 || pkL > 175 ? "opaque+scrim" : "scrim"})`);
     }
   }
   // lockup context shares the hero band's luma
@@ -375,9 +386,10 @@ function main() {
   let gid = 0;
   for (const l of flat) {
     l.gid = l.isMinorHero ? `h-${l.bi}` : `b${l.bi}-l${gid++}`;
-    // depth model: lockup CONTEXT floats in FRONT (readable across the subject, frames
-    // the embedded hero); narration columns stay embedded (bg) unless the DNA declares
-    // bodyLayer:"fg" (loud's announce-style). Minor heroes ride their column in FRONT.
+    // depth model: lockup CONTEXT embeds (bg) WITH the hero — the orbit anchors it
+    // beside the head/shoulder so it reads on the scene, one shared depth; narration
+    // columns embed too unless the DNA declares bodyLayer:"fg" (loud's announce-style).
+    // Minor heroes ride their column in FRONT. Per-line layer overrides any default.
     // ORBIT depth: lockup context lands BESIDE the subject (kicker/tail at the hero's
     // edges) — so it EMBEDS (bg) like the hero; the whole composition shares one depth.
     // fg remains for: minor heroes (column emphasis), a DNA's bodyLayer (loud announces),
@@ -497,7 +509,7 @@ function main() {
           let top = 0;
           for (const l of ordered) {
             const cap = (sample.caps || []).find((c) => c.id === l.gid);
-            const realH = cap ? textBoxH(cap) : l.frac * H * 1.25;
+            const realH = cap ? ((cap.cap_bbox && cap.cap_bbox.h) || textBoxH(cap)) : l.frac * H * 1.25;
             if (Math.abs(top - l.slotPx) > 3) {
               const g = groups.find((g2) => g2.id === l.gid);
               g.css = g.css.replace(/top:\s*-?[\d.]+px/, "top:" + Math.round(top) + "px");
@@ -526,6 +538,32 @@ function main() {
   //     shift the whole LOCKUP plane vertically.
   // (c) LOCKUP RE-STACK: a size change moves the hero's height — restack the lockup's
   //     slots from measured heights so post-context stays bonded BELOW the hero.
+  // HERO words never wrap — a mid-word break ("Watermelo|n") is wrong in every case,
+  // and author css REPLACES the default (which silently lost white-space:nowrap).
+  // Forced here so no authoring path can drop it; centered nowrap text overflows a
+  // narrow plane SYMMETRICALLY, which also keeps width-fit honest (it measures the
+  // true single-line width instead of a wrapped row).
+  // narration lines whipped away by a mid-sentence page-flip are the same disease
+  // in mild form — warn (a deliberate quick beat is legal, so no die)
+  for (const g of groups) if (!g.hero && g.words && g.words.length && g.out - g.in < 0.6) {
+    console.log(`[make-cinematic] ⚠ line "${g.words.map((w) => w.text).join(" ").slice(0, 28)}" visible only ${(g.out - g.in).toFixed(2)}s (page-flip) — merge micro-lines or give the plane more height so the page holds`);
+  }
+  // MIN DWELL — a peak on screen <0.5s is unreadable ("stars" shipped at 0.47s and
+  // the user couldn't read it). Merge the block with the next (one thought), promote
+  // a word with room, or demote to an emphasized line. <0.8s gets a loud warning.
+  for (const g of groups) if (g.hero) {
+    const dwell = g.out - g.in;
+    if (dwell < 0.5) die(`hero "${(g.words[0] || {}).text}" is on screen only ${dwell.toFixed(2)}s (<0.5s readability floor) — merge its block with the next, promote a word with more room, or demote it to an emphasized (non-hero) line.`);
+    if (dwell < 0.8) console.log(`[make-cinematic] ⚠ hero "${(g.words[0] || {}).text}" dwell ${dwell.toFixed(2)}s is tight (<0.8s) — consider merging blocks so the peak can breathe`);
+  }
+  {
+    let nwChanged = false;
+    for (const g of groups) if (g.hero && !/white-space\s*:\s*nowrap/.test(g.css || "")) { g.css = (g.css || "") + " white-space: nowrap;"; nwChanged = true; }
+    if (nwChanged) {
+      fs.writeFileSync(path.join(project, "plan.json"), JSON.stringify(plan, null, 2));
+      require("child_process").spawnSync("node", [path.join(__dirname, "make-composition.cjs"), project], { stdio: "ignore" });
+    }
+  }
   const fracOf = (css) => { const m = (css || "").match(/font-size\s*:\s*calc\(\s*([\d.]+)\s*\*\s*var\(--h\)/); return m ? +m[1] : null; };
   const setFrac = (css, f) => (css || "").replace(/font-size\s*:\s*[^;]+/, "font-size: calc(" + f.toFixed(3) + " * var(--h))");
   const textBox = (c) => {
@@ -549,16 +587,33 @@ function main() {
     if (!heroG) continue;
     const isApex = (fracOf(heroG.css) || 0) >= apexFrac - 1e-6;
     const lockupMates = groups.filter((g) => g.plane === hRef.plane && g.id !== heroG.id);
+    // hero size changed → context follows the 0.26 poster ratio, and its orbit
+    // max-width scales WITH the font (a stale max-width wraps re-locked context
+    // into multi-row towers that blow the stack past the frame)
+    const relockMates = (hf) => {
+      const rf = +Math.min(0.085, Math.max(0.05, hf * 0.26)).toFixed(4);
+      for (const m of lockupMates) {
+        const mf = fracOf(m.css);
+        if (!mf || Math.abs(mf - rf) <= 0.002) continue;
+        const scale = rf / mf;
+        m.css = setFrac(m.css, rf).replace(/max-width:\s*([\d.]+)px/, (s2, px) => "max-width:" + Math.round(+px * scale) + "px");
+      }
+    };
     const measure = () => {
       const midT = ((heroG.in + Math.min(heroG.out, heroG.in + 1.0)) / 2).toFixed(2);
-      cp2.spawnSync("node", [path.join(__dirname, "measure-layout.cjs"), project, String(midT)], { stdio: "ignore", timeout: 60000 });
-      try { return JSON.parse(fs.readFileSync(path.join(project, "_layout.json"), "utf8")).samples[0].caps || []; }
-      catch (e) { return null; }
+      const endT = Math.max(+midT + 0.05, heroG.out - 0.12).toFixed(2);
+      cp2.spawnSync("node", [path.join(__dirname, "measure-layout.cjs"), project, String(midT), String(endT)], { stdio: "ignore", timeout: 90000 });
+      try {
+        const ss = JSON.parse(fs.readFileSync(path.join(project, "_layout.json"), "utf8")).samples;
+        const near = (t) => ss.reduce((a, b) => Math.abs(b.t - t) < Math.abs((a ? a.t : 1e9) - t) ? b : a, null);
+        return { caps: (near(+midT) || {}).caps || [], capsEnd: (near(+endT) || {}).caps || [] };
+      } catch (e) { return null; }
     };
     let didRaise = false;
-    for (let pass = 0; pass < 3; pass++) {
-      const caps = measure();
-      if (!caps) break;
+    for (let pass = 0; pass < 5; pass++) {
+      const m0 = measure();
+      if (!m0) break;
+      const caps = m0.caps, capsEnd = m0.capsEnd && m0.capsEnd.length ? m0.capsEnd : m0.caps;
       const hc0 = caps.find((c) => c.id === heroG.id);
       if (!hc0 || !hc0.cap_bbox) break;
       const hc = { ...hc0, cap_bbox: textBox(hc0) };
@@ -602,12 +657,7 @@ function main() {
               }
             }
             heroG.css = setFrac(heroG.css, nf); changed = true; didRaise = true;
-            // hero grew → re-lock the orbit context to the 0.26 poster ratio
-            const rf = +Math.min(0.085, Math.max(0.05, nf * 0.26)).toFixed(4);
-            for (const m of lockupMates) {
-              const mf = fracOf(m.css);
-              if (mf && Math.abs(mf - rf) > 0.002) m.css = setFrac(m.css, rf);
-            }
+            relockMates(nf);
           }
         }
       }
@@ -647,13 +697,36 @@ function main() {
       // max-widths wrap context lines, so the re-slot's estimates can leave the tail
       // displaced or the whole composition off frame)
       if (lockupMates.length) {
-        const caps2 = caps; // restack from this measurement; next pass re-measures anyway
+        const caps2 = capsEnd; // lockup-END sample: every context line is revealed there
+        // TOWER CHECK — a context line wrapped to 3+ rows means its orbit max-width is
+        // too narrow for the (re-locked) font; widen toward the plane before stacking,
+        // or the tower blows the stack past the frame and the walk-back eats the hero
+        for (const m of lockupMates) {
+          const cm = caps2.find((x) => x.id === m.id);
+          const frm = fracOf(m.css) || 0.05;
+          const mwM = m.css.match(/max-width:\s*([\d.]+)px/);
+          if (!cm || !cm.cap_bbox || !mwM) continue;
+          const rows = Math.round(cm.cap_bbox.h / (frm * H * 1.12));
+          if (rows >= 3) {
+            const planeCssW2 = (plan.planes[hRef.plane] && plan.planes[hRef.plane].css) || "";
+            const pwX = W * (+((planeCssW2.match(/width:\s*([\d.]+)%/) || [0, 92])[1]) / 100);
+            const nw = Math.round(pwX * 0.62);
+            if (nw > +mwM[1] + 10) {
+              m.css = m.css.replace(/max-width:\s*[\d.]+px/, "max-width:" + nw + "px");
+              console.log(`[make-cinematic] context "${((m.words || [])[0] || {}).text}…" wrapped to ${rows} rows — orbit max-width ${Math.round(+mwM[1])}→${nw}px (towers break the stack)`);
+              changed = true;
+            }
+          }
+        }
         const entries = [heroG, ...lockupMates].map((g) => {
           const c = caps2.find((x) => x.id === g.id);
           const curTop = +((g.css.match(/top:\s*(-?[\d.]+)px/) || [0, 0])[1]);
           const fr = fracOf(g.css) || 0.05;
-          // for the group being resized this pass, predict its NEW height from the new frac
-          const measuredH = c ? (textBox(c) || {}).h : null;
+          // SLOT HEIGHT = the LAYOUT box (cap_bbox), not the glyph box: words reveal
+          // over time, so at the hero-mid sample a context line's later words are
+          // still opacity-0 — glyph-box measured a wrapped line one row short and the
+          // next line slotted INTO its wrap band (real text-on-text shipped).
+          const measuredH = c && c.cap_bbox ? c.cap_bbox.h : null;
           const h2 = (g.id === heroG.id && didRaise) ? fr * H * 1.12 : (measuredH || fr * H * 1.25);
           return { g, curTop, h: h2 };
         }).sort((a, b) => a.curTop - b.curTop);
@@ -671,11 +744,54 @@ function main() {
           console.log(`[make-cinematic] lockup measured ${Math.round(top)}px tall — plane top ${curTopPct}% → ${maxTopPct.toFixed(1)}% (kept on frame)`);
           changed = true;
         }
+        // even at the 2% ceiling the stack can exceed the frame (TIMID raise + ratio
+        // context on a tall lockup) — walk the hero back 8% and re-lock until it fits
+        if (top > H * 0.95 && maxTopPct <= 2.01) {
+          const f0c = fracOf(heroG.css);
+          if (f0c && f0c > 0.14) {
+            // decisive step: stack height scales ~linearly with the hero (context is
+            // ratio-locked to it), so aim straight at a 93% fill instead of nibbling
+            const nf2 = +Math.max(0.14, Math.min(f0c * 0.92, f0c * (H * 0.93) / top)).toFixed(3);
+            console.log(`[make-cinematic] lockup stack ${Math.round(top)}px exceeds the frame even at top 2% — hero ${f0c}h → ${nf2}h (fit)`);
+            heroG.css = setFrac(heroG.css, nf2);
+            relockMates(nf2);
+            didRaise = true; changed = true;
+          }
+        }
       }
       if (!changed) break;
       fs.writeFileSync(path.join(project, "plan.json"), JSON.stringify(plan, null, 2));
       r = cp2.spawnSync("node", [path.join(__dirname, "make-composition.cjs"), project], { stdio: "ignore" });
       try { fs.unlinkSync(path.join(project, "_layout.json")); } catch (e) {}
+    }
+  }
+  // MINOR HERO measure pass — minors keep their authored size (hierarchy is a choice)
+  // but never ship broken: wider than the frame's usable width shrinks to fit, and a
+  // column overflow gets a loud note (centered spill is legal on a clear side only).
+  {
+    const minors = groups.filter((g) => g.hero && !heroRefs.some((h) => `h-${h.bi}` === g.id));
+    let minorChanged = false;
+    for (const mg of minors) {
+      const midT = ((mg.in + Math.min(mg.out, mg.in + 1.0)) / 2).toFixed(2);
+      cp2.spawnSync("node", [path.join(__dirname, "measure-layout.cjs"), project, String(midT)], { stdio: "ignore", timeout: 60000 });
+      let mc = null;
+      try { mc = (JSON.parse(fs.readFileSync(path.join(project, "_layout.json"), "utf8")).samples[0].caps || []).find((c) => c.id === mg.id); } catch (e) {}
+      if (!mc || !mc.cap_bbox) continue;
+      const bb = textBox(mc), f0 = fracOf(mg.css);
+      if (f0 && bb.w > W * 0.94) {
+        const nf = Math.max(0.06, +(f0 * (W * 0.94) / bb.w).toFixed(3));
+        console.log(`[make-cinematic] minor hero "${(mg.words[0] || {}).text}" too WIDE ${Math.round(bb.w)}px → ${f0}h→${nf.toFixed(3)}h (shrink-to-fit)`);
+        mg.css = setFrac(mg.css, nf); minorChanged = true;
+      } else {
+        const planeCssM = (plan.planes[mg.plane] && plan.planes[mg.plane].css) || "";
+        const pwPx = W * (+((planeCssM.match(/width:\s*([\d.]+)%/) || [0, 100])[1]) / 100);
+        if (bb.w > pwPx * 1.05) console.log(`[make-cinematic] note: minor hero "${(mg.words[0] || {}).text}" (${Math.round(bb.w)}px) spills its ${Math.round(pwPx)}px column — fine on a clear side; reduce size if it crosses the subject`);
+      }
+      try { fs.unlinkSync(path.join(project, "_layout.json")); } catch (e) {}
+    }
+    if (minorChanged) {
+      fs.writeFileSync(path.join(project, "plan.json"), JSON.stringify(plan, null, 2));
+      cp2.spawnSync("node", [path.join(__dirname, "make-composition.cjs"), project], { stdio: "ignore" });
     }
   }
   process.exit(0);

@@ -92,7 +92,36 @@ function main() {
   const FONT = S.font || (dna ? dna.font.family : "Inter");
   const RFONT = S.rail_font || FONT;
   const CFILL = S.cfill || (dna ? dna.palette.cap_color : "#f3efe6");
-  const CACC = S.cacc || dnaAccent || "#e3c06a";
+  let CACC = S.cacc || dnaAccent || "#e3c06a";
+  // HIGHLIGHT DIRECTION — the karaoke accent must be BRIGHTER than the fill, or the
+  // active word visibly dims (scene-sampled accents on dark scenes come out darker
+  // than the cap color — a real cold-start trap). Same hue, lifted lightness.
+  {
+    const hx = (c) => { const m = String(c).trim().match(/^#?([0-9a-f]{6})$/i); return m ? [0,2,4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+    const luma = (rgb) => 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    const fa = hx(CACC), ff = hx(CFILL);
+    // a highlight must not read as "lights off": lift only when the accent is MUCH
+    // darker than the fill (gap > 60), and only up to fill−45 — never bleach to white
+    // (a saturated accent on a light fill reads by HUE; that is the classic karaoke).
+    const chroma = fa ? Math.max(...fa) - Math.min(...fa) : 0;
+    if (fa && ff && !S.cacc && luma(fa) < luma(ff) - 60 && chroma < 90) {
+      const target = Math.min(luma(ff) - 45, 205);
+      let [r, g, b] = fa.map((v) => v / 255);
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, sst = 0, l = (mx + mn) / 2;
+      if (mx !== mn) { const d = mx - mn; sst = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; }
+      const h2c = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1/6) return p + (q - p) * 6 * t; if (t < 1/2) return q; if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; };
+      const from = CACC;
+      for (let tries = 0; tries < 8 && l < 0.80; tries++) {
+        l = Math.min(0.80, l + 0.07);
+        const q = l < 0.5 ? l * (1 + sst) : l + sst - l * sst, p = 2 * l - q;
+        const rgb = [h2c(p, q, h + 1/3), h2c(p, q, h), h2c(p, q, h - 1/3)].map((v) => Math.round(v * 255));
+        CACC = "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
+        if (luma(rgb) >= target) break;
+      }
+      console.log(`[make-standard] accent ${from} reads as "lights off" vs fill (gap ${Math.round(luma(ff) - luma(fa))}) -> lifted to ${CACC} (same hue, saturation kept)`);
+    }
+  }
   const rail = S.rail || {};
   const clList = Array.isArray(S.climaxes) ? S.climaxes.slice() : (S.climax ? [S.climax] : []);
   if (dna && dna.hero) clList.forEach((c) => { if (!c.entrance) c.entrance = dna.hero.entrance; });
@@ -151,7 +180,12 @@ function main() {
       if (before.length === 0) { // the article IS the line start — a true orphan if left behind
         found.wi -= 1;
         found.words = found.ln.words.slice(found.wi, found.wiEnd + 1);
-        if (c.text) c.text = found.words[0].text.charAt(0).toUpperCase() + found.words[0].text.slice(1) + " " + c.text;
+        if (c.text) {
+          // display case follows the authored text (an all-caps climax gets THE, not The)
+          const art = found.words[0].text;
+          const artD = c.text === c.text.toUpperCase() ? art.toUpperCase() : art.charAt(0).toUpperCase() + art.slice(1);
+          c.text = artD + " " + c.text;
+        }
         console.log(`[make-standard] absorbed leading "${found.words[0].text}" into the climax (never strand a determiner)`);
       }
     }
@@ -191,6 +225,19 @@ function main() {
     // hand-off freeze: a PRE segment holds (frozen) until the page-flip moment
     if (s.kind === "pre" && nx) exitAt = nx.enter - EXIT_D - 0.02;
     s.exit = Math.max(s.enter + ENTER_D + 0.1, Math.min(exitAt, DUR - 0.05));
+  }
+  // SWALLOW GATE — pre-emption must never eat content: if a line exits before its own
+  // last words are spoken, those words reveal inside an opacity-0 container (silent
+  // verbatim loss). At dense pace the only legal split is one sentence per line.
+  {
+    const eaten = [];
+    for (const s2 of segsT) {
+      const lost = s2.words.filter((w) => w.start >= s2.exit - 0.04);
+      const faded = s2.words.filter((w) => w.start < s2.exit - 0.04 && w.end > s2.exit + 0.08);
+      if (lost.length) eaten.push(`"${s2.words.map((w) => w.text).join(" ").slice(0, 40)}" exits ${s2.exit.toFixed(2)}s but loses: ${lost.map((w) => w.text).join(" ")}`);
+      else if (faded.length) eaten.push(`"${s2.words.map((w) => w.text).join(" ").slice(0, 40)}" exits ${s2.exit.toFixed(2)}s while still SPEAKING: ${faded.map((w) => w.text).join(" ")} (reveals half-faded)`);
+    }
+    if (eaten.length) die(`RAIL PRE-EMPTION SWALLOW - ${eaten.length} line(s) would silently lose words:\n  ${eaten.join("\n  ")}\n  Merge each into the next line (dense pace leaves no room for the split).`);
   }
 
   // ── 4. climax windows: enter when spoken; hold to end of THOUGHT; never overlap ─
@@ -283,7 +330,7 @@ function main() {
     const heroExtraCss = hero && hero.css ? hero.css : "";
     const sharedCss = climaxes.length ? `
   .climax{position:absolute;left:50%;transform:translate(-50%,-50%);white-space:nowrap;
-    font-family:'${FONT}',sans-serif;${heroCaseCss}${heroTrackCss}${heroExtraCss}${(S.climax_css || "").trim()}
+    font-family:'${FONT}',sans-serif;font-weight:${(hero && hero.weight) || 800};${heroCaseCss}${heroTrackCss}${heroExtraCss}${(S.climax_css || "").trim()}
     line-height:1.12;color:${CFILL};
     ${heroBright
       ? "text-shadow:0 1px 6px rgba(0,0,0,.6);-webkit-text-stroke:2px rgba(0,0,0,.55);"
@@ -407,7 +454,7 @@ ${js}
   #stage{position:absolute;inset:0;z-index:2;container-type:size}
   .rail{position:absolute;left:50%;bottom:${rail.bottom_pct ?? 9}%;transform:translateX(-50%);width:${rail.width_pct ?? 90}%}
   .line{position:absolute;left:0;right:0;bottom:0;text-align:center;opacity:0;
-    font-family:'${RFONT}',sans-serif;${(S.rail_css || "").trim()}
+    font-family:'${RFONT}',sans-serif;font-weight:${(S.rail && S.rail.weight) || 600};${(S.rail_css || "").trim()}
     line-height:1.18;font-size:${railFontCqh}cqh;color:${CFILL};
     text-shadow:0 2px 10px rgba(0,0,0,.65)}
   .line .w{display:inline-block;opacity:0;margin:0 .1em;color:${CFILL}}
@@ -516,8 +563,10 @@ ${railJs}${dimJs}      tl.add(function(){},${DUR});
         if (c.cqh >= floor) continue;
         let target = floor;
         if (cap && cap.cap_bbox && cap.cap_bbox.w > 0) {
+          // a minor never rivals the apex's width: cap the RAISE at 72% of usable
+          // (long-phrase minors at the 0.55x floor were visually tying the apex)
           const wAt = cap.cap_bbox.w * target / c.cqh;
-          if (wAt > maxW * 0.94) target = Math.max(c.cqh, Math.floor(c.cqh * (maxW * 0.94) / cap.cap_bbox.w));
+          if (wAt > maxW * 0.72) target = Math.max(c.cqh, Math.floor(c.cqh * (maxW * 0.72) / cap.cap_bbox.w));
         }
         if (target > c.cqh) {
           console.log(`[make-standard] minor "${c.text}" ${c.cqh}cqh rides the apex (${apexFinal}cqh) → ${target}cqh (0.55× family)`);

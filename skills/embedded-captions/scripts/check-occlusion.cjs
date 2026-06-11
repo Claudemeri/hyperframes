@@ -85,7 +85,7 @@ async function main() {
         if (score > 0 && (!entry.overflow || score > entry.overflow.score)) entry.overflow = { text: w.text, off, score, t: sample.t };
       }
       const capOccl = occlusionForRect(mask, cap.cap_bbox.x, cap.cap_bbox.y, cap.cap_bbox.w, cap.cap_bbox.h);
-      entry.samples.push({ t: sample.t, cap_occl: capOccl, words: wordsData });
+      entry.samples.push({ t: sample.t, cap_occl: capOccl, cap_bbox: cap.cap_bbox, words: wordsData });
     }
   }
 
@@ -125,7 +125,16 @@ async function main() {
     // HERO target-occlusion advisory (not a failure): a hero should sit ON the subject
     // (~30–55%). If it barely grazes, it reads as a small floating word, not an embed.
     if (heroIds.has(gid) && peakCap < 0.15) {
-      console.log(`  ${gid}  [hero-weak] peak ${(peakCap * 100).toFixed(0)}% — hero barely crosses the subject; it should sit ON the subject (~30–55% = the embed effect). Center it (safe-zones heroAnchor) + make it BIG; don't park it in a clean margin.`);
+      // METRIC HONESTY: this advisory uses CAP-AREA occlusion, which saturates ~15%
+      // for a width-filled hero over a narrow subject (the 30–55% figure elsewhere is
+      // the safe-zones BAND metric — different denominator). If the hero already owns
+      // the width, "center it + make it BIG" is unactionable — stay quiet.
+      const widest = Math.max(...entry.samples.map((sm) => (sm.cap_bbox && sm.cap_bbox.w) || 0), 0);
+      if (widest >= frameW * 0.8) {
+        console.log(`  ${gid}  [hero-ok] peak ${(peakCap * 100).toFixed(0)}% cap-area — width-saturated hero over a narrow subject; cap-area can't reach the band target (this is the geometry, not a layout fault).`);
+      } else {
+        console.log(`  ${gid}  [hero-weak] peak ${(peakCap * 100).toFixed(0)}% — hero barely crosses the subject; it should sit ON the subject (~30–55% by the safe-zones BAND metric = the embed effect). Center it (safe-zones heroAnchor) + make it BIG; don't park it in a clean margin.`);
+      }
     }
   }
   if (failures.length) {

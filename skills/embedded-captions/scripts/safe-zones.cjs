@@ -63,7 +63,7 @@ function largestRect(safe, GW, c0, c1, r0, r1) {
 }
 
 // turn a max-coverage grid into {coverage, subject, zones, recommendation}
-function analyze(occ, GW, GH, W, H, lum) {
+function analyze(occ, GW, GH, W, H, lum, lumSeries) {
   const occCell = new Uint8Array(GW * GH);
   for (let c = 0; c < GW * GH; c++) occCell[c] = occ[c] >= THRESH ? 1 : 0;
   const safe = new Uint8Array(GW * GH);            // 1-cell dilation margin around the silhouette
@@ -121,12 +121,20 @@ function analyze(occ, GW, GH, W, H, lum) {
     for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) { s2 += lum[y * GW + x]; n++; }
     return n ? Math.round(s2 / n) : null;
   };
+  // a TIME-AVERAGED map walks a moving minefield: a dark wall swept by a bright
+  // moving object (handheld drift, screens) averages "clean" while peaking hot.
+  // peakLuma = p95 of the zone's per-sample mean over the window.
+  const zoneLumaPeak = (r) => {
+    if (!lumSeries || !lumSeries.length || r.area === 0) return null;
+    const means = lumSeries.map((Lg) => { let s2 = 0, n = 0; for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) { s2 += Lg[y * GW + x]; n++; } return n ? s2 / n : 0; }).sort((a, b) => a - b);
+    return Math.round(means[Math.max(0, Math.ceil(means.length * 0.95) - 1)]);
+  };
   const toZone = (r) => r.area === 0 ? null : {
     xPct: +(r.x / GW * 100).toFixed(1), yPct: +(r.y / GH * 100).toFixed(1),
     wPct: +(r.w / GW * 100).toFixed(1), hPct: +(r.h / GH * 100).toFixed(1),
     areaPct: +(r.w * r.h / (GW * GH) * 100).toFixed(1),
     px: { x: Math.round(r.x * cellW), y: Math.round(r.y * cellH), w: Math.round(r.w * cellW), h: Math.round(r.h * cellH) },
-    ...(zoneLuma(r) != null ? { meanLuma: zoneLuma(r), bright: zoneLuma(r) > 180 } : {}),
+    ...(zoneLuma(r) != null ? { meanLuma: zoneLuma(r), bright: zoneLuma(r) > 180, ...(zoneLumaPeak(r) != null ? { peakLuma: zoneLumaPeak(r) } : {}) } : {}),
   };
   const zones = {
     largest: toZone(largestRect(safe, GW, 0, GW, 0, GH)),
@@ -375,6 +383,11 @@ async function main() {
     for (let c = 0; c < GW * GH; c++) acc[c] /= n;
     return acc;
   };
+  const lumSeriesWindow = (t0, t1) => {
+    let inWin = grids.filter((s2) => s2.t >= t0 - 1e-6 && s2.t <= t1 + 1e-6 && s2.lum);
+    if (!inWin.length) inWin = grids.filter((s2) => s2.lum);
+    return inWin.map((s2) => s2.lum);
+  };
   const occWindow = (t0, t1) => {
     const occ = new Float32Array(GW * GH);
     let inWin = grids.filter((s) => s.t >= t0 - 1e-6 && s.t <= t1 + 1e-6);
@@ -388,7 +401,7 @@ async function main() {
   // ad-hoc window query
   const qIn = parseFloat(process.argv[3]), qOut = parseFloat(process.argv[4]);
   if (Number.isFinite(qIn) && Number.isFinite(qOut)) {
-    const a = analyze(occWindow(qIn, qOut), GW, GH, W, H, lumWindow(qIn, qOut));
+    const a = analyze(occWindow(qIn, qOut), GW, GH, W, H, lumWindow(qIn, qOut), lumSeriesWindow(qIn, qOut));
     console.log(`[safe-zones] window ${qIn}-${qOut}s: ${a.recommendation.toUpperCase()}  coverage ${a.coverage}%  clearer:${a.subject.clearerSide}`);
     const z = a.zones;
     for (const k of ["largest", "left", "right", "top"]) if (z[k]) console.log(`   ${k}: ${z[k].wPct}%×${z[k].hPct}% @ (${z[k].xPct}%,${z[k].yPct}%)`);
@@ -398,9 +411,9 @@ async function main() {
 
   const globalOcc = occWindow(-1e9, 1e9);
   const globalLum = lumWindow(-1e9, 1e9);
-  const global = analyze(globalOcc, GW, GH, W, H, globalLum);
+  const global = analyze(globalOcc, GW, GH, W, H, globalLum, lumSeriesWindow(-1e9, 1e9));
   const windows = sentenceWindows(project).map((s) => {
-    const a = analyze(occWindow(s.in, s.out), GW, GH, W, H, lumWindow(s.in, s.out));
+    const a = analyze(occWindow(s.in, s.out), GW, GH, W, H, lumWindow(s.in, s.out), lumSeriesWindow(s.in, s.out));
     return { in: s.in, out: s.out, text: s.text.slice(0, 48), coverage: a.coverage, recommendation: a.recommendation, clearerSide: a.subject.clearerSide, zones: a.zones };
   });
 

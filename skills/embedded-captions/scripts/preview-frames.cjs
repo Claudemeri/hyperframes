@@ -100,12 +100,19 @@ async function main() {
   if (!times.length) {
     try {
       const plan = JSON.parse(fs.readFileSync(path.join(project, "plan.json"), "utf8"));
-      // hero/climax windows FIRST — when truncating, the peak moments must survive
-      const gs = [...(plan.groups || [])].sort((a, b) => (b.hero === true) - (a.hero === true));
-      for (const g of gs) {
+      // heroes get 2 samples each (entrance + hold); every OTHER group gets at least
+      // a shot at one midpoint — the old 2-per-group list truncated at 12 and silently
+      // dropped whole narration blocks from the sheet (cold-start agents missed bugs there)
+      const gs = plan.groups || [];
+      const heroes = gs.filter((g) => g.hero === true), rest = gs.filter((g) => !g.hero);
+      for (const g of heroes) {
         const span = g.out - g.in;
         times.push(+(g.in + span * 0.25).toFixed(2), +(g.in + span * 0.7).toFixed(2));
       }
+      const mids = rest.map((g) => +((g.in + g.out) / 2).toFixed(2));
+      const budget = Math.max(2, 16 - times.length);
+      const step = Math.max(1, Math.ceil(mids.length / budget));
+      for (let i = 0; i < mids.length; i += step) times.push(mids[i]);
     } catch (e) {}
   }
   if (!times.length) {
@@ -113,7 +120,7 @@ async function main() {
     const dur = n / fps || 10;
     times = [dur * 0.25, dur * 0.5, dur * 0.75].map((t) => +t.toFixed(2));
   }
-  times = [...new Set(times)].slice(0, 12).sort((a, b) => a - b);
+  times = [...new Set(times)].slice(0, 16).sort((a, b) => a - b);
 
   const meta = await sharp(path.join(project, "frames_bg", fs.readdirSync(path.join(project, "frames_bg")).filter((f) => f.endsWith(".png")).sort()[0])).metadata();
   const W = meta.width, H = meta.height;

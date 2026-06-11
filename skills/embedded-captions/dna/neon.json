@@ -3,7 +3,10 @@
   "title": "Neon — the sign in the scene",
   "register": "loud-cyber",
   "when": "cyberpunk / nightlife / tech-noir / music content on dark scenes. The captions ARE neon signage hanging in the room: electric cyan tubes, ignition flicker, a hum of glow. The hero powers ON like a sign being lit.",
-  "font": { "family": "Orbitron", "weights": [400, 700] },
+  "font": {
+    "family": "Orbitron",
+    "weights": [400, 700]
+  },
   "palette": {
     "scheme": "light-on-dark",
     "cap_color": "#d9f7ff",
@@ -12,13 +15,27 @@
     "accent_fallback": "#22e6ff",
     "heroColor": "accent"
   },
-  "optics": { "depthMatch": false, "contactShadow": false, "warmBloom": false },
+  "optics": {
+    "depthMatch": false,
+    "contactShadow": false,
+    "warmBloom": false
+  },
   "filter": "none",
   "motion": {
-    "soft": { "reveal": "flicker" },
-    "present": { "reveal": "flicker" },
-    "impact": { "reveal": "flicker" },
-    "exit": { "dur": 0.18, "ease": "power2.in", "stagger": 0 }
+    "soft": {
+      "reveal": "flicker"
+    },
+    "present": {
+      "reveal": "flicker"
+    },
+    "impact": {
+      "reveal": "flicker"
+    },
+    "exit": {
+      "dur": 0.18,
+      "ease": "power2.in",
+      "stagger": 0
+    }
   },
   "hero": {
     "entrance": "flicker-on",
@@ -32,5 +49,10 @@
     "sizeRange": [0.18, 0.3],
     "css": "text-shadow: 0 0 14px rgba(34,230,255,0.65), 0 0 40px rgba(34,230,255,0.35), 0 0 80px rgba(34,230,255,0.18);"
   },
-  "css": ".cap { text-shadow: 0 0 10px rgba(34,230,255,0.4), 0 0 26px rgba(34,230,255,0.2); }"
+  "css": ".cap { text-shadow: 0 0 10px rgba(34,230,255,0.4), 0 0 26px rgba(34,230,255,0.2); }",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "signature = flicker-on + glow layer (engine hero fx) — rail keeps only the cyan skin"
+  }
 }

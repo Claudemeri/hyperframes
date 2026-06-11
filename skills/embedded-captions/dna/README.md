@@ -9,6 +9,28 @@ entrance amplitude follows how hard the word was actually spoken (RMS).
 This replaces the template grab-bag. Six deep languages × scene adaptation beats 54
 shallow presets — every render is already fitted to its footage.
 
+## Category lock (deliveries field, enforced by the compilers)
+
+Every classic DNA's **home is Cinematic (column)** — that is where all ten were
+built and validated. Using one under Standard (rail) is a CROSS-CATEGORY combo
+and is allowed only where explicitly validated:
+
+| DNA                                                               | home   | rail status                                              |
+| ----------------------------------------------------------------- | ------ | -------------------------------------------------------- |
+| keynote                                                           | column | **validated** (rooftop_std / keynote_std, user-reviewed) |
+| cream                                                             | column | **validated** (jimeng_office_std, user-reviewed)         |
+| documentary, loud, ink, editorial, neon, glitch, chrome, velocity | column | unvalidated — make-standard ERRORS                       |
+
+Why the lock matters technically: make-standard consumes only `font / palette /
+hero.entrance / sizeRange / case / register` — fx (echoes/sheen/flicker/streak),
+`wordCss`, glow/breathe and the motion grammar are cinematic-engine features, so
+an unvalidated DNA under rail would silently ship a skin without its identity.
+
+**To validate a new combo**: author it deliberately (`"allow_unvalidated_dna":
+true` in standard.json), render, review with the user, then flip that DNA's
+`deliveries.rail` to `"validated"` and remove the override. Never recommend an
+unvalidated combo.
+
 ## The ten
 
 | DNA             | Register       | Scene fit                                       | Voice                                                                                                                                                                       |

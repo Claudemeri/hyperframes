@@ -66,5 +66,10 @@
     "loom": 0.03
   },
   "css": "",
-  "bodyLayer": "fg"
+  "bodyLayer": "fg",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "slam maps; bodyLayer:fg already a std-shaped hybrid; validated both"
+  }
 }

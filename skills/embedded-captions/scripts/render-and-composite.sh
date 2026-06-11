@@ -46,8 +46,12 @@ if [[ ! -f "$PROJECT/index.html" ]]; then
     C="$(compiler_for)"
     echo "[render] no index.html — auto-compiling via $C"
     node "$(dirname "$0")/$C" "$PROJECT"
+  elif [[ -f "$PROJECT/cinematic.json" ]]; then
+    # cinematic.json-only project: the full compiler lowers blocks → plan.json → html
+    echo "[render] no index.html — auto-compiling via make-cinematic.cjs"
+    node "$(dirname "$0")/make-cinematic.cjs" "$PROJECT"
   else
-    echo "[render] missing $PROJECT/index.html and standard.json/plan.json — author + compile first" >&2
+    echo "[render] missing $PROJECT/index.html and standard.json/plan.json/cinematic.json — author + compile first" >&2
     exit 1
   fi
 elif [[ -f "$PROJECT/standard.json" && "$PROJECT/standard.json" -nt "$PROJECT/index.html" ]]; then

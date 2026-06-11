@@ -88,6 +88,13 @@ function main() {
       ? ((sz0.palette && sz0.palette.accentSuggestion) || dna.palette.accent_fallback)
       : dna.palette.accent;
     console.log(`[make-standard] DNA "${dna.name}" (${dna.register}) — accent ${dnaAccent}`);
+    // CATEGORY LOCK: classic DNAs live in their validated home (cinematic).
+    // Using one under Standard is a cross-category combo: allowed ONLY where
+    // explicitly validated (deliveries.rail === "validated"); otherwise ERROR.
+    // To validate a new combo: render it, review it, then flip the DNA's flag.
+    const dlv = dna.deliveries && dna.deliveries.rail;
+    if (dlv && dlv !== "validated" && S.allow_unvalidated_dna !== true)
+      throw new Error(`[make-standard] DNA "${dna.name}" is NOT validated for Standard (rail) — its home is cinematic. ${dna.deliveries.note || ""} Validated rail DNAs: keynote, cream. (Deliberate experiment: set "allow_unvalidated_dna": true in standard.json — renders carry only the static skin; fx/wordCss/motion grammar are cinematic-engine features.)`);
   }
   const FONT = S.font || (dna ? dna.font.family : "Inter");
   const RFONT = S.rail_font || FONT;

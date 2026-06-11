@@ -53,5 +53,10 @@
     "sizeRange": [0.16, 0.3],
     "css": "font-weight: 800;"
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "validated",
+    "note": "wipe-up maps to the std entrance enum; keynote_std validated (Shine)"
+  }
 }

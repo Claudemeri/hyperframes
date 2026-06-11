@@ -60,5 +60,10 @@
     "sizeRange": [0.2, 0.34],
     "letterBlur": 2.5
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "validated",
+    "note": "standard-mode lineage IS cinematic-cream; validated std renders (jimeng)"
+  }
 }

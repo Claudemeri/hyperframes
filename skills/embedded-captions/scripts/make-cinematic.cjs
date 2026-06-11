@@ -264,8 +264,15 @@ function main() {
   try {
     const dnaLib0 = require("./lib-dna.cjs");
     const dn0 = C.dna || (C.template ? dnaLib0.LEGACY[C.template] : "cream");
-    if (dn0) dnaBodyLayer = (dnaLib0.load(dn0).bodyLayer) || null;
-  } catch (e) {}
+    if (dn0) {
+      const d0 = dnaLib0.load(dn0);
+      dnaBodyLayer = d0.bodyLayer || null;
+      // category lock (symmetric): column is every classic DNA's home today,
+      // so this only fires if a future DNA declares a different home.
+      if (d0.deliveries && d0.deliveries.home && d0.deliveries.home !== "column")
+        console.warn(`[make-cinematic] WARN: DNA "${dn0}" declares home="${d0.deliveries.home}" — cinematic use is cross-category and unvalidated.`);
+    }
+  } catch (e) { if (e.message && e.message.includes("does not support")) throw e; }
   const groups = [];
   const heroRefs = heroBlocks; // [{b, bi, ln, plane}]
   const isHeroBlock = new Set(heroBlocks.map((h) => h.bi));

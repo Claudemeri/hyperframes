@@ -59,5 +59,10 @@
     "css": "",
     "wordCss": "background: linear-gradient(105deg,#3a4350 0%,#f6fbff 20%,#8fa0b2 38%,#ffffff 50%,#2e3742 64%,#eef6fd 82%,#6b7888 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; text-shadow: none;"
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "signature = liquid-metal wordCss + sheen sweep (engine fx) — std ignores wordCss/fx"
+  }
 }

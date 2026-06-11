@@ -53,5 +53,10 @@
     "sizeRange": [0.09, 0.15],
     "css": "font-weight: 700;"
   },
-  "css": ""
+  "css": "",
+  "deliveries": {
+    "home": "column",
+    "rail": "unvalidated",
+    "note": "the lower-third IS documentary's home register (Errol Morris); column stays deliberately modest"
+  }
 }

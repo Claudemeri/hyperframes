@@ -22,6 +22,8 @@ export interface TimelineElement {
   duration: number;
   track: number;
   domId?: string;
+  /** Stable `data-hf-id` attribute value — used as primary patch target when present */
+  hfId?: string;
   /** Best-effort selector used when patching source HTML back from timeline edits */
   selector?: string;
   /** Zero-based occurrence index for non-unique selectors */
@@ -43,6 +45,7 @@ export interface TimelineElement {
 }
 
 export type ZoomMode = "fit" | "manual";
+type TimelineTool = "select" | "razor";
 
 interface PlayerState {
   isPlaying: boolean;
@@ -63,10 +66,30 @@ interface PlayerState {
   /** Work-area out-point (seconds). When set, loop ends here and E jumps here. */
   outPoint: number | null;
 
+  activeTool: TimelineTool;
+  setActiveTool: (tool: TimelineTool) => void;
+
   /** Set of selected keyframe keys in format `${elementId}:${percentage}`. */
   selectedKeyframes: Set<string>;
   toggleSelectedKeyframe: (key: string) => void;
   clearSelectedKeyframes: () => void;
+
+  /** Multi-select: additional selected elements beyond selectedElementId. */
+  selectedElementIds: Set<string>;
+  toggleSelectedElementId: (id: string) => void;
+  clearSelectedElementIds: () => void;
+
+  /** Clipboard for keyframe copy/paste — stores keyframes with relative times. */
+  keyframeClipboard: Array<{
+    relativeTime: number;
+    properties: Record<string, number | string>;
+    ease?: string;
+  }> | null;
+  setKeyframeClipboard: (data: PlayerState["keyframeClipboard"]) => void;
+
+  /** Elements with expanded property rows in the timeline. */
+  expandedTimelineElements: Set<string>;
+  toggleExpandedElement: (id: string) => void;
 
   /** Keyframe data per element id, populated from parsed GSAP animations. */
   keyframeCache: Map<string, KeyframeCacheEntry>;
@@ -98,6 +121,12 @@ interface PlayerState {
   requestedSeekTime: number | null;
   requestSeek: (time: number) => void;
   clearSeekRequest: () => void;
+
+  autoKeyframeEnabled: boolean;
+  setAutoKeyframeEnabled: (enabled: boolean) => void;
+
+  lintFindingsByElement: Map<string, { count: number; messages: string[] }>;
+  setLintFindingsByElement: (map: Map<string, { count: number; messages: string[] }>) => void;
 }
 
 // Lightweight pub-sub for current time during playback.
@@ -128,6 +157,9 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   inPoint: null,
   outPoint: null,
 
+  activeTool: "select",
+  setActiveTool: (tool) => set({ activeTool: tool }),
+
   selectedKeyframes: new Set(),
   toggleSelectedKeyframe: (key) =>
     set((s) => {
@@ -137,6 +169,28 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       return { selectedKeyframes: next };
     }),
   clearSelectedKeyframes: () => set({ selectedKeyframes: new Set() }),
+
+  keyframeClipboard: null,
+  setKeyframeClipboard: (data) => set({ keyframeClipboard: data }),
+
+  selectedElementIds: new Set<string>(),
+  toggleSelectedElementId: (id: string) =>
+    set((s) => {
+      const next = new Set(s.selectedElementIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { selectedElementIds: next };
+    }),
+  clearSelectedElementIds: () => set({ selectedElementIds: new Set() }),
+
+  expandedTimelineElements: new Set<string>(),
+  toggleExpandedElement: (id: string) =>
+    set((s) => {
+      const next = new Set(s.expandedTimelineElements);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { expandedTimelineElements: next };
+    }),
 
   keyframeCache: new Map(),
   setKeyframeCache: (elementId, data) =>
@@ -150,6 +204,12 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   requestedSeekTime: null,
   requestSeek: (time) => set({ requestedSeekTime: time }),
   clearSeekRequest: () => set({ requestedSeekTime: null }),
+
+  autoKeyframeEnabled: true,
+  setAutoKeyframeEnabled: (enabled) => set({ autoKeyframeEnabled: enabled }),
+
+  lintFindingsByElement: new Map(),
+  setLintFindingsByElement: (map) => set({ lintFindingsByElement: map }),
 
   setIsPlaying: (playing) => set({ isPlaying: playing }),
   setPlaybackRate: (rate) => {
@@ -209,7 +269,10 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       selectedElementId: null,
       inPoint: null,
       outPoint: null,
+      activeTool: "select",
       selectedKeyframes: new Set(),
+      selectedElementIds: new Set(),
+      expandedTimelineElements: new Set(),
       keyframeCache: new Map(),
     }),
 }));

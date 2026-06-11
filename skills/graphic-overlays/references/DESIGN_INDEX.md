@@ -16,12 +16,12 @@ self-contained HTML fragment that follows the graphic-overlays card-HTML contrac
 
 ## Layouts — how video and card share the canvas
 
-| key | file | what it does | best for |
-|---|---|---|---|
-| `split` | [layouts/split.html](layouts/split.html) | 50/50 side-by-side (landscape) or top/bottom (portrait) | speaker + data equal weight |
-| `stack` | [layouts/stack.html](layouts/stack.html) | video on top (~52%), card below | talking-head with summary card |
-| `pip` | [layouts/pip.html](layouts/pip.html) | card fills canvas, video rounded PiP in corner | content-heavy moment, speaker secondary |
-| `overlay` | [layouts/overlay.html](layouts/overlay.html) | video full-bleed, glass card floats on bottom | cinematic / dramatic moments |
+| key       | file                                         | what it does                                            | best for                                |
+| --------- | -------------------------------------------- | ------------------------------------------------------- | --------------------------------------- |
+| `split`   | [layouts/split.html](layouts/split.html)     | 50/50 side-by-side (landscape) or top/bottom (portrait) | speaker + data equal weight             |
+| `stack`   | [layouts/stack.html](layouts/stack.html)     | video on top (~52%), card below                         | talking-head with summary card          |
+| `pip`     | [layouts/pip.html](layouts/pip.html)         | card fills canvas, video rounded PiP in corner          | content-heavy moment, speaker secondary |
+| `overlay` | [layouts/overlay.html](layouts/overlay.html) | video full-bleed, glass card floats on bottom           | cinematic / dramatic moments            |
 
 A layout is a **two-part recipe**: pick a `card.zone` value to put in
 `storyboard.json` AND author a GSAP tween for `#video-wrap` to its
@@ -32,18 +32,18 @@ exist in the real schema; the strict v3 schema only has `card.zone`.)
 
 ## Styles — the card's visual language
 
-| key | file | character | accent | suggested font |
-|---|---|---|---|---|
-| `academic` | [styles/academic.html](styles/academic.html) | warm paper · grid · serif · blue highlight | `#2557a7` | serif |
-| `editorial` | [styles/editorial.html](styles/editorial.html) | cream · coral block · big italic quote | `#ff3a2d` | Playfair-like serif |
-| `minimal` | [styles/minimal.html](styles/minimal.html) | pure black/white · huge type · generous space | `#000` | Inter |
-| `spotlight` | [styles/spotlight.html](styles/spotlight.html) | dark purple gradient · glow · dramatic | `#a78bfa` | sans |
-| `geom` | [styles/geom.html](styles/geom.html) | chartreuse + hot pink + black collision | `#d4ff00` | Inter bold |
-| `whiteboard` | [styles/whiteboard.html](styles/whiteboard.html) | paper · Caveat handwriting · sketched borders | `#ff6b35` | Caveat |
-| `audit` | [styles/audit.html](styles/audit.html) | manila paper · justified serif · APPROVED stamp | `#8b1d1d` | serif |
-| `terminal` | [styles/terminal.html](styles/terminal.html) | dark · monospace · ASCII border · prompt cursor | `#4ade80` | mono |
-| `swiss` | [styles/swiss.html](styles/swiss.html) | white · Helvetica · strict double rules · red accent | `#e8190f` | Helvetica/Inter |
-| `xhs` | [styles/xhs.html](styles/xhs.html) | cream + hot pink · chips · #hashtags · ❤️💬 row | `#ff2e63` | sans |
+| key          | file                                             | character                                            | accent    | suggested font      |
+| ------------ | ------------------------------------------------ | ---------------------------------------------------- | --------- | ------------------- |
+| `academic`   | [styles/academic.html](styles/academic.html)     | warm paper · grid · serif · blue highlight           | `#2557a7` | serif               |
+| `editorial`  | [styles/editorial.html](styles/editorial.html)   | cream · coral block · big italic quote               | `#ff3a2d` | Playfair-like serif |
+| `minimal`    | [styles/minimal.html](styles/minimal.html)       | pure black/white · huge type · generous space        | `#000`    | Inter               |
+| `spotlight`  | [styles/spotlight.html](styles/spotlight.html)   | dark purple gradient · glow · dramatic               | `#a78bfa` | sans                |
+| `geom`       | [styles/geom.html](styles/geom.html)             | chartreuse + hot pink + black collision              | `#d4ff00` | Inter bold          |
+| `whiteboard` | [styles/whiteboard.html](styles/whiteboard.html) | paper · Caveat handwriting · sketched borders        | `#ff6b35` | Caveat              |
+| `audit`      | [styles/audit.html](styles/audit.html)           | manila paper · justified serif · APPROVED stamp      | `#8b1d1d` | serif               |
+| `terminal`   | [styles/terminal.html](styles/terminal.html)     | dark · monospace · ASCII border · prompt cursor      | `#4ade80` | mono                |
+| `swiss`      | [styles/swiss.html](styles/swiss.html)           | white · Helvetica · strict double rules · red accent | `#e8190f` | Helvetica/Inter     |
+| `xhs`        | [styles/xhs.html](styles/xhs.html)               | cream + hot pink · chips · #hashtags · ❤️💬 row      | `#ff2e63` | sans                |
 
 Choose by content tone, not by content type — `academic` works for finance
 too if the tone is reflective; `terminal` works for non-tech if the tone is
@@ -51,10 +51,10 @@ too if the tone is reflective; `terminal` works for non-tech if the tone is
 
 ## Video Frames — decoration around the video element
 
-| key | file | character | when to skip |
-|---|---|---|---|
-| `clean` | [frames/clean.html](frames/clean.html) | no decoration; raw video | default; safest |
-| `hairline` | [frames/hairline.html](frames/hairline.html) | double-stroke + four-corner viewfinder ticks | over `overlay` layout (clashes with full-bleed) |
+| key        | file                                         | character                                                    | when to skip                                     |
+| ---------- | -------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------ |
+| `clean`    | [frames/clean.html](frames/clean.html)       | no decoration; raw video                                     | default; safest                                  |
+| `hairline` | [frames/hairline.html](frames/hairline.html) | double-stroke + four-corner viewfinder ticks                 | over `overlay` layout (clashes with full-bleed)  |
 | `polaroid` | [frames/polaroid.html](frames/polaroid.html) | white photo frame + Caveat label + blue washi tape (no tilt) | over `overlay` layout; portrait PiP gets cramped |
 
 A frame is a decorative div that sits **next to** the `#video-wrap` inside
@@ -64,15 +64,15 @@ and the inline `<style>` it needs.
 
 ## Decision guide (loose, not prescriptive)
 
-| video content | suggested combos |
-|---|---|
-| 访谈 / 对话 | `academic` × `stack`, `audit` × `split` |
-| 产品发布 / 公告 | `editorial` × `overlay`, `geom` × `pip` |
-| 数据分析 / 财报 | `audit` × `split`, `swiss` × `stack`, `terminal` × `pip` |
-| 社交剪辑（9:16） | `xhs` × `overlay`, `editorial` × `stack` |
-| 技术教程 | `terminal` × `split`, `whiteboard` × `pip` |
-| 情绪故事 / 旁白 | `spotlight` × `overlay`, `whiteboard` × `overlay` |
-| 极简陈述 | `minimal` × `split`, `swiss` × `overlay` |
+| video content                    | suggested combos                                         |
+| -------------------------------- | -------------------------------------------------------- |
+| interview / dialogue             | `academic` × `stack`, `audit` × `split`                  |
+| product launch / announcement    | `editorial` × `overlay`, `geom` × `pip`                  |
+| data analysis / financial report | `audit` × `split`, `swiss` × `stack`, `terminal` × `pip` |
+| social clip (9:16)               | `xhs` × `overlay`, `editorial` × `stack`                 |
+| technical tutorial               | `terminal` × `split`, `whiteboard` × `pip`               |
+| emotional story / narration      | `spotlight` × `overlay`, `whiteboard` × `overlay`        |
+| minimalist presentation          | `minimal` × `split`, `swiss` × `overlay`                 |
 
 These are starting points only. Look at the transcript, pick the tone, then
 pick the visual.
@@ -84,13 +84,13 @@ preview. When the final composition is **portrait (1080×1920)** — the
 default for social / mobile — scale every visual size up so it reads on a
 phone held close.
 
-| token | landscape | **portrait** | scale |
-|---|---|---|---|
-| hero title (h1/h2) | 64–96px | **88–132px** | ×1.35 |
-| detail / body | 24–30px | **30–40px** | ×1.30 |
-| kicker / chip / meta | 14–18px | **18–22px** | ×1.25 |
-| primary number / stat | 48–60px | **64–88px** | ×1.40 |
-| horizontal padding | 40–64px | **24–36px** | ÷1.5 |
+| token                 | landscape | **portrait** | scale |
+| --------------------- | --------- | ------------ | ----- |
+| hero title (h1/h2)    | 64–96px   | **88–132px** | ×1.35 |
+| detail / body         | 24–30px   | **30–40px**  | ×1.30 |
+| kicker / chip / meta  | 14–18px   | **18–22px**  | ×1.25 |
+| primary number / stat | 48–60px   | **64–88px**  | ×1.40 |
+| horizontal padding    | 40–64px   | **24–36px**  | ÷1.5  |
 
 `portraitPx ≈ round(landscapePx × 1.3)`. Hero headlines can go ×1.4;
 small meta stays at ×1.2. Padding **shrinks** in portrait since the card
@@ -104,11 +104,11 @@ root: `container-type: inline-size` + `font-size: clamp(64px, 8.5cqi, 132px)`.
 Output canvas is independent of source video aspect. Three supported
 output ratios (selected by the user in Step 7.0 of SKILL.md):
 
-| ratio | canvas | `storyboard.layout` | best for |
-|---|---|---|---|
-| `16:9` | 1920×1080 | `"landscape"` | YouTube / TV / desktop playback |
-| `9:16` | 1080×1920 | `"portrait"` | TikTok / Reels / 抖音 / 小红书 |
-| `4:5` | 1080×1350 | `"portrait"` (schema treats 4:5 as portrait since h>w) | Instagram feed / 微信朋友圈 / 兼顾两端 |
+| ratio  | canvas    | `storyboard.layout`                                    | best for                                                   |
+| ------ | --------- | ------------------------------------------------------ | ---------------------------------------------------------- |
+| `16:9` | 1920×1080 | `"landscape"`                                          | YouTube / TV / desktop playback                            |
+| `9:16` | 1080×1920 | `"portrait"`                                           | TikTok / Reels / short-form mobile                         |
+| `4:5`  | 1080×1350 | `"portrait"` (schema treats 4:5 as portrait since h>w) | Instagram feed / WeChat Moments / works for both platforms |
 
 The layout reference files in `layouts/` document **landscape** and
 **portrait** bounds only. For **4:5** derive bounds by proportional
@@ -138,6 +138,7 @@ flip the long axis: `split` becomes top/bottom, `pip` video bubble shrinks
    inline hex when you want this specific style's signature look
 
 If a reference uses a font you don't have, fall back:
+
 - Playfair Display / Noto Serif SC → `ui-serif, "Songti SC", "Times New Roman", serif`
 - Noto Sans SC → `ui-sans-serif, system-ui, sans-serif`
 - JetBrains Mono → `ui-monospace, "SF Mono", Menlo, monospace`

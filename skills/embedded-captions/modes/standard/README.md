@@ -127,23 +127,23 @@ bash scripts/prepare.sh <project> # matte ∥ transcribe ∥ safe-zones (THIS sk
 
 ### Atelier · Design-Forward
 
-| Template            | File                                                   | Font               | Climax  | Entrance -> Exit      | Scene                         |
-| ------------------- | ------------------------------------------------------ | ------------------ | ------- | --------------------- | ----------------------------- |
-| **SWISS**           | [`templates/swiss.md`](templates/swiss.md)             | 'Inter'            | `ORDER` | editwipe -> sweep-off | podcast studio (mic in frame) |
-| **DIDONE**          | [`templates/didone.md`](templates/didone.md)           | 'Bodoni Moda'      | `VOGUE` | rise -> rise-off      | bright beauty set             |
-| **BAUHAUS**         | [`templates/bauhaus.md`](templates/bauhaus.md)         | 'Poppins'          | `FORM`  | block -> fade         | bright home office            |
-| **BRUTALIST**       | [`templates/brutalist.md`](templates/brutalist.md)     | 'JetBrains Mono'   | `RAW`   | editwipe -> sweep-off | dark studio (low-key)         |
-| **TATEGAKI 縦書き** | [`templates/tategaki.md`](templates/tategaki.md)       | 'Shippori Mincho'  | `静寂`  | vert -> fade          | dark studio (low-key)         |
-| **INK**             | [`templates/ink.md`](templates/ink.md)                 | 'Caveat'           | `muse`  | ink -> fade           | outdoor / daylight            |
-| **VARIABLE**        | [`templates/variable.md`](templates/variable.md)       | 'Inter'            | `BOLD`  | weight -> fade        | sci-fi cockpit                |
-| **MID-CENTURY**     | [`templates/mid-century.md`](templates/mid-century.md) | 'Playfair Display' | `ICON`  | rise -> rise-off      | podcast studio (mic in frame) |
+| Template                      | File                                                   | Font               | Climax    | Entrance -> Exit      | Scene                         |
+| ----------------------------- | ------------------------------------------------------ | ------------------ | --------- | --------------------- | ----------------------------- |
+| **SWISS**                     | [`templates/swiss.md`](templates/swiss.md)             | 'Inter'            | `ORDER`   | editwipe -> sweep-off | podcast studio (mic in frame) |
+| **DIDONE**                    | [`templates/didone.md`](templates/didone.md)           | 'Bodoni Moda'      | `VOGUE`   | rise -> rise-off      | bright beauty set             |
+| **BAUHAUS**                   | [`templates/bauhaus.md`](templates/bauhaus.md)         | 'Poppins'          | `FORM`    | block -> fade         | bright home office            |
+| **BRUTALIST**                 | [`templates/brutalist.md`](templates/brutalist.md)     | 'JetBrains Mono'   | `RAW`     | editwipe -> sweep-off | dark studio (low-key)         |
+| **TATEGAKI Vertical Writing** | [`templates/tategaki.md`](templates/tategaki.md)       | 'Shippori Mincho'  | `SILENCE` | vert -> fade          | dark studio (low-key)         |
+| **INK**                       | [`templates/ink.md`](templates/ink.md)                 | 'Caveat'           | `muse`    | ink -> fade           | outdoor / daylight            |
+| **VARIABLE**                  | [`templates/variable.md`](templates/variable.md)       | 'Inter'            | `BOLD`    | weight -> fade        | sci-fi cockpit                |
+| **MID-CENTURY**               | [`templates/mid-century.md`](templates/mid-century.md) | 'Playfair Display' | `ICON`    | rise -> rise-off      | podcast studio (mic in frame) |
 
 ### Impact 💥 Bold
 
-| Template           | File                                                 | Font                | Climax   | Entrance -> Exit | Scene                          |
-| ------------------ | ---------------------------------------------------- | ------------------- | -------- | ---------------- | ------------------------------ |
-| **NUKE 核爆**      | [`templates/nuke.md`](templates/nuke.md)             | 'Archivo Black'     | `BLAST`  | nuke -> fade     | dark studio (low-key)          |
-| **METEOR 天降**    | [`templates/meteor.md`](templates/meteor.md)         | 'Anton'             | `IMPACT` | meteor -> fade   | gritty basement, overhead lamp |
-| **SONIC BOOM**     | [`templates/sonic-boom.md`](templates/sonic-boom.md) | 'Archivo Black'     | `BOOM`   | sonic -> fade    | sci-fi cockpit                 |
-| **SEISMIC 地震**   | [`templates/seismic.md`](templates/seismic.md)       | 'Saira Stencil One' | `QUAKE`  | seismic -> fade  | outdoor / daylight             |
-| **JUDGEMENT 天罚** | [`templates/judgement.md`](templates/judgement.md)   | 'Cinzel'            | `POWER`  | judge -> fade    | dark studio (low-key)          |
+| Template                        | File                                                 | Font                | Climax   | Entrance -> Exit | Scene                          |
+| ------------------------------- | ---------------------------------------------------- | ------------------- | -------- | ---------------- | ------------------------------ |
+| **NUKE Nuclear Blast**          | [`templates/nuke.md`](templates/nuke.md)             | 'Archivo Black'     | `BLAST`  | nuke -> fade     | dark studio (low-key)          |
+| **METEOR Sky Fall**             | [`templates/meteor.md`](templates/meteor.md)         | 'Anton'             | `IMPACT` | meteor -> fade   | gritty basement, overhead lamp |
+| **SONIC BOOM**                  | [`templates/sonic-boom.md`](templates/sonic-boom.md) | 'Archivo Black'     | `BOOM`   | sonic -> fade    | sci-fi cockpit                 |
+| **SEISMIC Earthquake**          | [`templates/seismic.md`](templates/seismic.md)       | 'Saira Stencil One' | `QUAKE`  | seismic -> fade  | outdoor / daylight             |
+| **JUDGEMENT Divine Punishment** | [`templates/judgement.md`](templates/judgement.md)   | 'Cinzel'            | `POWER`  | judge -> fade    | dark studio (low-key)          |

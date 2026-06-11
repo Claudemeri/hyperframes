@@ -6,7 +6,7 @@ metadata:
   tags: caption, talking-head, impact, judge, pop
 ---
 
-# JUDGEMENT 天罚
+# JUDGEMENT Divine Punishment
 
 > Impact 💥 Bold - **light-beam descent + bloom**. flow: fade · climax: descends in a beam of light → weight → shake
 
@@ -14,9 +14,10 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 ## Recipe
 
-| | |
-|---|---|
-bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
+|     |     |
+| --- | --- |
+
+bash scripts/prepare.sh <project> # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 | **Font** | `'Cinzel'` |
 | **Fill** | text `#fff` - active-word accent `#ffe9a8` - climax fill: solid |
 | **Flow reveal** | `pop` (per-word, from `transcribe`) -> active word gets the accent |
@@ -33,8 +34,16 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 ## Style (drop in beside the `_anatomy.md` base CSS)
 
 ```css
-.s-judge{--ff:'Cinzel';--cfill:#fff;--cacc:#ffe9a8}
-.s-judge .climax span{text-shadow:0 0 30px rgba(255,240,180,.7),0 0 72px rgba(255,210,120,.4)}
+.s-judge {
+  --ff: "Cinzel";
+  --cfill: #fff;
+  --cacc: #ffe9a8;
+}
+.s-judge .climax span {
+  text-shadow:
+    0 0 30px rgba(255, 240, 180, 0.7),
+    0 0 72px rgba(255, 210, 120, 0.4);
+}
 ```
 
 ## Motion (names -> `../_motion.md`)
@@ -50,8 +59,9 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
+
 Build the `_anatomy.md` scene with class `stage s-judge bg-dark`, feed the transcript to the flow, set `CLIMAX_IN=judge` / `CLIMAX_OUT=fade` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.
 
 ## Triggers
 
-impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, judgement 天罚, power
+impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, judgement divine punishment, power

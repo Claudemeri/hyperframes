@@ -33,6 +33,7 @@ import {
 } from "./propertyPanelPrimitives";
 import { ColorField } from "./propertyPanelColor";
 import { GradientField, ImageFillField } from "./propertyPanelFill";
+import { BorderRadiusEditor } from "./BorderRadiusEditor";
 
 export function StyleSections({
   projectId,
@@ -41,6 +42,7 @@ export function StyleSections({
   assets,
   onSetStyle,
   onImportAssets,
+  gsapBorderRadius,
 }: {
   projectId: string;
   element: DomEditSelection;
@@ -48,10 +50,19 @@ export function StyleSections({
   assets: string[];
   onSetStyle: (prop: string, value: string) => void | Promise<void>;
   onImportAssets?: (files: FileList) => Promise<string[]>;
+  gsapBorderRadius?: { tl: number; tr: number; br: number; bl: number } | null;
 }) {
   const styleEditingDisabled = !element.capabilities.canEditStyles;
   const isFlex = styles.display === "flex" || styles.display === "inline-flex";
   const radiusValue = parseNumericValue(styles["border-radius"]) ?? 0;
+  const radiusTL =
+    gsapBorderRadius?.tl ?? parseNumericValue(styles["border-top-left-radius"]) ?? radiusValue;
+  const radiusTR =
+    gsapBorderRadius?.tr ?? parseNumericValue(styles["border-top-right-radius"]) ?? radiusValue;
+  const radiusBR =
+    gsapBorderRadius?.br ?? parseNumericValue(styles["border-bottom-right-radius"]) ?? radiusValue;
+  const radiusBL =
+    gsapBorderRadius?.bl ?? parseNumericValue(styles["border-bottom-left-radius"]) ?? radiusValue;
   const opacityValue = Math.round((parseNumericValue(styles.opacity) ?? 1) * 100);
   const borderWidthValue =
     parsePxMetricValue(styles["border-width"] ?? "") ??
@@ -155,15 +166,26 @@ export function StyleSections({
 
       {hasVisualBackground && (
         <Section title="Radius" icon={<Settings size={15} />} defaultCollapsed>
-          <SliderControl
-            value={radiusValue}
-            min={0}
-            max={Math.max(240, Math.ceil(radiusValue))}
-            step={1}
+          <BorderRadiusEditor
+            tl={radiusTL}
+            tr={radiusTR}
+            br={radiusBR}
+            bl={radiusBL}
             disabled={styleEditingDisabled}
-            displayValue={`${formatNumericValue(radiusValue)}px`}
-            formatDisplayValue={(next) => `${formatNumericValue(next)}px`}
-            onCommit={(next) => onSetStyle("border-radius", `${formatNumericValue(next)}px`)}
+            onCommit={(corner, value) => {
+              const px = `${formatNumericValue(value)}px`;
+              if (corner === "all") {
+                onSetStyle("border-radius", px);
+              } else {
+                const prop = {
+                  tl: "border-top-left-radius",
+                  tr: "border-top-right-radius",
+                  br: "border-bottom-right-radius",
+                  bl: "border-bottom-left-radius",
+                }[corner];
+                onSetStyle(prop, px);
+              }
+            }}
           />
         </Section>
       )}
@@ -347,15 +369,7 @@ export function StyleSections({
         </div>
       </Section>
 
-      <Section
-        title="Fill"
-        icon={<Palette size={15} />}
-        accessory={
-          <div className="rounded-full border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-400">
-            {preferredFillMode}
-          </div>
-        }
-      >
+      <Section title="Fill" icon={<Palette size={15} />}>
         <div className="space-y-4">
           <SegmentedControl
             disabled={styleEditingDisabled}

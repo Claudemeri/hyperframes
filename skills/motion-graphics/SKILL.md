@@ -13,7 +13,9 @@ description: >
   (pr-to-video), or captions on existing footage (embedded-captions). When unsure whether it's a
   quick motion-first piece or a longer / narrated treatment, see /hyperframes-read-first.
 metadata:
-  tags: orchestrator, motion-graphics, kinetic-type, data-viz, logo-reveal, lower-thirds, news, tweet, webpage, asset-fusion, short-form, overlay, no-narration
+  {
+    "tags": "orchestrator, motion-graphics, kinetic-type, data-viz, logo-reveal, lower-thirds, news, tweet, webpage, asset-fusion, short-form, overlay, no-narration",
+  }
 ---
 
 # motion-graphics — dispatch entry
@@ -22,15 +24,15 @@ metadata:
 
 A short design-led motion graphic. **Asset-first**: decide the asset strategy and source real material _before_ designing the shot, then design the shot around what you have, then compose by reusing catalog capabilities. All artifacts go to `PROJECT_DIR = videos/<project-name>/` (created in Step 0); all paths below are relative to it.
 
-| Phase    | Execution                                                                     | Primary artifact                                                 | Detailed flow                 |
-| -------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------- |
-| init     | Bash                                                                          | `hyperframes.json`                                               | Step 0                        |
-| plan     | subagent (`general-purpose`) — **decide search?** + classify + asset strategy | `shot-plan.json` (draft: category, `asset_needs` queries, brief) | `agents/director.md` (Part 1) |
-| source ◇ | Bash — media-use resolve (**skip if `asset_needs` is empty**)                 | `assets/` + `assets/index.md`                                    | `phases/source/guide.md`      |
-| design   | subagent (`general-purpose`) — shot design around resolved assets             | `shot-plan.json` (final: block(s) + layout + motion + positions) | `agents/director.md` (Part 2) |
-| build    | subagent (`general-purpose`) — reuse-first composition                        | `compositions/index.html`                                        | `agents/builder.md`           |
-| render   | Bash — `hyperframes render` (MP4, or `--format webm/mov` for overlay)         | `renders/video.mp4`                                              | Step 5                        |
-| verify   | Bash — `lint` / `inspect` -> repair subagent on failure                       | (fixes in place)                                                 | `agents/finalize.md`          |
+| Phase    | Execution                                                             | Primary artifact                                                 | Detailed flow                 |
+| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------- |
+| init     | Bash                                                                  | `hyperframes.json`                                               | Step 0                        |
+| plan     | subagent — **decide search?** + classify + asset strategy             | `shot-plan.json` (draft: category, `asset_needs` queries, brief) | `agents/director.md` (Part 1) |
+| source ◇ | Bash — media-use resolve (**skip if `asset_needs` is empty**)         | `assets/` + `assets/index.md`                                    | `phases/source/guide.md`      |
+| design   | subagent — shot design around resolved assets                         | `shot-plan.json` (final: block(s) + layout + motion + positions) | `agents/director.md` (Part 2) |
+| build    | subagent — reuse-first composition                                    | `compositions/index.html`                                        | `agents/builder.md`           |
+| render   | Bash — `hyperframes render` (MP4, or `--format webm/mov` for overlay) | `renders/video.mp4`                                              | Step 5                        |
+| verify   | Bash — `lint` / `inspect` -> repair subagent on failure               | (fixes in place)                                                 | `agents/finalize.md`          |
 
 `◇ source` runs only when the chosen category declares assets. Pure code/text categories (e.g. `kinetic-type`, most `charts`/`stat`) have `asset_needs: []` and skip straight from plan to design.
 

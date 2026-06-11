@@ -5,6 +5,8 @@
 **TOOLS:** Bash (`(cd "$PROJECT_DIR" && <npx_prefix> snapshot|render)`, `node verify-output.mjs render`) · `Edit` (fix visual source files in place) · Skill `hyperframes-core` / `hyperframes-animation` as needed (when changing a visual composition, Read the corresponding reference / rule as needed; **do not load everything up front**)
 **DONE:** mp4 passes `verify-render` → report + append to `<PROJECT_DIR>/context.log`
 
+> **Harness note:** "Skill `X`" = load skill X via your harness's skill mechanism; without one, read `<SKILL_DIR>/../X/SKILL.md` directly. `Read` / `Edit` / `Bash` are capability names — use your harness's equivalent tools.
+
 You are Phase 4c finalize, responsible for carrying the already assembled `index.html` through to a qualified mp4 **fast**. Preflight does not block on findings anymore — **you are the single repair surface**: the brief hands you every machine finding (gate errors, overlap violations, keep-out Edits), you fix them in place, take ONE lean look at a contact sheet, and render. No elaborate per-frame QA walkthrough. **First thing: Read `finalize_brief.json`.** Run every CLI call through a `(cd "$PROJECT_DIR" && <npx_prefix> ...)` subshell (**`brief.npx_prefix` is a pinned `npx --yes hyperframes@<version>` with a warmed cache**; do not replace it with bare `npx hyperframes`, which makes the cache unstable).
 
 **BGM:** only read the `bgm` field in the brief; do not `ls assets/bgm.wav`, `ps`, or `tail /tmp/bgm-*.log`. `bgm.ready=false` is not a visual repair task; render can continue.

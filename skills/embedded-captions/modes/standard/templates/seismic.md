@@ -6,7 +6,7 @@ metadata:
   tags: caption, talking-head, impact, seismic, pop
 ---
 
-# SEISMIC 地震
+# SEISMIC Earthquake
 
 > Impact 💥 Bold - **fissure line + long rumble**. flow: fade · climax: slam → gold fissure splits frame → sustained shake
 
@@ -14,9 +14,10 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 ## Recipe
 
-| | |
-|---|---|
-bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
+|     |     |
+| --- | --- |
+
+bash scripts/prepare.sh <project> # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 | **Font** | `'Saira Stencil One'` |
 | **Fill** | text `#fff` - active-word accent `#ffb000` - climax fill: solid |
 | **Flow reveal** | `pop` (per-word, from `transcribe`) -> active word gets the accent |
@@ -33,8 +34,16 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 ## Style (drop in beside the `_anatomy.md` base CSS)
 
 ```css
-.s-seismic{--ff:'Saira Stencil One';--cfill:#fff;--cacc:#ffb000}
-.s-seismic .flow{font-family:'Oswald';font-weight:700;text-transform:uppercase}
+.s-seismic {
+  --ff: "Saira Stencil One";
+  --cfill: #fff;
+  --cacc: #ffb000;
+}
+.s-seismic .flow {
+  font-family: "Oswald";
+  font-weight: 700;
+  text-transform: uppercase;
+}
 ```
 
 ## Motion (names -> `../_motion.md`)
@@ -50,8 +59,9 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
+
 Build the `_anatomy.md` scene with class `stage s-seismic bg-outdoor`, feed the transcript to the flow, set `CLIMAX_IN=seismic` / `CLIMAX_OUT=fade` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.
 
 ## Triggers
 
-impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, seismic 地震, quake
+impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, seismic earthquake, quake

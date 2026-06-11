@@ -22,7 +22,7 @@ Run through these mentally before starting:
 
 After writing, run the self-check block (grep + two scoped machine gates, at the end). If any FAIL/MISSING/bug-shape hits, fix before reporting. Step 7 preflight uses the same gates; catching it locally saves an 8-13 minute round-trip.
 
-## Required Resources (parallel Read in the same message before starting)
+## Required Resources (read all up front, in parallel where your harness allows)
 
 1. **Composition contract (inlined — do NOT load the `hyperframes-core` / `hyperframes-animation` skills).** Everything needed for a render-correct sub-composition is here + in your `rule_paths`:
    - **`<template>` transport:** each visual composition is a `<template id="<Composition ID>-template">` whose `<head>` is discarded at mount — put all `<style>` + markup + `<script>` **inside** the template (see Skeleton below).

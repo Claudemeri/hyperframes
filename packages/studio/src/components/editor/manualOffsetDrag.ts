@@ -142,8 +142,18 @@ export function applyManualOffsetDragMatrix(matrix: ManualOffsetDragMatrix, poin
 export function measureManualOffsetDragScreenToOffsetMatrix(
   element: HTMLElement,
   initialOffset: { x: number; y: number },
-  options: { probeSize?: number } = {},
+  options: { probeSize?: number; scaleX?: number; scaleY?: number } = {},
 ): { ok: true; matrix: ManualOffsetDragMatrix } | { ok: false; reason: string } {
+  if (
+    !element.hasAttribute("data-hf-studio-path-offset") &&
+    initialOffset.x === 0 &&
+    initialOffset.y === 0
+  ) {
+    const sx = options.scaleX || 1;
+    const sy = options.scaleY || 1;
+    return { ok: true, matrix: { a: 1 / sx, b: 0, c: 0, d: 1 / sy } };
+  }
+
   const probeSize = options.probeSize ?? DEFAULT_OFFSET_PROBE_PX;
   if (!Number.isFinite(probeSize) || probeSize <= 0) {
     return { ok: false, reason: "Invalid movement probe size." };
@@ -232,9 +242,43 @@ export function createManualOffsetDragMember(input: {
   rect: ManualOffsetDragRect;
 }): ManualOffsetDragMemberResult {
   const initialOffset = readStudioPathOffset(input.element);
+  input.element.setAttribute("data-hf-drag-initial-offset-x", String(initialOffset.x));
+  input.element.setAttribute("data-hf-drag-initial-offset-y", String(initialOffset.y));
+
+  const win = input.element.ownerDocument.defaultView as
+    | (Window & {
+        gsap?: { getProperty?: (el: Element, prop: string) => number };
+        __timelines?: Record<string, { pause?: () => void; paused?: () => boolean }>;
+      })
+    | null;
+  const gsapX = win?.gsap?.getProperty?.(input.element, "x") || 0;
+  const gsapY = win?.gsap?.getProperty?.(input.element, "y") || 0;
+  input.element.setAttribute("data-hf-drag-gsap-base-x", String(gsapX));
+  input.element.setAttribute("data-hf-drag-gsap-base-y", String(gsapY));
+
+  if (win?.__timelines) {
+    const paused: string[] = [];
+    for (const [id, tl] of Object.entries(win.__timelines)) {
+      try {
+        if (tl?.pause && !tl.paused?.()) {
+          tl.pause();
+          paused.push(id);
+        }
+      } catch {
+        /* cross-origin guard */
+      }
+    }
+    if (paused.length > 0) {
+      input.element.setAttribute("data-hf-drag-paused-timelines", paused.join(","));
+    }
+  }
+
   const initialPathOffset = captureStudioPathOffset(input.element);
   const gestureToken = beginStudioManualEditGesture(input.element);
-  const measured = measureManualOffsetDragScreenToOffsetMatrix(input.element, initialOffset);
+  const measured = measureManualOffsetDragScreenToOffsetMatrix(input.element, initialOffset, {
+    scaleX: input.rect.editScaleX,
+    scaleY: input.rect.editScaleY,
+  });
   if (!measured.ok) {
     // Fallback: when GSAP transforms interfere with probe measurement, use
     // the preview scale as an approximation. The commit path reads the actual
@@ -313,11 +357,32 @@ function restoreManualOffsetDragMember(member: ManualOffsetDragMember): void {
 export function restoreManualOffsetDragMembers(members: ManualOffsetDragMember[]): void {
   for (const member of members) {
     restoreManualOffsetDragMember(member);
+    resumeGsapTimelines(member.element);
   }
 }
 
 export function endManualOffsetDragMembers(members: ManualOffsetDragMember[]): void {
   for (const member of members) {
     endStudioManualEditGesture(member.element, member.gestureToken);
+    member.element.removeAttribute("data-hf-drag-initial-offset-x");
+    member.element.removeAttribute("data-hf-drag-initial-offset-y");
+    member.element.removeAttribute("data-hf-drag-gsap-base-x");
+    member.element.removeAttribute("data-hf-drag-gsap-base-y");
+    resumeGsapTimelines(member.element);
   }
+}
+
+export function resumeGsapTimelines(element: HTMLElement): void {
+  const ids = element.getAttribute("data-hf-drag-paused-timelines");
+  element.removeAttribute("data-hf-drag-paused-timelines");
+  if (!ids) return;
+  const win = element.ownerDocument.defaultView as
+    | (Window & {
+        __timelines?: Record<string, { pause?: () => void }>;
+        __player?: { seek?: (t: number) => void; getTime?: () => number };
+      })
+    | null;
+  if (!win) return;
+  const t = win.__player?.getTime?.() ?? 0;
+  win.__player?.seek?.(t);
 }

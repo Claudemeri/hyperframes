@@ -1,6 +1,6 @@
 {
   "name": "@hyperframes/core",
-  "version": "0.6.84",
+  "version": "0.6.91",
   "description": "",
   "repository": {
     "type": "git",
@@ -49,6 +49,10 @@
     "./studio-api/studio-motion-render-script": {
       "import": "./src/studio-api/helpers/studioMotionRenderScript.ts",
       "types": "./src/studio-api/helpers/studioMotionRenderScript.ts"
+    },
+    "./studio-api/draft-markers": {
+      "import": "./src/studio-api/helpers/draftMarkers.ts",
+      "types": "./src/studio-api/helpers/draftMarkers.ts"
     },
     "./text": {
       "import": "./src/text/index.ts",
@@ -121,6 +125,10 @@
         "import": "./dist/studio-api/helpers/studioMotionRenderScript.js",
         "types": "./dist/studio-api/helpers/studioMotionRenderScript.d.ts"
       },
+      "./studio-api/draft-markers": {
+        "import": "./dist/studio-api/helpers/draftMarkers.js",
+        "types": "./dist/studio-api/helpers/draftMarkers.d.ts"
+      },
       "./text": {
         "import": "./dist/text/index.js",
         "types": "./dist/text/index.d.ts"
@@ -185,6 +193,7 @@
     "@babel/parser": "^7.27.0",
     "@chenglou/pretext": "^0.0.5",
     "postcss": "^8.5.8",
+    "postcss-selector-parser": "^7.1.2",
     "recast": "^0.23.11"
   },
   "devDependencies": {

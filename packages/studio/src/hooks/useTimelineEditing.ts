@@ -1,8 +1,7 @@
 import { useCallback, useRef } from "react";
 import type { TimelineElement } from "../player";
 import { usePlayerStore } from "../player";
-import { applyPatchByTarget, readAttributeByTarget } from "../utils/sourcePatcher";
-import { formatTimelineAttributeNumber } from "../player/components/timelineEditing";
+import { useRazorSplit } from "./useRazorSplit";
 import {
   buildTimelineAssetId,
   buildTimelineAssetInsertHtml,
@@ -19,10 +18,20 @@ import {
   resolveDroppedAssetDuration,
 } from "../utils/studioHelpers";
 import type { EditHistoryKind } from "../utils/editHistory";
+import {
+  buildPatchTarget,
+  patchIframeDomTiming,
+  resolveResizePlaybackStart,
+  persistTimelineEdit,
+  readFileContent,
+  applyPatchByTarget,
+  formatTimelineAttributeNumber,
+} from "./timelineEditingHelpers";
+import type { PersistTimelineEditInput } from "./timelineEditingHelpers";
 
 // ── Types ──
 
-interface RecordEditInput {
+export interface RecordEditInput {
   label: string;
   kind: EditHistoryKind;
   coalesceKey?: string;
@@ -41,123 +50,7 @@ interface UseTimelineEditingOptions {
   previewIframeRef: React.RefObject<HTMLIFrameElement | null>;
   pendingTimelineEditPathRef: React.MutableRefObject<Set<string>>;
   uploadProjectFiles: (files: Iterable<File>, dir?: string) => Promise<string[]>;
-}
-
-// ── Helpers ──
-
-function buildPatchTarget(element: { domId?: string; selector?: string; selectorIndex?: number }) {
-  if (element.domId) {
-    return { id: element.domId, selector: element.selector, selectorIndex: element.selectorIndex };
-  }
-  if (element.selector) {
-    return { selector: element.selector, selectorIndex: element.selectorIndex };
-  }
-  return null;
-}
-
-// The runtime re-reads data-start/data-duration from the DOM on each sync tick
-// (packages/core/src/runtime/init.ts:1324-1368), so attribute mutations here are
-// picked up automatically on the next frame without a rebind call.
-function patchIframeDomTiming(
-  iframe: HTMLIFrameElement | null,
-  element: TimelineElement,
-  attrs: Array<[string, string]>,
-): void {
-  try {
-    const doc = iframe?.contentDocument;
-    if (!doc) return;
-    const el = element.domId
-      ? doc.getElementById(element.domId)
-      : element.selector
-        ? (doc.querySelectorAll(element.selector)[element.selectorIndex ?? 0] ?? null)
-        : null;
-    if (!el) return;
-    for (const [name, value] of attrs) el.setAttribute(name, value);
-  } catch {
-    // Cross-origin or mid-navigation — file save is enqueued; iframe patch is best-effort.
-  }
-}
-
-function resolveResizePlaybackStart(
-  original: string,
-  target: PatchTarget,
-  element: TimelineElement,
-  updates: Pick<TimelineElement, "start" | "playbackStart">,
-): { attrName: string; value: number } | null {
-  if (updates.playbackStart != null) {
-    const attrName =
-      element.playbackStartAttr === "playback-start" ? "playback-start" : "media-start";
-    return { attrName, value: updates.playbackStart };
-  }
-  const trimDelta = updates.start - element.start;
-  if (trimDelta === 0) return null;
-  const raw =
-    readAttributeByTarget(original, target, "playback-start") ??
-    readAttributeByTarget(original, target, "media-start");
-  const current = raw != null ? parseFloat(raw) : undefined;
-  if (current == null || !Number.isFinite(current)) return null;
-  const attrName =
-    element.playbackStartAttr === "playback-start" ? "playback-start" : "media-start";
-  return {
-    attrName,
-    value: Math.max(0, current + trimDelta * Math.max(element.playbackRate ?? 1, 0.1)),
-  };
-}
-
-type PatchTarget = NonNullable<ReturnType<typeof buildPatchTarget>>;
-
-interface PersistTimelineEditInput {
-  projectId: string;
-  element: TimelineElement;
-  activeCompPath: string | null;
-  label: string;
-  buildPatches: (original: string, target: PatchTarget) => string;
-  writeProjectFile: (path: string, content: string) => Promise<void>;
-  recordEdit: (input: RecordEditInput) => Promise<void>;
-  domEditSaveTimestampRef: React.MutableRefObject<number>;
-  pendingTimelineEditPathRef: React.MutableRefObject<Set<string>>;
-}
-
-async function persistTimelineEdit(input: PersistTimelineEditInput): Promise<void> {
-  const targetPath = input.element.sourceFile || input.activeCompPath || "index.html";
-  const originalContent = await readFileContent(input.projectId, targetPath);
-
-  const patchTarget = buildPatchTarget(input.element);
-  if (!patchTarget) {
-    throw new Error(`Timeline element ${input.element.id} is missing a patchable target`);
-  }
-
-  const patchedContent = input.buildPatches(originalContent, patchTarget);
-  if (patchedContent === originalContent) {
-    throw new Error(`Unable to patch timeline element ${input.element.id} in ${targetPath}`);
-  }
-
-  input.pendingTimelineEditPathRef.current.add(targetPath);
-  input.domEditSaveTimestampRef.current = Date.now();
-  await saveProjectFilesWithHistory({
-    projectId: input.projectId,
-    label: input.label,
-    kind: "timeline",
-    files: { [targetPath]: patchedContent },
-    readFile: async () => originalContent,
-    writeFile: input.writeProjectFile,
-    recordEdit: input.recordEdit,
-  });
-  input.domEditSaveTimestampRef.current = Date.now();
-}
-
-async function readFileContent(projectId: string, targetPath: string): Promise<string> {
-  const response = await fetch(
-    `/api/projects/${projectId}/files/${encodeURIComponent(targetPath)}`,
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to read ${targetPath}`);
-  }
-  const data = (await response.json()) as { content?: string };
-  if (typeof data.content !== "string") {
-    throw new Error(`Missing file contents for ${targetPath}`);
-  }
-  return data.content;
+  isRecordingRef?: React.RefObject<boolean>;
 }
 
 // ── Hook ──
@@ -174,6 +67,7 @@ export function useTimelineEditing({
   previewIframeRef,
   pendingTimelineEditPathRef,
   uploadProjectFiles,
+  isRecordingRef,
 }: UseTimelineEditingOptions) {
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
@@ -187,6 +81,10 @@ export function useTimelineEditing({
       label: string,
       buildPatches: PersistTimelineEditInput["buildPatches"],
     ): Promise<void> => {
+      if (isRecordingRef?.current) {
+        showToast("Cannot edit timeline while recording", "error");
+        return Promise.resolve();
+      }
       const pid = projectIdRef.current;
       if (!pid) return Promise.resolve();
       const queued = editQueueRef.current.then(() =>
@@ -213,6 +111,8 @@ export function useTimelineEditing({
       writeProjectFile,
       domEditSaveTimestampRef,
       pendingTimelineEditPathRef,
+      showToast,
+      isRecordingRef,
     ],
   );
 
@@ -274,6 +174,10 @@ export function useTimelineEditing({
 
   const handleTimelineElementDelete = useCallback(
     async (element: TimelineElement) => {
+      if (isRecordingRef?.current) {
+        showToast("Cannot edit timeline while recording", "error");
+        return;
+      }
       const pid = projectIdRef.current;
       if (!pid) throw new Error("No active project");
       const label = getTimelineElementLabel(element);
@@ -338,6 +242,7 @@ export function useTimelineEditing({
       writeProjectFile,
       domEditSaveTimestampRef,
       reloadPreview,
+      isRecordingRef,
     ],
   );
 
@@ -347,6 +252,10 @@ export function useTimelineEditing({
       placement: Pick<TimelineElement, "start" | "track">,
       durationOverride?: number,
     ) => {
+      if (isRecordingRef?.current) {
+        showToast("Cannot edit timeline while recording", "error");
+        return;
+      }
       const pid = projectIdRef.current;
       if (!pid) throw new Error("No active project");
 
@@ -415,11 +324,16 @@ export function useTimelineEditing({
       writeProjectFile,
       domEditSaveTimestampRef,
       reloadPreview,
+      isRecordingRef,
     ],
   );
 
   const handleTimelineFileDrop = useCallback(
     async (files: File[], placement?: Pick<TimelineElement, "start" | "track">) => {
+      if (isRecordingRef?.current) {
+        showToast("Cannot edit timeline while recording", "error");
+        return;
+      }
       const pid = projectIdRef.current;
       if (!pid) return;
       const uploaded = await uploadProjectFiles(files);
@@ -453,7 +367,14 @@ export function useTimelineEditing({
         );
       }
     },
-    [activeCompPath, handleTimelineAssetDrop, timelineElements, uploadProjectFiles],
+    [
+      activeCompPath,
+      handleTimelineAssetDrop,
+      timelineElements,
+      uploadProjectFiles,
+      isRecordingRef,
+      showToast,
+    ],
   );
 
   const handleBlockedTimelineEdit = useCallback(
@@ -466,103 +387,24 @@ export function useTimelineEditing({
     [showToast],
   );
 
-  const handleTimelineElementSplit = useCallback(
-    async (element: TimelineElement, splitTime: number) => {
-      const pid = projectIdRef.current;
-      if (!pid) return;
-
-      const splittableTags = new Set(["video", "audio", "img"]);
-      if (
-        element.timelineLocked ||
-        element.timingSource === "implicit" ||
-        element.compositionSrc ||
-        !splittableTags.has(element.tag) ||
-        !element.duration ||
-        !Number.isFinite(element.duration)
-      ) {
-        return;
-      }
-
-      if (splitTime <= element.start || splitTime >= element.start + element.duration) {
-        showToast("Playhead must be inside the clip to split.", "error");
-        return;
-      }
-
-      const patchTarget = buildPatchTarget(element);
-      if (!patchTarget) {
-        showToast("Clip is missing a patchable target.", "error");
-        return;
-      }
-
-      const targetPath = element.sourceFile || activeCompPath || "index.html";
-      try {
-        const originalContent = await readFileContent(pid, targetPath);
-        const existingIds = collectHtmlIds(originalContent);
-        const baseId = element.domId || "clip";
-        let newId = `${baseId}-split`;
-        let suffix = 2;
-        while (existingIds.includes(newId)) {
-          newId = `${baseId}-split-${suffix++}`;
-        }
-
-        const response = await fetch(
-          `/api/projects/${pid}/file-mutations/split-element/${encodeURIComponent(targetPath)}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ target: patchTarget, splitTime, newId }),
-          },
-        );
-        if (!response.ok) {
-          throw new Error("Split request failed");
-        }
-
-        const data = (await response.json()) as {
-          ok?: boolean;
-          changed?: boolean;
-          content?: string;
-        };
-        if (!data.ok || !data.changed) {
-          showToast("Failed to split clip — playhead may be outside the clip.", "error");
-          return;
-        }
-
-        const patchedContent = typeof data.content === "string" ? data.content : originalContent;
-
-        domEditSaveTimestampRef.current = Date.now();
-        await saveProjectFilesWithHistory({
-          projectId: pid,
-          label: "Split timeline clip",
-          kind: "timeline",
-          files: { [targetPath]: patchedContent },
-          readFile: async () => originalContent,
-          writeFile: writeProjectFile,
-          recordEdit,
-        });
-
-        reloadPreview();
-        const label = getTimelineElementLabel(element);
-        showToast(`Split ${label} at ${splitTime.toFixed(2)}s`, "info");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to split timeline clip";
-        showToast(message, "error");
-      }
-    },
-    [
-      activeCompPath,
-      recordEdit,
-      showToast,
-      writeProjectFile,
-      domEditSaveTimestampRef,
-      reloadPreview,
-    ],
-  );
+  const { handleRazorSplit, handleRazorSplitAll } = useRazorSplit({
+    projectId,
+    activeCompPath,
+    showToast,
+    writeProjectFile,
+    recordEdit,
+    domEditSaveTimestampRef,
+    reloadPreview,
+    isRecordingRef,
+  });
 
   return {
     handleTimelineElementMove,
     handleTimelineElementResize,
     handleTimelineElementDelete,
-    handleTimelineElementSplit,
+    handleTimelineElementSplit: handleRazorSplit,
+    handleRazorSplit,
+    handleRazorSplitAll,
     handleTimelineAssetDrop,
     handleTimelineFileDrop,
     handleBlockedTimelineEdit,

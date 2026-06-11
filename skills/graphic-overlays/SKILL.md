@@ -1,6 +1,6 @@
 ---
 name: graphic-overlays
-description: Package an existing talking-head / interview / podcast video by layering timed, designed GRAPHIC OVERLAY cards onto the playing video — titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture — synced to the transcript. The source video plays in full; the agent designs and writes each card's HTML in conversation, then renders to MP4 via hyperframes. Use when the user asks for graphic overlays, on-screen graphics / lower-thirds / data callouts / kinetic titles on a video, "package / 包装 my video", "add overlay cards / 图文卡片", or AI-composed graphic packaging of an existing video. NOT for plain subtitles (→ embedded-captions) or building a video from scratch (→ the creation workflows); when unsure overlays-vs-captions, see /hyperframes-read-first.
+description: Package an existing talking-head / interview / podcast video by layering timed, designed GRAPHIC OVERLAY cards onto the playing video — titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture — synced to the transcript. The source video plays in full; the agent designs and writes each card's HTML in conversation, then renders to MP4 via hyperframes. Use when the user asks for graphic overlays, on-screen graphics / lower-thirds / data callouts / kinetic titles on a video, "package / dress up my video", "add overlay cards / graphic cards", or AI-composed graphic packaging of an existing video. NOT for plain subtitles (→ embedded-captions) or building a video from scratch (→ the creation workflows); when unsure overlays-vs-captions, see /hyperframes-read-first.
 ---
 
 # Graphic Overlays
@@ -152,8 +152,8 @@ the composition you author in Step 9:
       "zone": "fullscreen",
       "contentHints": {
         "kicker": "AN HONEST QUESTION",
-        "title": "晚上 11 点的灵魂提问",
-        "detail": "客户六十秒语音：「人民币会升值，我的美金保单是不是亏惨了？」"
+        "title": "The soul-searching question at 11 PM",
+        "detail": "Client's 60-second voice message: 'If the RMB appreciates, does that mean my USD policy is a terrible loss?'"
       }
     }
   ]
@@ -242,7 +242,7 @@ sub-compositions** (one .html per chapter, mounted with
 `data-composition-src`) so the GSAP timeline per file stays manageable
 — see the `timeline_track_too_dense` HyperFrames lint warning.
 
-`content` can be a plain string ("标题：年化 5.69%\n说明：...") or any JSON
+`content` can be a plain string ("Title: annualized 5.69%\nNotes: ...") or any JSON
 shape that captures the data. The agent decides the shape per card.
 
 **Optional outro.** This skill ships **no fixed brand outro**. If the user wants a closing card, design a neutral one yourself (wordmark + one-line tagline, ~1.5-2s, fade in -> short hold -> fade out), append it to `cards[]`, and extend `composition.durationSeconds` to its `endSec`. Otherwise end on the last content card.
@@ -264,11 +264,11 @@ question, **precompute two things**:
    - `sourceAspect ≤ 0.7` (≤ ~9:13 tall) → recommend **`9:16`**
    - `0.7 < sourceAspect < 1.5` (near-square) → recommend **`4:5`**
 
-   Mark the recommended option's label with " (推荐 · 匹配源视频 X:Y)"
+   Mark the recommended option's label with " (recommended · matches source video X:Y)"
    so the user sees why it's recommended.
 
 2. **`autoCount`** from Step 6 (`max(5, round(videoSec / (basePace ×
-densityMultiplier)))`) so the "自动" option's label can show the
+densityMultiplier)))`) so the "auto" option's label can show the
    concrete number.
 
 **Environment compatibility — pick the best available question channel.**
@@ -293,10 +293,10 @@ Rules that apply to every channel:
   the parameters that materially affect the final output** (ratio,
   layout, style, cardCount).
 - If the user has already pre-approved defaults ("just use defaults",
-  "无需询问", "auto-pick everything") or asked you not to ask — **skip
+  "no need to ask", "auto-pick everything") or asked you not to ask — **skip
   the question entirely** and use: `recommendedRatio`, `layout="stack"`
   (safest cross-ratio default), `style` chosen from transcript tone in
-  the most neutral group (editorial/数据), `autoCount`. Tell the user
+  the most neutral group (editorial/data), `autoCount`. Tell the user
   what you picked in one sentence and continue.
 
 **Channel A — native `AskUserQuestion`:**
@@ -309,100 +309,98 @@ Rules that apply to every channel:
 AskUserQuestion({
   questions: [
     {
-      question: "输出视频比例 (画幅)：",
-      header: "画幅",
+      question: "Output video aspect ratio (canvas):",
+      header: "Aspect ratio",
       multiSelect: false,
       // Reorder so the recommended option appears FIRST (per AskUserQuestion convention).
-      // Append " (推荐 · 匹配源视频 W×H)" to the recommended option's label.
+      // Append " (recommended · matches source video W×H)" to the recommended option's label.
       options: [
-        { label: "16:9 (1920×1080) 横屏", description: "TV / YouTube / 电脑播放。源视频已经是横屏时最自然，画幅最宽。" },
-        { label: "9:16 (1080×1920) 竖屏", description: "抖音 / 小红书 / TikTok / Reels。源视频竖屏时最自然；移动端原生体验。" },
-        { label: "4:5 (1080×1350) 方屏偏竖", description: "Instagram feed / 微信朋友圈。近方形源视频或想兼顾两种平台时最稳。" }
+        { label: "16:9 (1920×1080) landscape", description: "TV / YouTube / desktop playback. Most natural when the source video is already landscape; widest canvas." },
+        { label: "9:16 (1080×1920) portrait", description: "TikTok / Reels / short-form mobile. Most natural for portrait source; native mobile experience." },
+        { label: "4:5 (1080×1350) near-portrait", description: "Instagram feed / WeChat Moments. Best when source is near-square or you want to cover both platforms." }
       ]
     },
     {
-      question: "选择整体布局：视频和卡片在画面里如何共存？",
-      header: "布局",
+      question: "Choose the overall layout: how should the video and cards coexist on the canvas?",
+      header: "Layout",
       multiSelect: false,
       options: [
-        { label: "左右分屏 (split)",     description: "video 和 card 各占画面一半。访谈 / 数据并列时最稳，画面分隔清晰。" },
-        { label: "上下分屏 (stack)",     description: "video 在上方 (~52%)，card 在下方。说话人头像 + 总结句的经典组合，竖屏也好用。" },
-        { label: "画中画 (pip)",         description: "card 满屏，video 缩成圆角小窗在右上角。内容为主、speaker 为辅时用。" },
-        { label: "全屏浮层 (overlay)",   description: "video 全屏播放，card 作为玻璃浮层落在画面上。情绪 / 电影感强烈。" }
+        { label: "side-by-side (split)",  description: "Video and card each take half the canvas. Most stable for interview / data side-by-side; clear visual separation." },
+        { label: "top-bottom (stack)",    description: "Video on top (~52%), card below. Classic combo of speaker face + summary card; works well in portrait too." },
+        { label: "picture-in-picture (pip)", description: "Card fills the canvas, video shrinks to a rounded corner window. Use when content is primary and speaker is secondary." },
+        { label: "full-screen overlay (overlay)", description: "Video plays full-bleed, card floats as a glass layer on top. Strong cinematic / emotional feel." }
       ]
     },
     {
-      question: "选择卡片视觉风格 (style)：",
-      header: "风格大类",
+      question: "Choose the card visual style (style):",
+      header: "Style group",
       multiSelect: false,
       // NOTE: these 3 groups intentionally match the frame auto-pick matrix
       // rows below, so picking a group resolves both `style` group AND the
       // frame matrix column in one step. Memberships are mutually exclusive.
       options: [
-        { label: "温暖纸感 (warm-paper)", description: "academic 学术笔记 · editorial 大字编辑 · whiteboard 手写白板 · xhs 小红书。适合访谈反思、产品发布、生活方式、情绪故事。" },
-        { label: "冷峻临床 (clinical)",   description: "audit 审计杂志 · swiss 瑞士网格 · terminal CLI · minimal 现代极简。适合财报分析、调查报告、技术教程、严肃陈述。" },
-        { label: "实验前卫 (experimental)", description: "geom 撞色几何 · spotlight 暗色聚光。适合短视频高光、产品发布、强烈情绪、电影质感。" }
+        { label: "warm paper (warm-paper)", description: "academic notebook · editorial big-type · whiteboard hand-drawn · xhs social. Best for interview reflections, product launches, lifestyle, emotional stories." },
+        { label: "clinical / cold (clinical)",   description: "audit magazine · swiss grid · terminal CLI · minimal modern. Best for financial analysis, investigative reports, technical tutorials, serious presentations." },
+        { label: "experimental / avant-garde (experimental)", description: "geom color-clash geometry · spotlight dark-background. Best for short-form highlights, product launches, strong emotion, cinematic feel." }
       ]
     },
     {
-      question: "卡片数量 (takeaway 节奏)：要切多少张？",
-      header: "卡片数量",
+      question: "Card count (takeaway pacing): how many cards to cut?",
+      header: "Card count",
       multiSelect: false,
       options: [
-        { label: "自动 (推荐) · 约 N 张", description: "按视频时长和信息密度自动推断 (见 Step 6 规则)。本次推断约 N 张。带 N 进 label —— N 是你刚算出的 autoCount。" },
-        { label: "少量 · 约 round(N × 0.6) 张", description: "切得稀疏一点，每张卡停留更久，适合 reflective / 慢节奏。" },
-        { label: "更多 · 约 round(N × 1.5) 张", description: "切得更紧凑，节奏更快，适合 staccato / 数据密集 / 短视频高光。" }
+        { label: "Auto (recommended) · approx N cards", description: "Inferred automatically from video duration and information density (see Step 6 rules). This run estimates approx N cards. Substitute the real N (your autoCount) into the label." },
+        { label: "Fewer · approx round(N × 0.6) cards", description: "Sparser cuts, each card holds longer — suits reflective / slow-paced content." },
+        { label: "More · approx round(N × 1.5) cards", description: "Tighter cuts, faster rhythm — suits staccato / data-dense / short-form highlight content." }
       ]
     }
   ]
 })
 ```
 
-**关于"Other"** — `AskUserQuestion` 会自动给"卡片数量"题加 "Other" 选项，
-用户可以直接输入数字（如 "8"、"20"）作为 cardCount 目标值。把输入解析为整数：
-若解析成功 → 直接用该值（最少 5 张兜底）；解析失败 → 退回 "自动"。
+**About "Other"** — `AskUserQuestion` automatically adds an "Other" option to the card count question. The user can type a number directly (e.g. "8", "20") as the cardCount target. Parse the input as an integer: if parsing succeeds → use that value (minimum 5 as a floor); if parsing fails → fall back to "auto".
 
 **Channel B — plain-text fallback** (Codex CLI, runtimes without a
 native question tool). Post this as one normal message, then wait for
 the reply. Bullet-style 1/2/3/4 keeps the reply parseable:
 
 ```
-我需要先和你确认四个视觉决策再开始切卡片：
+I need to confirm four visual decisions with you before I start cutting cards:
 
-1) 输出比例 (画幅)：
-   A. 16:9 横屏 (1920×1080) — TV / YouTube / 电脑播放
-   B. 9:16 竖屏 (1080×1920) — 抖音 / 小红书 / TikTok
-   C. 4:5 方屏偏竖 (1080×1350) — Instagram feed / 兼顾两端
-   ▸ 我的推荐:  <recommendedRatio>  (匹配源视频 W×H = <sourceW>×<sourceH>)
+1) Output aspect ratio (canvas):
+   A. 16:9 landscape (1920×1080) — TV / YouTube / desktop playback
+   B. 9:16 portrait (1080×1920) — TikTok / Reels / short-form mobile
+   C. 4:5 near-portrait (1080×1350) — Instagram feed / works for both platforms
+   ▸ My recommendation:  <recommendedRatio>  (matches source video W×H = <sourceW>×<sourceH>)
 
-2) 整体布局 (video & card 怎么共存)：
-   A. split   左右分屏 (50/50)
-   B. stack   上下分屏 (video 顶, card 底)
-   C. pip     画中画 (card 满屏, video 圆角小窗)
-   D. overlay 全屏浮层 (video 全屏, card 玻璃浮层)
+2) Overall layout (how video & card coexist):
+   A. split   side-by-side (50/50)
+   B. stack   top-bottom (video top, card bottom)
+   C. pip     picture-in-picture (card full canvas, video rounded corner window)
+   D. overlay full-screen glass overlay (video full-bleed, card glass layer)
 
-3) 卡片风格大类 (与 frame 自动矩阵同构,3 选 1)：
-   A. 温暖纸感 warm-paper      (academic / editorial / whiteboard / xhs)
-   B. 冷峻临床 clinical        (audit / swiss / terminal / minimal)
-   C. 实验前卫 experimental    (geom / spotlight)
+3) Card style group (maps to frame auto-pick matrix, pick 1 of 3):
+   A. warm paper (warm-paper)      (academic / editorial / whiteboard / xhs)
+   B. clinical / cold (clinical)   (audit / swiss / terminal / minimal)
+   C. experimental (experimental)  (geom / spotlight)
 
-4) 卡片数量 (takeaway 节奏)：
-   A. 自动 (推荐) — 约 <autoCount> 张
-   B. 少量 — 约 round(<autoCount> × 0.6) 张
-   C. 更多 — 约 round(<autoCount> × 1.5) 张
-   D. 直接给我一个数字 (如 "8"、"20")
+4) Card count (takeaway pacing):
+   A. Auto (recommended) — approx <autoCount> cards
+   B. Fewer — approx round(<autoCount> × 0.6) cards
+   C. More — approx round(<autoCount> × 1.5) cards
+   D. Give me a specific number (e.g. "8", "20")
 
-回复格式: "1A 2C 3B 4A" 或自然语言均可。
-若你想全部用推荐默认值，回复 "默认" / "auto" / "都用推荐" 即可。
+Reply format: "1A 2C 3B 4A" or natural language is fine.
+If you want all recommended defaults, reply "default" / "auto" / "use all recommendations".
 ```
 
 Parsing the plain-text reply:
 
 - Accept loose formats: `"1A 2C 3B 4A"`, `"A C B A"`, `"16:9 / pip /
-数据 / 自动"`, full sentences, or `默认`.
+data / auto"`, full sentences, or `default`.
 - If any answer is ambiguous → re-ask only the ambiguous ones (still
   inside the 2–5 cap).
-- If the user says "默认 / auto / 都用推荐" → skip without re-asking.
+- If the user says "default / auto / use all recommendations" → skip without re-asking.
 
 After the user answers (any channel):
 
@@ -434,9 +432,9 @@ After the user answers (any channel):
 
    | user choice             | final cardCount                           |
    | ----------------------- | ----------------------------------------- |
-   | 自动 (推荐)             | the `autoCount` you already computed      |
-   | 少量                    | `max(5, round(autoCount × 0.6))`          |
-   | 更多                    | `round(autoCount × 1.5)` (no upper clamp) |
+   | Auto (recommended)      | the `autoCount` you already computed      |
+   | Fewer                   | `max(5, round(autoCount × 0.6))`          |
+   | More                    | `round(autoCount × 1.5)` (no upper clamp) |
    | Other = "<n>" (integer) | `max(5, parseInt(n))`                     |
    | Other = anything else   | fall back to `autoCount`                  |
 
@@ -524,8 +522,8 @@ Style  ×  Layout  ×  VideoFrame
 | **frame**  | `clean` `hairline` `polaroid`                                                                     | the decorative chrome around the video element                           |
 
 Read `<SKILL_DIR>/references/DESIGN_INDEX.md`
-for the full matrix and a loose decision guide (访谈 / 产品发布 / 数据分析 /
-社交剪辑 / 技术教程 / 情绪故事 …). When you decide to use a specific
+for the full matrix and a loose decision guide (interview / product launch / data analysis /
+social clip / technical tutorial / emotional story …). When you decide to use a specific
 style / layout / frame, Read the corresponding file:
 
 - `references/styles/<key>.html` — self-contained card fragment with that
@@ -678,8 +676,8 @@ contains a single rooted HTML fragment that follows this contract:
       data-anim-stagger="0.04"
       data-anim-pattern="pop"
     >
-      <span class="char">字</span>
-      <span class="char">幕</span>
+      <span class="char">S</span>
+      <span class="char">u</span>
     </h1>
     <div
       id="card-01-line"

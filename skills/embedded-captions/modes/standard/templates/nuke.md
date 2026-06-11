@@ -6,7 +6,7 @@ metadata:
   tags: caption, talking-head, impact, nuke, pop
 ---
 
-# NUKE 核爆
+# NUKE Nuclear Blast
 
 > Impact 💥 Bold - **flash + shockwave + quake**. flow: pop · climax: erupt → blinding flash → ring → shake
 
@@ -14,9 +14,10 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 ## Recipe
 
-| | |
-|---|---|
-bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
+|     |     |
+| --- | --- |
+
+bash scripts/prepare.sh <project> # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 | **Font** | `'Archivo Black'` |
 | **Fill** | text `#fff` - active-word accent `#ffb04a` - climax fill: solid |
 | **Flow reveal** | `pop` (per-word, from `transcribe`) -> active word gets the accent |
@@ -33,9 +34,19 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 ## Style (drop in beside the `_anatomy.md` base CSS)
 
 ```css
-.s-nuke{--ff:'Archivo Black';--cfill:#fff;--cacc:#ffb04a}
-.s-nuke .flow{font-weight:700}
-.s-nuke .climax span{text-shadow:0 0 22px rgba(255,150,40,.7),0 0 62px rgba(255,90,0,.4)}
+.s-nuke {
+  --ff: "Archivo Black";
+  --cfill: #fff;
+  --cacc: #ffb04a;
+}
+.s-nuke .flow {
+  font-weight: 700;
+}
+.s-nuke .climax span {
+  text-shadow:
+    0 0 22px rgba(255, 150, 40, 0.7),
+    0 0 62px rgba(255, 90, 0, 0.4);
+}
 ```
 
 ## Motion (names -> `../_motion.md`)
@@ -51,8 +62,9 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
+
 Build the `_anatomy.md` scene with class `stage s-nuke bg-dark`, feed the transcript to the flow, set `CLIMAX_IN=nuke` / `CLIMAX_OUT=fade` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.
 
 ## Triggers
 
-impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, nuke 核爆, blast
+impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, nuke nuclear blast, blast

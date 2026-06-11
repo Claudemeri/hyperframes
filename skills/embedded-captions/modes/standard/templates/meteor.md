@@ -6,7 +6,7 @@ metadata:
   tags: caption, talking-head, impact, meteor, pop
 ---
 
-# METEOR 天降
+# METEOR Sky Fall
 
 > Impact 💥 Bold - **crash-down + hard quake**. flow: fade · climax: falls from above → squash-impact → shock line + shake
 
@@ -14,9 +14,10 @@ A complete caption template (see `../_anatomy.md` for the scene engine, `../_mot
 
 ## Recipe
 
-| | |
-|---|---|
-bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
+|     |     |
+| --- | --- |
+
+bash scripts/prepare.sh <project> # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 | **Font** | `'Anton'` |
 | **Fill** | text `#fff` - active-word accent `#ff5a2c` - climax fill: stroke |
 | **Flow reveal** | `pop` (per-word, from `transcribe`) -> active word gets the accent |
@@ -33,8 +34,15 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 ## Style (drop in beside the `_anatomy.md` base CSS)
 
 ```css
-.s-meteor{--ff:'Anton';--cfill:#fff;--cacc:#ff5a2c}
-.s-meteor .climax span{-webkit-text-stroke:2px rgba(0,0,0,.5);paint-order:stroke fill}
+.s-meteor {
+  --ff: "Anton";
+  --cfill: #fff;
+  --cacc: #ff5a2c;
+}
+.s-meteor .climax span {
+  -webkit-text-stroke: 2px rgba(0, 0, 0, 0.5);
+  paint-order: stroke fill;
+}
 ```
 
 ## Motion (names -> `../_motion.md`)
@@ -50,8 +58,9 @@ bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (
 bash scripts/prepare.sh   <project>      # matte ∥ transcribe ∥ safe-zones (THIS skill — not remove-background)
 npx hyperframes transcribe   subject.mp4 --model small      # -> transcript.json
 ```
+
 Build the `_anatomy.md` scene with class `stage s-meteor bg-tactical`, feed the transcript to the flow, set `CLIMAX_IN=meteor` / `CLIMAX_OUT=fade` from `_motion.md`, then `npx hyperframes lint && npx hyperframes validate`.
 
 ## Triggers
 
-impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, meteor 天降, impact
+impact, explosive, nuclear, meteor, shockwave, earthquake, power, slam, meteor sky fall, impact

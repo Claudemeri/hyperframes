@@ -20,6 +20,7 @@ import { useStudioContext } from "../contexts/StudioContext";
 import { usePanelLayoutContext } from "../contexts/PanelLayoutContext";
 import { useFileManagerContext } from "../contexts/FileManagerContext";
 import { useDomEditContext } from "../contexts/DomEditContext";
+import { usePlayerStore } from "../player";
 
 export interface StudioRightPanelProps {
   selectedStudioMotion: StudioMotionData | null;
@@ -32,6 +33,9 @@ export interface StudioRightPanelProps {
     compositionPath: string;
   } | null;
   onCloseBlockParams?: () => void;
+  recordingState?: "idle" | "recording" | "preview";
+  recordingDuration?: number;
+  onToggleRecording?: () => void;
 }
 
 // fallow-ignore-next-line complexity
@@ -41,6 +45,9 @@ export function StudioRightPanel({
   motionPanelActive,
   activeBlockParams,
   onCloseBlockParams,
+  recordingState,
+  recordingDuration,
+  onToggleRecording,
 }: StudioRightPanelProps) {
   const {
     rightWidth,
@@ -92,6 +99,11 @@ export function StudioRightPanel({
     handleGsapAddFromProperty,
     handleGsapRemoveFromProperty,
     commitAnimatedProperty,
+    handleSetArcPath,
+    handleUpdateArcSegment,
+    handleGsapAddKeyframe,
+    handleGsapRemoveKeyframe,
+    handleGsapConvertToKeyframes,
   } = useDomEditContext();
 
   const { assets, fontAssets, projectDir, handleImportFiles, handleImportFonts } =
@@ -226,6 +238,15 @@ export function StudioRightPanel({
                   onRemoveGsapFromProperty={handleGsapRemoveFromProperty}
                   onAddGsapAnimation={handleGsapAddAnimation}
                   onCommitAnimatedProperty={commitAnimatedProperty}
+                  onAddKeyframe={handleGsapAddKeyframe}
+                  onRemoveKeyframe={handleGsapRemoveKeyframe}
+                  onConvertToKeyframes={handleGsapConvertToKeyframes}
+                  onSeekToTime={(t) => usePlayerStore.getState().requestSeek(t)}
+                  onSetArcPath={handleSetArcPath}
+                  onUpdateArcSegment={handleUpdateArcSegment}
+                  recordingState={recordingState}
+                  recordingDuration={recordingDuration}
+                  onToggleRecording={onToggleRecording}
                 />
               ) : motionPanelActive ? (
                 <MotionPanel

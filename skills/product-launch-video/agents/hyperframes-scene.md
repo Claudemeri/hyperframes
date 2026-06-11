@@ -5,6 +5,8 @@
 **TOOLS:** Skill `hyperframes-core` + Skill `hyperframes-animation` (only read `SKILL.md`) · Read multiple files · Write · Bash (self-check: grep block + scoped keepout gate when captions enabled)
 **DONE:** File written + all self-checks pass → one-line report; **do not write** `./context.log`
 
+> **Harness note:** "Skill `X`" = load skill X via your harness's skill mechanism; without one, read `<SKILL_DIR>/../X/SKILL.md` directly. `Read` / `Write` / `Edit` / `Bash` are capability names — use your harness's equivalent tools.
+
 You are a product-launch-video Step 6 worker, running in parallel fan-out with sibling workers. You cannot see sibling outputs; final assembly happens in Step 7. After assembly, the finalize agent takes ONE contact-sheet look at the rendered frames — there is no analyzer between you and the pixels. What you write is what ships; a broken contract costs a full re-dispatch round-trip.
 
 **Path contract:** Dispatch provides `PROJECT_DIR` (the video project root). Write to `PROJECT_DIR/compositions/<scene-id>.html`; do not create a `hyperframes/` subdirectory under `PROJECT_DIR`.
@@ -18,10 +20,10 @@ Run through these mentally before starting:
 3. **Foreground lives in flow containers (`flex`/`grid`)** — boxes in normal flow cannot overlap; reserve `position: absolute` for decorative/background layers (constraint #10).
 4. **Component elements that will be tweened → remove CSS-baked `transform: rotate(...)`; move tilt into GSAP `rotation`** (constraint #5b). CSS transform and GSAP transform on the same element overwrite each other, and the preset tilt signature is lost.
 
-## Required Resources (parallel Read in the same message before starting)
+## Required Resources (read all up front, in parallel where your harness allows)
 
 1. Skill `hyperframes-core` — composition structure, timeline contract, non-negotiable rules
-2. `hyperframes-core` `references/sub-compositions.md` (path relative to the hyperframes-core skill root, under its `references/` directory; that skill has already been loaded with the Skill tool) — **required reading**: `<template>` is the transport container (head is discarded), host id ≡ inner `data-composition-id` ≡ `window.__timelines[key]` must be a three-way match, and `gsap.fromTo` vs `gsap.from` seek-back behavior
+2. `hyperframes-core` `references/sub-compositions.md` (path relative to the hyperframes-core skill root, under its `references/` directory; you load that skill in resource #1) — **required reading**: `<template>` is the transport container (head is discarded), host id ≡ inner `data-composition-id` ≡ `window.__timelines[key]` must be a three-way match, and `gsap.fromTo` vs `gsap.from` seek-back behavior
 3. Skill `hyperframes-animation` — **read only `SKILL.md`** (routing table; it points to `rules-index.md` / `blueprints-index.md`, but your rules are provided by `rule_paths`, so you do not need to browse indexes). Open the specific rule body files from your `rule_paths` list. The `SKILL.md` routing table tells you which runtime adapter each rule references (default GSAP; only open another adapter when the rule explicitly references one, under `adapters/` in the hyperframes-animation skill)
 4. **Every** `.md` file in your `rule_paths` list (absolute paths; read all of them)
 5. When `blueprint` is not `composed` → read `<id>.md` in the hyperframes-animation skill `blueprints/` subdirectory (extract `id` from `based-on <id>` / `extended <id>`)

@@ -1,7 +1,10 @@
 import { parseHTML } from "linkedom";
+import postcss from "postcss";
+import selectorParser from "postcss-selector-parser";
 
 export interface SourceMutationTarget {
   id?: string | null;
+  hfId?: string;
   selector?: string;
   selectorIndex?: number;
 }
@@ -15,6 +18,36 @@ function parseSourceDocument(source: string): { document: Document; wrappedFragm
     document: parseHTML(`<!DOCTYPE html><html><head></head><body>${source}</body></html>`).document,
     wrappedFragment: true,
   };
+}
+
+function duplicateCssRulesForId(document: Document, originalId: string, newId: string): void {
+  const idToken = `#${originalId}`;
+  const transform = selectorParser((selectors) => {
+    selectors.walkIds((node) => {
+      if (node.value === originalId) node.value = newId;
+    });
+  });
+  for (const styleEl of document.querySelectorAll("style")) {
+    const css = styleEl.textContent ?? "";
+    let root: postcss.Root;
+    try {
+      root = postcss.parse(css);
+    } catch {
+      continue;
+    }
+    const clones: postcss.Rule[] = [];
+    root.walkRules((rule) => {
+      if (!rule.selector.includes(idToken)) return;
+      const newSelector = transform.processSync(rule.selector);
+      if (newSelector === rule.selector) return;
+      const clone = rule.clone({ selector: newSelector });
+      clones.push(clone);
+    });
+    if (clones.length > 0) {
+      for (const c of clones) root.append(c);
+      styleEl.textContent = root.toString();
+    }
+  }
 }
 
 function querySelectorAllWithTemplates(root: Document | Element, selector: string): Element[] {
@@ -31,7 +64,41 @@ function querySelectorAllWithTemplates(root: Document | Element, selector: strin
   return [];
 }
 
+// Prevent CSS attribute-selector injection via a crafted hfId: escape
+// backslashes first, then double-quotes. Keeps a malformed/hostile value from
+// breaking out of the `[data-hf-id="…"]` selector once callers beyond the
+// internal mint contract (R2+ user flows) pass values here.
+function escapeCssAttrValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function findByHfId(document: Document, hfId: string): Element | null {
+  try {
+    const matches = querySelectorAllWithTemplates(
+      document,
+      `[data-hf-id="${escapeCssAttrValue(hfId)}"]`,
+    );
+    if (matches.length > 1) {
+      // The mint contract guarantees uniqueness; a duplicate means upstream
+      // id drift. Don't silently patch an arbitrary one — surface it.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `sourceMutation: data-hf-id "${hfId}" matched ${matches.length} elements; using the first. ids must be unique per document.`,
+      );
+    }
+    return matches[0] ?? null;
+  } catch {
+    // Malformed selector despite escaping — let the caller fall back.
+    return null;
+  }
+}
+
 function findTargetElement(document: Document, target: SourceMutationTarget): Element | null {
+  if (target.hfId) {
+    const el = findByHfId(document, target.hfId);
+    if (el) return el;
+  }
+
   if (target.id) {
     const byId = document.getElementById(target.id);
     if (byId) return byId;
@@ -195,7 +262,11 @@ export function patchElementInHtml(
         }
         break;
       case "text-content":
-        if (op.value != null) htmlEl.textContent = op.value;
+        if (op.value != null) {
+          const inner = htmlEl.children.length === 1 ? htmlEl.firstElementChild : null;
+          const textTarget = inner ? (inner as unknown as HTMLElement) : htmlEl;
+          textTarget.textContent = op.value;
+        }
         break;
     }
   }
@@ -207,7 +278,7 @@ export function patchElementInHtml(
 }
 
 export function probeElementInSource(source: string, target: SourceMutationTarget): boolean {
-  if (!target.id && !target.selector) return false;
+  if (!target.id && !target.hfId && !target.selector) return false;
   const { document } = parseSourceDocument(source);
   const el = findTargetElement(document, target);
   return el != null && isHTMLElement(el);
@@ -219,6 +290,36 @@ export interface SplitElementResult {
   newId: string | null;
 }
 
+function resolveElementTiming(el: Element): {
+  start: number;
+  duration: number;
+  usesDataEnd: boolean;
+} {
+  const start = parseFloat(el.getAttribute("data-start") ?? "0") || 0;
+  const usesDataEnd = el.hasAttribute("data-end");
+  const duration = usesDataEnd
+    ? parseFloat(el.getAttribute("data-end") ?? "") - start || 0
+    : parseFloat(el.getAttribute("data-duration") ?? "0") || 0;
+  return { start, duration, usesDataEnd };
+}
+
+function setElementDuration(
+  el: Element,
+  start: number,
+  duration: number,
+  usesDataEnd: boolean,
+): void {
+  if (usesDataEnd) {
+    const endTime = String(Math.round((start + duration) * 1000) / 1000);
+    el.setAttribute("data-end", endTime);
+    el.removeAttribute("data-duration");
+  } else {
+    el.setAttribute("data-duration", String(Math.round(duration * 1000) / 1000));
+    el.removeAttribute("data-end");
+  }
+}
+
+// fallow-ignore-next-line complexity
 export function splitElementInHtml(
   source: string,
   target: SourceMutationTarget,
@@ -229,10 +330,17 @@ export function splitElementInHtml(
   const el = findTargetElement(document, target);
   if (!el || !isHTMLElement(el)) return { html: source, matched: false, newId: null };
 
-  const start = parseFloat(el.getAttribute("data-start") ?? "0") || 0;
-  const duration = parseFloat(el.getAttribute("data-duration") ?? "0") || 0;
+  const { start, duration, usesDataEnd } = resolveElementTiming(el);
   if (duration <= 0 || splitTime <= start || splitTime >= start + duration) {
     return { html: source, matched: false, newId: null };
+  }
+
+  if (document.getElementById(newId)) {
+    let suffix = 2;
+    const base = newId;
+    while (document.getElementById(newId)) {
+      newId = `${base}-${suffix++}`;
+    }
   }
 
   const firstDuration = splitTime - start;
@@ -240,8 +348,12 @@ export function splitElementInHtml(
 
   const clone = el.cloneNode(true) as HTMLElement;
   clone.setAttribute("id", newId);
+  clone.removeAttribute("data-hf-id");
   clone.setAttribute("data-start", String(Math.round(splitTime * 1000) / 1000));
-  clone.setAttribute("data-duration", String(Math.round(secondDuration * 1000) / 1000));
+  setElementDuration(clone, splitTime, secondDuration, usesDataEnd);
+
+  // Keep the "clip" class — the runtime uses it to control visibility
+  // based on data-start/data-duration timing.
 
   // Adjust media trim offset for the second half
   const playbackStartAttr = el.hasAttribute("data-playback-start")
@@ -251,15 +363,22 @@ export function splitElementInHtml(
       : null;
   if (playbackStartAttr) {
     const currentTrim = parseFloat(el.getAttribute(playbackStartAttr) ?? "0") || 0;
-    const rate = parseFloat(el.getAttribute("data-playback-rate") ?? "1") || 1;
+    const rateRaw = parseFloat(el.getAttribute("data-playback-rate") ?? "");
+    const rate = Number.isFinite(rateRaw) ? rateRaw : 1;
     clone.setAttribute(
       playbackStartAttr,
       String(Math.round((currentTrim + firstDuration * rate) * 1000) / 1000),
     );
   }
 
+  // Duplicate CSS rules targeting the original ID so the clone inherits the same styles.
+  const originalId = el.getAttribute("id");
+  if (originalId) {
+    duplicateCssRulesForId(document, originalId, newId);
+  }
+
   // Trim the original element's duration
-  el.setAttribute("data-duration", String(Math.round(firstDuration * 1000) / 1000));
+  setElementDuration(el, start, firstDuration, usesDataEnd);
 
   // Insert clone after original
   if (el.nextSibling) {

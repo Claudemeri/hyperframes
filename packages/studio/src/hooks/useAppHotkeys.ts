@@ -6,6 +6,8 @@ import type { LeftSidebarHandle } from "../components/sidebar/LeftSidebar";
 import { STUDIO_MOTION_PATH } from "../components/editor/studioMotion";
 import { shouldHandleTimelineToggleHotkey, isEditableTarget } from "../utils/timelineDiscovery";
 import { shouldIgnoreHistoryShortcut } from "../utils/studioHelpers";
+import { canSplitElement } from "../utils/timelineElementSplit";
+import { STUDIO_RAZOR_TOOL_ENABLED } from "../components/editor/manualEditingAvailability";
 
 /** Safely resolves contentWindow for a potentially cross-origin iframe. */
 function iframeContentWindow(iframe: HTMLIFrameElement | null): Window | null {
@@ -81,6 +83,7 @@ interface UseAppHotkeysParams {
   onResetKeyframes: () => boolean;
   onDeleteSelectedKeyframes: () => void;
   onAfterUndoRedo?: () => void;
+  onToggleRecording?: () => void;
 }
 
 // ── Hook ──
@@ -106,6 +109,7 @@ export function useAppHotkeys({
   onResetKeyframes,
   onDeleteSelectedKeyframes,
   onAfterUndoRedo,
+  onToggleRecording,
 }: UseAppHotkeysParams) {
   const previewHotkeyWindowRef = useRef<Window | null>(null);
   const handleAppKeyDownRef = useRef<((event: KeyboardEvent) => void) | undefined>(undefined);
@@ -215,6 +219,8 @@ export function useAppHotkeys({
   onResetKeyframesRef.current = onResetKeyframes;
   const onDeleteSelectedKeyframesRef = useRef(onDeleteSelectedKeyframes);
   onDeleteSelectedKeyframesRef.current = onDeleteSelectedKeyframes;
+  const onToggleRecordingRef = useRef(onToggleRecording);
+  onToggleRecordingRef.current = onToggleRecording;
 
   // ── Consolidated keydown handler ──
 
@@ -323,7 +329,7 @@ export function useAppHotkeys({
         const element = elements.find((el) => (el.key ?? el.id) === selectedElementId);
         if (
           element &&
-          ["video", "audio", "img"].includes(element.tag) &&
+          canSplitElement(element) &&
           currentTime > element.start &&
           currentTime < element.start + element.duration
         ) {
@@ -331,6 +337,51 @@ export function useAppHotkeys({
           void handleSplitRef.current(element, currentTime);
           return;
         }
+      }
+    }
+
+    // B — toggle razor tool
+    if (
+      STUDIO_RAZOR_TOOL_ENABLED &&
+      event.key.toLowerCase() === "b" &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !isEditableTarget(event.target)
+    ) {
+      event.preventDefault();
+      const { activeTool, setActiveTool } = usePlayerStore.getState();
+      setActiveTool(activeTool === "razor" ? "select" : "razor");
+      return;
+    }
+
+    // V — return to selection tool
+    if (
+      event.key.toLowerCase() === "v" &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !isEditableTarget(event.target)
+    ) {
+      event.preventDefault();
+      usePlayerStore.getState().setActiveTool("select");
+      return;
+    }
+
+    // Escape — exit razor mode (only when no selection to deselect first)
+    if (event.key === "Escape" && !isEditableTarget(event.target)) {
+      const { activeTool, selectedElementId, setActiveTool, setSelectedElementId } =
+        usePlayerStore.getState();
+      if (activeTool === "razor") {
+        if (selectedElementId) {
+          setSelectedElementId(null);
+        } else {
+          setActiveTool("select");
+        }
+        event.preventDefault();
+        return;
       }
     }
 
@@ -376,6 +427,20 @@ export function useAppHotkeys({
         event.preventDefault();
         void handleDomEditDeleteRef.current(domSelection);
       }
+    }
+
+    // R — toggle gesture recording
+    if (
+      event.key === "r" &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !isEditableTarget(event.target) &&
+      onToggleRecordingRef.current
+    ) {
+      event.preventDefault();
+      onToggleRecordingRef.current();
     }
   };
 

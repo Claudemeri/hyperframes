@@ -4,7 +4,11 @@ type IframeWindow = Window & {
   __hfForceTimelineRebind?: () => void;
   __hfSuppressSceneMutations?: <T>(fn: () => T) => T;
   __hfStudioManualEditsApply?: () => void;
-  gsap?: { timeline?: (...args: unknown[]) => unknown };
+  gsap?: {
+    timeline?: (...args: unknown[]) => unknown;
+    registerPlugin?: (...plugins: unknown[]) => unknown;
+  };
+  MotionPathPlugin?: unknown;
 };
 
 function isGsapScript(text: string): boolean {
@@ -57,23 +61,56 @@ export function applySoftReload(iframe: HTMLIFrameElement | null, scriptText: st
     if (timelines) {
       for (const key of Object.keys(timelines)) {
         try {
-          timelines[key]?.kill?.();
+          const tl = timelines[key] as {
+            kill?: () => void;
+            getChildren?: (deep: boolean) => Array<{ targets?: () => Element[] }>;
+          };
+          const allTargets: Element[] = [];
+          if (tl?.getChildren) {
+            try {
+              for (const child of tl.getChildren(true)) {
+                if (typeof child.targets === "function") {
+                  for (const t of child.targets()) {
+                    allTargets.push(t);
+                    delete (t as unknown as Record<string, unknown>)._gsap;
+                  }
+                }
+              }
+            } catch {}
+          }
+          tl?.kill?.();
         } catch {}
         delete timelines[key];
       }
     }
 
     oldScriptEl.remove();
-    const newScript = doc.createElement("script");
-    // IIFE prevents const/let redeclaration errors across consecutive edits.
-    // Top-level declarations are scoped to the IIFE; window.* assignments
-    // (e.g. window.__timelines["root"] = tl) still reach the global scope.
-    newScript.textContent = `(function(){${scriptText}\n})();`;
-    doc.body.appendChild(newScript);
 
-    win.__hfForceTimelineRebind?.();
-    win.__player?.seek?.(currentTime);
-    win.__hfStudioManualEditsApply?.();
+    const executeScript = () => {
+      if (win.MotionPathPlugin && win.gsap?.registerPlugin) {
+        win.gsap.registerPlugin(win.MotionPathPlugin);
+      }
+      const s = doc.createElement("script");
+      s.textContent = `(function(){${scriptText}\n})();`;
+      doc.body.appendChild(s);
+      win.__hfForceTimelineRebind?.();
+      win.__player?.seek?.(currentTime);
+      win.__hfStudioManualEditsApply?.();
+    };
+
+    // Load MotionPathPlugin on demand if the script uses motionPath.
+    // Uses the same CDN as composition templates (GSAP_CDN in constants.ts).
+    const needsMotionPath = /motionPath\s*[:{]/.test(scriptText);
+    if (needsMotionPath && !win.MotionPathPlugin && win.gsap) {
+      const pluginScript = doc.createElement("script");
+      pluginScript.src = "https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js";
+      pluginScript.onload = () => executeScript();
+      pluginScript.onerror = () => executeScript();
+      doc.head.appendChild(pluginScript);
+      return;
+    }
+
+    executeScript();
   };
 
   try {

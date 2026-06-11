@@ -52,10 +52,14 @@ export interface StudioPreviewAreaProps {
   ) => Promise<void> | void;
   handleBlockedTimelineEdit: (element: TimelineElement, intent: BlockedTimelineEditIntent) => void;
   handleTimelineElementSplit: (element: TimelineElement, splitTime: number) => Promise<void> | void;
+  handleRazorSplit: (element: TimelineElement, splitTime: number) => Promise<void> | void;
+  handleRazorSplitAll: (splitTime: number) => Promise<void> | void;
   setCompIdToSrc: (map: Map<string, string>) => void;
   setCompositionLoading: (loading: boolean) => void;
   shouldShowSelectedDomBounds: boolean;
   blockPreview?: BlockPreviewInfo | null;
+  isGestureRecording?: boolean;
+  gestureOverlay?: ReactNode;
 }
 
 // fallow-ignore-next-line complexity
@@ -71,10 +75,14 @@ export function StudioPreviewArea({
   handleTimelineElementResize,
   handleBlockedTimelineEdit,
   handleTimelineElementSplit,
+  handleRazorSplit,
+  handleRazorSplitAll,
   setCompIdToSrc,
   setCompositionLoading,
   shouldShowSelectedDomBounds,
+  isGestureRecording,
   blockPreview,
+  gestureOverlay,
 }: StudioPreviewAreaProps) {
   const {
     projectId,
@@ -142,6 +150,8 @@ export function StudioPreviewArea({
           onResizeElement={handleTimelineElementResize}
           onBlockedEditAttempt={handleBlockedTimelineEdit}
           onSplitElement={handleTimelineElementSplit}
+          onRazorSplit={handleRazorSplit}
+          onRazorSplitAll={handleRazorSplitAll}
           onSelectTimelineElement={handleTimelineElementSelect}
           onDeleteAllKeyframes={(_elId) => {
             const anim =
@@ -241,7 +251,7 @@ export function StudioPreviewArea({
                   }
                   selection={shouldShowSelectedDomBounds ? domEditSelection : null}
                   groupSelections={shouldShowSelectedDomBounds ? domEditGroupSelections : []}
-                  allowCanvasMovement={STUDIO_PREVIEW_MANUAL_EDITING_ENABLED}
+                  allowCanvasMovement={STUDIO_PREVIEW_MANUAL_EDITING_ENABLED && !isGestureRecording}
                   onCanvasMouseDown={handlePreviewCanvasMouseDown}
                   onCanvasPointerMove={handlePreviewCanvasPointerMove}
                   onCanvasPointerLeave={handlePreviewCanvasPointerLeave}
@@ -256,6 +266,7 @@ export function StudioPreviewArea({
                   gridSpacing={snapPrefs.gridSpacing}
                 />
                 <SnapToolbar onSnapChange={setSnapPrefs} />
+                {gestureOverlay}
               </>
             ) : null
           }

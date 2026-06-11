@@ -15,7 +15,7 @@ description: >
   framework. Especially important when no project CLAUDE.md or AGENTS.md
   explains the video workflow.
 metadata:
-  tags: read-first, orientation, router, index, hyperframes, intent-routing, disambiguation
+  { "tags": "read-first, orientation, router, index, hyperframes, intent-routing, disambiguation" }
 ---
 
 # HyperFrames — read this first
@@ -130,7 +130,7 @@ The table above is for **creating** a video from an input. One workflow sits out
 
 - **Input:** An existing **talking-head / interview / podcast video** (MP4) the user wants **packaged with designed on-screen graphics** — actual footage, not a URL or brief. Transcribed locally (Whisper). The clip **plays in full underneath**; nothing is cut, re-timed, or recolored.
 - **Output:** the same footage with a sequence of **timed graphic-overlay cards** composited on top / beside it — kinetic titles, lower-thirds, data callouts, pull-quotes, side panels, picture-in-picture — synced to the transcript, via a design system of 10 styles × 4 layouts × 3 frames. **Any length.** (This is the replacement for the removed `/footage-recut` info-card overlay flow.)
-- **Triggers:** "package / 包装 this video", "add graphic overlays / on-screen graphics", "lower-thirds / data callouts / kinetic titles / info-cards on my talk", "turn this interview into a graphics-packaged edit", "overlay cards synced to what I'm saying"
+- **Triggers:** "package / wrap this video", "add graphic overlays / on-screen graphics", "lower-thirds / data callouts / kinetic titles / info-cards on my talk", "turn this interview into a graphics-packaged edit", "overlay cards synced to what I'm saying"
 - **Do NOT use for:** plain readable **subtitles / captions** — the spoken words as text (→ `/embedded-captions`); a **single short unnarrated** motion element like one lower-third or a logo sting (→ `/motion-graphics` — this skill packages a whole narrated clip with many synced cards); **editing the footage itself** — re-timing, recoloring, reframing, reordering, audio (NLE editing, out of scope); building a video from a URL / topic / PR (→ the creation workflows); footage that doesn't exist yet.
 
 ### `/pr-to-video`

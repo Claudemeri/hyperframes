@@ -64,4 +64,4 @@ MusicGen ignores all of the above — pass the mood you want directly in `--prom
 | Lyria API error                                                         | Exit 1 with stderr tail. Re-run with `--provider musicgen` to fall back.                        |
 | MusicGen OOM on CPU                                                     | Reduce `--duration` (each second ≈ 50 tokens; ~10 GB peak for 30 s on CPU).                     |
 
-BGM generation is **synchronous** in the CLI — for multi-minute renders, run it in the background (`&` in shell, or `run_in_background` in the agent harness).
+BGM generation is **synchronous** in the CLI — for multi-minute renders, run it in the background (`&` in shell, or your agent harness's background-execution option).

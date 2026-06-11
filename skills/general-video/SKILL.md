@@ -12,8 +12,7 @@ description: >
   hits such as logo stings, kinetic type, stat/chart pops, lower-thirds,
   animated tweets/headlines, or page highlights. If a specialized workflow clearly fits the input, prefer it
   (see /hyperframes-read-first); use this only as the input/length-agnostic fallback.
-metadata:
-  tags: orchestrator, general-video, fallback, freeform, composition-authoring
+metadata: { "tags": "orchestrator, general-video, fallback, freeform, composition-authoring" }
 ---
 
 # general-video — general composition authoring

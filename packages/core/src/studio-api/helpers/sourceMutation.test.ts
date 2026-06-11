@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   removeElementFromHtml,
   patchElementInHtml,
+  splitElementInHtml,
   probeElementInSource,
 } from "./sourceMutation.js";
 
@@ -368,13 +369,151 @@ describe("probeElementInSource", () => {
 // Covers the same surface as T3 (Studio sourcePatcher) — Core sourceMutation supports
 // all patch types (inline-style, attribute, text-content) via patchElementInHtml.
 describe("T7 — data-hf-id targeting (spec for R1)", () => {
-  it.todo("updates inline style by data-hf-id when no HTML id attribute is present");
+  it("updates inline style by data-hf-id when no HTML id attribute is present", () => {
+    const source = `<h1 data-hf-id="hf-x7k2" style="color: red">Hello</h1>`;
+    const { html, matched } = patchElementInHtml(source, { hfId: "hf-x7k2" }, [
+      { type: "inline-style", property: "color", value: "blue" },
+    ]);
+    expect(matched).toBe(true);
+    expect(html).toMatch(/color:\s*blue/);
+    expect(html).toContain('data-hf-id="hf-x7k2"');
+  });
 
-  it.todo("updates text content by data-hf-id");
+  it("updates text content by data-hf-id", () => {
+    const source = `<p data-hf-id="hf-a1b2">Old text</p>`;
+    const { html, matched } = patchElementInHtml(source, { hfId: "hf-a1b2" }, [
+      { type: "text-content", property: "", value: "New text" },
+    ]);
+    expect(matched).toBe(true);
+    expect(html).toContain("New text");
+  });
 
-  it.todo("updates attribute by data-hf-id");
+  it("updates attribute by data-hf-id", () => {
+    const source = `<div data-hf-id="hf-c3d4" data-start="0"></div>`;
+    const { html, matched } = patchElementInHtml(source, { hfId: "hf-c3d4" }, [
+      { type: "attribute", property: "start", value: "2.5" },
+    ]);
+    expect(matched).toBe(true);
+    expect(html).toContain('data-start="2.5"');
+  });
 
-  it.todo("data-hf-id attribute survives the patch (can be targeted again)");
+  it("data-hf-id attribute survives the patch (can be targeted again)", () => {
+    const source = `<h1 data-hf-id="hf-x7k2" style="color: red">Hello</h1>`;
+    const { html } = patchElementInHtml(source, { hfId: "hf-x7k2" }, [
+      { type: "inline-style", property: "color", value: "blue" },
+    ]);
+    expect(html).toContain('data-hf-id="hf-x7k2"');
+  });
 
-  it.todo("hfId lookup falls through to selector when hfId is not found in the document");
+  it("hfId lookup falls through to selector when hfId is not found in the document", () => {
+    const source = `<h1 class="headline" style="color: red">Hello</h1>`;
+    const { html, matched } = patchElementInHtml(
+      source,
+      { hfId: "hf-missing", selector: ".headline" },
+      [{ type: "inline-style", property: "color", value: "blue" }],
+    );
+    expect(matched).toBe(true);
+    expect(html).toMatch(/color:\s*blue/);
+  });
+
+  it("does not break out of the selector on a crafted hfId (CSS injection guard)", () => {
+    // A value with a quote/bracket must be escaped, not injected — it should
+    // simply match nothing and leave the source untouched, never throw.
+    const source = `<h1 class="safe">A</h1><h1 class="victim">B</h1>`;
+    const evil = `x"] , [class="victim`;
+    const run = () =>
+      patchElementInHtml(source, { hfId: evil }, [
+        { type: "text-content", property: "textContent", value: "HACKED" },
+      ]);
+    expect(run).not.toThrow();
+    const { html, matched } = run();
+    expect(matched).toBe(false);
+    expect(html).toBe(source);
+    expect(html).not.toContain("HACKED");
+  });
+
+  // The Studio edit path targets by id/selector (it never sends hfId). Once a
+  // persisted data-hf-id exists in source, those edits must NOT strip it — else
+  // the stable handle is destroyed by the next edit. This is the preservation
+  // guarantee the write-back design depends on.
+  it("preserves an existing data-hf-id when the element is patched by id", () => {
+    const source = `<h1 id="hero" data-hf-id="hf-x7k2" style="color: red">Hello</h1>`;
+    const { html, matched } = patchElementInHtml(source, { id: "hero" }, [
+      { type: "inline-style", property: "color", value: "blue" },
+    ]);
+    expect(matched).toBe(true);
+    expect(html).toMatch(/color:\s*blue/);
+    expect(html).toContain('data-hf-id="hf-x7k2"');
+  });
+
+  it("preserves an existing data-hf-id when the element is patched by selector", () => {
+    const source = `<p class="body" data-hf-id="hf-a1b2">Old</p>`;
+    const { html, matched } = patchElementInHtml(source, { selector: ".body" }, [
+      { type: "text-content", property: "textContent", value: "New" },
+    ]);
+    expect(matched).toBe(true);
+    expect(html).toContain("New");
+    expect(html).toContain('data-hf-id="hf-a1b2"');
+  });
+});
+
+describe("splitElementInHtml — hfId clone isolation", () => {
+  it("does not copy data-hf-id to the cloned second half", () => {
+    const source = `<html><body><div data-composition-id="root"><div id="clip1" class="clip" data-start="0" data-duration="10" data-hf-id="hf-abc123"></div></div></body></html>`;
+    const { html, matched } = splitElementInHtml(source, { id: "clip1" }, 5, "clip2");
+
+    expect(matched).toBe(true);
+    const occurrences = (html.match(/data-hf-id="hf-abc123"/g) ?? []).length;
+    expect(occurrences).toBe(1);
+  });
+});
+
+describe("splitElementInHtml", () => {
+  const source = `<!DOCTYPE html><html><head><style>#box { position: absolute; top: 100px; background: red; }</style></head><body><div data-composition-id="root"><div id="box" class="clip" data-start="1" data-duration="6">Hello</div></div></body></html>`;
+
+  it("splits element at the given time", () => {
+    const result = splitElementInHtml(source, { id: "box" }, 3, "box-split");
+    expect(result.matched).toBe(true);
+    expect(result.html).toContain('data-duration="2"');
+    expect(result.html).toContain('id="box-split"');
+    expect(result.html).toContain('data-start="3"');
+    expect(result.html).toContain('data-duration="4"');
+  });
+
+  it("duplicates CSS rules for the new element ID", () => {
+    const result = splitElementInHtml(source, { id: "box" }, 3, "box-split");
+    expect(result.html).toContain("#box-split");
+    expect(result.html).toContain("background: red");
+    const cssMatches = result.html.match(/#box-split\s*\{/g);
+    expect(cssMatches?.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("deduplicates IDs when the requested newId already exists", () => {
+    const withExisting = source.replace(
+      "</div></div>",
+      '</div><div id="box-split" data-start="5" data-duration="1">Existing</div></div>',
+    );
+    const result = splitElementInHtml(withExisting, { id: "box" }, 3, "box-split");
+    expect(result.matched).toBe(true);
+    expect(result.html).toContain('id="box-split-2"');
+  });
+
+  it("keeps clip class on the cloned element", () => {
+    const result = splitElementInHtml(source, { id: "box" }, 3, "box-split");
+    expect(result.html).toMatch(/id="box-split"[^>]*class="clip"/);
+  });
+
+  it("returns matched false for out-of-range split time", () => {
+    expect(splitElementInHtml(source, { id: "box" }, 0.5, "box-split").matched).toBe(false);
+    expect(splitElementInHtml(source, { id: "box" }, 7.5, "box-split").matched).toBe(false);
+  });
+
+  it("adjusts media playback-start for the second half", () => {
+    const mediaSource = source.replace(
+      'id="box" class="clip" data-start="1" data-duration="6"',
+      'id="box" class="clip" data-start="1" data-duration="6" data-playback-start="0"',
+    );
+    const result = splitElementInHtml(mediaSource, { id: "box" }, 3, "box-split");
+    expect(result.html).toMatch(/id="box-split"[^>]*data-playback-start="2"/);
+  });
 });

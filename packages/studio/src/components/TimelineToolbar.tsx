@@ -1,94 +1,45 @@
+import { useRef } from "react";
+import { useEnableKeyframes, type EnableKeyframesSession } from "../hooks/useEnableKeyframes";
 import {
   getNextTimelineZoomPercent,
   getTimelineZoomPercent,
 } from "../player/components/timelineZoom";
+import { useTimelineZoom } from "../player/components/useTimelineZoom";
 import { getTimelineToggleTitle } from "../utils/timelineDiscovery";
 import { usePlayerStore, type TimelineElement } from "../player";
-import { STUDIO_KEYFRAMES_ENABLED } from "./editor/manualEditingAvailability";
+import {
+  STUDIO_KEYFRAMES_ENABLED,
+  STUDIO_RAZOR_TOOL_ENABLED,
+} from "./editor/manualEditingAvailability";
 import { Tooltip } from "./ui";
 import { Scissors } from "../icons/SystemIcons";
-import type { GsapAnimation, GsapPercentageKeyframe } from "@hyperframes/core/gsap-parser";
+import type { GsapAnimation } from "@hyperframes/core/gsap-parser";
 import type { DomEditSelection } from "./editor/domEditingTypes";
+import { canSplitElement } from "../utils/timelineElementSplit";
 
-function interpolateKeyframeProperties(
-  keyframes: GsapPercentageKeyframe[],
-  pct: number,
-): Record<string, number> {
-  const sorted = keyframes.slice().sort((a, b) => a.percentage - b.percentage);
-  const allProps = new Set<string>();
-  for (const kf of sorted) {
-    for (const p of Object.keys(kf.properties)) {
-      if (typeof kf.properties[p] === "number") allProps.add(p);
-    }
-  }
-  const result: Record<string, number> = {};
-  for (const prop of allProps) {
-    let prev: { pct: number; val: number } | null = null;
-    let next: { pct: number; val: number } | null = null;
-    for (const kf of sorted) {
-      const v = kf.properties[prop];
-      if (typeof v !== "number") continue;
-      if (kf.percentage <= pct) prev = { pct: kf.percentage, val: v };
-      if (kf.percentage >= pct && !next) next = { pct: kf.percentage, val: v };
-    }
-    if (prev && next && prev.pct !== next.pct) {
-      const t = (pct - prev.pct) / (next.pct - prev.pct);
-      result[prop] = Math.round(prev.val + t * (next.val - prev.val));
-    } else if (prev) {
-      result[prop] = Math.round(prev.val);
-    } else if (next) {
-      result[prop] = Math.round(next.val);
-    }
-  }
-  return result;
+function AutoKeyframeToggle() {
+  const enabled = usePlayerStore((s) => s.autoKeyframeEnabled);
+  return (
+    <Tooltip label={enabled ? "Auto-keyframe ON" : "Auto-keyframe OFF"}>
+      <button
+        type="button"
+        onClick={() => usePlayerStore.getState().setAutoKeyframeEnabled(!enabled)}
+        className={`flex h-7 w-7 items-center justify-center rounded transition-colors ${
+          enabled ? "text-red-400" : "text-neutral-600 hover:text-neutral-400"
+        }`}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+          {enabled && <circle cx="7" cy="7" r="3" fill="currentColor" />}
+        </svg>
+      </button>
+    </Tooltip>
+  );
 }
 
-function readRuntimeKeyframeValues(
-  iframe: HTMLIFrameElement | null,
-  sel: DomEditSelection,
-  keyframes: GsapPercentageKeyframe[],
-): Record<string, number> {
-  if (!iframe?.contentWindow) return {};
-  let gsap: { getProperty?: (el: Element, prop: string) => number } | undefined;
-  try {
-    gsap = (iframe.contentWindow as Window & { gsap?: typeof gsap }).gsap;
-  } catch {
-    return {};
-  }
-  if (!gsap?.getProperty) return {};
-  const selector = sel.id ? `#${sel.id}` : sel.selector;
-  if (!selector) return {};
-  let doc: Document | null = null;
-  try {
-    doc = iframe.contentDocument;
-  } catch {
-    return {};
-  }
-  const element = doc?.querySelector(selector);
-  if (!element) return {};
-  const allProps = new Set<string>();
-  for (const kf of keyframes) {
-    for (const p of Object.keys(kf.properties)) {
-      if (typeof kf.properties[p] === "number") allProps.add(p);
-    }
-  }
-  const result: Record<string, number> = {};
-  for (const prop of allProps) {
-    const val = Number(gsap.getProperty(element, prop));
-    if (Number.isFinite(val)) result[prop] = Math.round(val);
-  }
-  return result;
-}
-
-interface DomEditSessionSlice {
+interface DomEditSessionSlice extends EnableKeyframesSession {
   domEditSelection: DomEditSelection | null;
   selectedGsapAnimations: GsapAnimation[];
-  handleGsapRemoveKeyframe: (animId: string, pct: number) => void;
-  handleGsapAddKeyframe: (animId: string, pct: number, prop: string, val: number | string) => void;
-  handleGsapConvertToKeyframes: (animId: string) => void;
-  handleGsapMaterializeKeyframes?: (animId: string) => Promise<void>;
-  handleGsapAddAnimation: (method: "to" | "from" | "set" | "fromTo") => void;
-  previewIframeRef?: React.RefObject<HTMLIFrameElement | null>;
 }
 
 interface TimelineToolbarProps {
@@ -97,82 +48,49 @@ interface TimelineToolbarProps {
   onSplitElement?: (element: TimelineElement, splitTime: number) => void;
 }
 
-// fallow-ignore-next-line complexity
 function useKeyframeToggle(session?: DomEditSessionSlice) {
   const currentTime = usePlayerStore((s) => s.currentTime);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
+  const onToggle = useEnableKeyframes(
+    sessionRef as React.RefObject<EnableKeyframesSession | undefined>,
+  );
+
   if (!session) return { state: "none" as const, onToggle: undefined };
 
   const sel = session.domEditSelection;
   const anims = session.selectedGsapAnimations;
   const kfAnim = anims.find((a) => a.keyframes);
-  const flatAnim = anims.find((a) => !a.keyframes);
+
+  const computePct = (time: number) => {
+    const elStart = Number.parseFloat(sel?.dataAttributes?.start ?? "0") || 0;
+    const elDuration = Number.parseFloat(sel?.dataAttributes?.duration ?? "1") || 1;
+    return elDuration > 0
+      ? Math.max(0, Math.min(100, Math.round(((time - elStart) / elDuration) * 1000) / 10))
+      : 0;
+  };
 
   let state: "active" | "inactive" | "none" = "none";
   if (kfAnim?.keyframes && sel) {
-    const elStart = Number.parseFloat(sel.dataAttributes?.start ?? "0") || 0;
-    const elDuration = Number.parseFloat(sel.dataAttributes?.duration ?? "1") || 1;
-    const pct =
-      elDuration > 0
-        ? Math.max(0, Math.min(100, Math.round(((currentTime - elStart) / elDuration) * 1000) / 10))
-        : 0;
+    const pct = computePct(currentTime);
     state = kfAnim.keyframes.keyframes.some((k) => Math.abs(k.percentage - pct) <= 1)
       ? "active"
       : "inactive";
   }
 
-  // fallow-ignore-next-line complexity
-  const onToggle = sel
-    ? async () => {
-        const t = usePlayerStore.getState().currentTime;
-        if (kfAnim?.keyframes) {
-          if (kfAnim.hasUnresolvedKeyframes) {
-            await session.handleGsapMaterializeKeyframes?.(kfAnim.id);
-          }
-          const elStart = Number.parseFloat(sel.dataAttributes?.start ?? "0") || 0;
-          const elDuration = Number.parseFloat(sel.dataAttributes?.duration ?? "1") || 1;
-          const pct =
-            elDuration > 0
-              ? Math.max(0, Math.min(100, Math.round(((t - elStart) / elDuration) * 1000) / 10))
-              : 0;
-          const existing = kfAnim.keyframes.keyframes.find(
-            (k) => Math.abs(k.percentage - pct) <= 1,
-          );
-          if (existing) {
-            session.handleGsapRemoveKeyframe(kfAnim.id, existing.percentage);
-          } else {
-            const runtimeValues = readRuntimeKeyframeValues(
-              session.previewIframeRef?.current ?? null,
-              sel,
-              kfAnim.keyframes.keyframes,
-            );
-            const values =
-              Object.keys(runtimeValues).length > 0
-                ? runtimeValues
-                : interpolateKeyframeProperties(kfAnim.keyframes.keyframes, pct);
-            for (const [prop, val] of Object.entries(values)) {
-              session.handleGsapAddKeyframe(kfAnim.id, pct, prop, val);
-            }
-          }
-        } else if (flatAnim) {
-          session.handleGsapConvertToKeyframes(flatAnim.id);
-        } else {
-          session.handleGsapAddAnimation("to");
-        }
-      }
-    : undefined;
-
-  return { state, onToggle };
+  return { state, onToggle: sel ? onToggle : undefined };
 }
 
+// fallow-ignore-next-line complexity
 export function TimelineToolbar({
   toggleTimelineVisibility,
   domEditSession,
   onSplitElement,
 }: TimelineToolbarProps) {
-  const zoomMode = usePlayerStore((s) => s.zoomMode);
-  const manualZoomPercent = usePlayerStore((s) => s.manualZoomPercent);
-  const setZoomMode = usePlayerStore((s) => s.setZoomMode);
-  const setManualZoomPercent = usePlayerStore((s) => s.setManualZoomPercent);
+  const activeTool = usePlayerStore((s) => s.activeTool);
+  const setActiveTool = usePlayerStore((s) => s.setActiveTool);
+  const { zoomMode, manualZoomPercent, setZoomMode, setManualZoomPercent } = useTimelineZoom();
   const displayedTimelineZoomPercent = getTimelineZoomPercent(zoomMode, manualZoomPercent);
   const { state: keyframeState, onToggle: onToggleKeyframe } = useKeyframeToggle(domEditSession);
 
@@ -183,41 +101,76 @@ export function TimelineToolbar({
           <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
             Timeline
           </div>
+          {STUDIO_RAZOR_TOOL_ENABLED && (
+            <div className="flex items-center border border-neutral-800 rounded overflow-hidden">
+              <Tooltip label="Selection tool (V)">
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("select")}
+                  className={`flex h-6 w-6 items-center justify-center transition-colors ${
+                    activeTool === "select"
+                      ? "bg-neutral-700 text-neutral-200"
+                      : "text-neutral-500 hover:text-neutral-300"
+                  }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                    <path d="M2 0.5L10 6L6.5 6.5L8.5 11L6.5 11.5L4.5 7L2 9Z" />
+                  </svg>
+                </button>
+              </Tooltip>
+              <Tooltip label="Razor tool (B)">
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("razor")}
+                  className={`flex h-6 w-6 items-center justify-center transition-colors ${
+                    activeTool === "razor"
+                      ? "bg-neutral-700 text-neutral-200"
+                      : "text-neutral-500 hover:text-neutral-300"
+                  }`}
+                >
+                  <Scissors size={11} />
+                </button>
+              </Tooltip>
+            </div>
+          )}
           {STUDIO_KEYFRAMES_ENABLED && onToggleKeyframe && (
-            <Tooltip
-              label={
-                keyframeState === "active"
-                  ? "Remove keyframe at playhead"
-                  : keyframeState === "inactive"
-                    ? "Add keyframe at playhead"
-                    : "Enable keyframes"
-              }
-            >
-              <button
-                type="button"
-                onClick={onToggleKeyframe}
-                className={`flex h-7 w-7 items-center justify-center rounded transition-colors ${
+            <>
+              <Tooltip
+                label={
                   keyframeState === "active"
-                    ? "text-studio-accent"
+                    ? "Remove keyframe at playhead"
                     : keyframeState === "inactive"
-                      ? "text-neutral-400 hover:text-studio-accent"
-                      : "text-neutral-600 hover:text-neutral-400"
-                }`}
+                      ? "Add keyframe at playhead"
+                      : "Enable keyframes"
+                }
               >
-                <svg width="18" height="18" viewBox="0 0 10 10" fill="currentColor">
-                  {keyframeState === "active" ? (
-                    <path d="M5 0.5L9.5 5L5 9.5L0.5 5Z" />
-                  ) : (
-                    <path
-                      d="M5 1.2L8.8 5L5 8.8L1.2 5Z"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                    />
-                  )}
-                </svg>
-              </button>
-            </Tooltip>
+                <button
+                  type="button"
+                  onClick={onToggleKeyframe}
+                  className={`flex h-7 w-7 items-center justify-center rounded transition-colors ${
+                    keyframeState === "active"
+                      ? "text-studio-accent"
+                      : keyframeState === "inactive"
+                        ? "text-neutral-400 hover:text-studio-accent"
+                        : "text-neutral-600 hover:text-neutral-400"
+                  }`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 10 10" fill="currentColor">
+                    {keyframeState === "active" ? (
+                      <path d="M5 0.5L9.5 5L5 9.5L0.5 5Z" />
+                    ) : (
+                      <path
+                        d="M5 1.2L8.8 5L5 8.8L1.2 5Z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                      />
+                    )}
+                  </svg>
+                </button>
+              </Tooltip>
+              <AutoKeyframeToggle />
+            </>
           )}
           {onSplitElement &&
             (() => {
@@ -225,9 +178,7 @@ export function TimelineToolbar({
               const el = selectedElementId
                 ? elements.find((e) => (e.key ?? e.id) === selectedElementId)
                 : null;
-              const splittable =
-                el && !el.compositionSrc && ["video", "audio", "img"].includes(el.tag);
-              if (!splittable) return null;
+              if (!el || !canSplitElement(el)) return null;
               const canSplit = currentTime > el.start && currentTime < el.start + el.duration;
               return (
                 <Tooltip label="Split clip at playhead (S)">

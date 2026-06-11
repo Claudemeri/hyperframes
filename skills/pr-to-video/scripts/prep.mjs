@@ -505,10 +505,11 @@ const narratorByNumber = new Map((narratorScripts.scenes || []).map((s) => [s.sc
 // override for testing). The resolved size is stamped into group_spec.width/
 // height; every downstream script + scene worker reads it from there. See the
 // seam doc at scripts/lib/dimensions.mjs.
-const { width: CANVAS_W, height: CANVAS_H, source: dimSource } = resolveDimensions(
-  { width: flag("width"), height: flag("height") },
-  narratorScripts,
-);
+const {
+  width: CANVAS_W,
+  height: CANVAS_H,
+  source: dimSource,
+} = resolveDimensions({ width: flag("width"), height: flag("height") }, narratorScripts);
 
 let audioMeta = null;
 if (audioMetaPath) {

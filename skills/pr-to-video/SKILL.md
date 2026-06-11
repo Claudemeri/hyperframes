@@ -265,15 +265,22 @@ node <SKILL_DIR>/scripts/check-overlap.mjs --ensure-deps
 # reused from the hyperframes browser cache. Workers must NOT install it themselves (parallel npm race).
 ```
 
-Then read `group_spec.json.groups[]` for worker count N. Build the shared header once, then per-worker packets (`tokens` / `easings` / `voice` are identical for every worker):
+Then read `group_spec.json.groups[]` for worker count N. Build the shared header once, then per-worker packets (`film direction` / `tokens` / `easings` / `voice` are identical for every worker):
 
 ```bash
 # Same rule as Step 4: packets go in $PROJECT_DIR/.dispatch/, never a fixed /tmp path
 # (a stale /tmp file from a previous project survives a failed write and silently
 # poisons every worker with the wrong design system).
 mkdir -p "$PROJECT_DIR/.dispatch/scene-dispatch"
-(cd "$PROJECT_DIR" && cat design-system/chunks/tokens.css design-system/chunks/easings.js design-system/chunks/voice.md 2>/dev/null) \
-  > "$PROJECT_DIR/.dispatch/scene-shared.txt"
+# `## Film direction` = the film-level invariants from group_spec.film_direction
+# (palette system / motion defaults + budget / ambient system / negative list);
+# each scene's creative_brief carries only scene-specific deltas on top of it.
+{
+  echo "## Film direction"
+  (cd "$PROJECT_DIR" && node -p 'JSON.parse(require("fs").readFileSync("group_spec.json","utf8")).film_direction || ""')
+  echo "## Tokens / easings / voice"
+  (cd "$PROJECT_DIR" && cat design-system/chunks/tokens.css design-system/chunks/easings.js design-system/chunks/voice.md 2>/dev/null)
+} > "$PROJECT_DIR/.dispatch/scene-shared.txt"
 # Guard BEFORE fan-out: the project's own brand token must be present; a contaminated
 # packet here costs a full re-author round across every affected worker.
 grep -q -- '--brand-primary' "$PROJECT_DIR/.dispatch/scene-shared.txt" || \
@@ -281,7 +288,7 @@ grep -q -- '--brand-primary' "$PROJECT_DIR/.dispatch/scene-shared.txt" || \
 # Then per worker: shared header + that worker's Scenes YAML -> $PROJECT_DIR/.dispatch/scene-dispatch/w<N>.txt
 ```
 
-Start **N scene workers in parallel** (concurrent background dispatches; a harness concurrency cap below N means waves of the cap size until every worker has run — never fewer workers). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height`) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: <PROJECT_DIR>/.dispatch/scene-dispatch/w<N>.txt`, plus the shared header body + a `Scenes:` list. Each worker's self-check runs two scoped machine gates before returning — `captions.mjs keepout --scene` (when captions enabled) and `check-overlap.mjs --scene` (always) — so layout violations are fixed at the source instead of surfacing at preflight.
+Start **N scene workers in parallel** (concurrent background dispatches; a harness concurrency cap below N means waves of the cap size until every worker has run — never fewer workers). prompt = full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, verbatim. Top-level fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height`) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: <PROJECT_DIR>/.dispatch/scene-dispatch/w<N>.txt`, plus the shared header body (`## Film direction` + `## Tokens / easings / voice`) + a `Scenes:` list. Each worker's self-check runs two scoped machine gates before returning — `captions.mjs keepout --scene` (when captions enabled) and `check-overlap.mjs --scene` (always) — so layout violations are fixed at the source instead of surfacing at preflight.
 
 For the worker top-level context, copy from `group_spec.json.groups[i]`: `worker_id`, `composition_id`, `composition_file`, `duration_s`, `scene_ids`; and from the top of `group_spec.json`: `width`, `height` (the worker authors + self-checks the root at these dims — landscape 1920×1080 unless portrait/square was requested upstream). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580) — constraint #13 keep-out is computed from these, not hardcoded. Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-3 logical scenes): `scene_id` / `local_start_s` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `design_chunks` (absolute paths to the whole component library — the worker chooses by visual judgment) / `creative_brief`. A continue run of 2-3 scenes writes one `group_wN.html` with true shared DOM across the segments.
 
@@ -349,6 +356,8 @@ SKILL_DIR: <absolute path>
 PROJECT_DIR: <video project root>
 Render quality: high     # Or draft / standard
 Finalize brief: <PROJECT_DIR>/finalize_brief.json   # Preflight has already written it; agent reads once for findings + npx_prefix + scene timings
+Film direction: |        # = group_spec.film_direction (film-level invariants the briefs assume)
+  <verbatim>
 Visual clips:            # One line per group_spec.visual_clips[] entry
   - { id, file, kind, worker_id, scene_ids, start_s, duration_s }
 Scenes:                  # One line per logical scene, copied verbatim from group_spec.json

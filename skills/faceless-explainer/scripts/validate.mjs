@@ -383,23 +383,38 @@ async function runSection(argv) {
     );
   }
 
-  // File shape: no project-level preamble. section_plan.md must contain only an
-  // optional H1 title + the "## Scene N:" blocks. Anything substantial before the
-  // first scene heading is a write-only preamble — prep.mjs slices per-scene from
-  // the first "## Scene", the validator iterates scene blocks, and the scene
-  // worker is forbidden from reading section_plan.md, so a preamble reaches no
-  // consumer. Global invariants travel via per-scene prose + dedicated channels
-  // (voice_file / Captions flag / tokens.css / easings.js). See guide.md §2.
+  // File shape: optional H1 title + ONE "## Film Direction" block + the
+  // "## Scene N:" blocks, nothing else. Film Direction is the film-level header
+  // (write-once invariants: palette system, motion defaults + budget, ambient
+  // system, negative list, transition vocabulary, visual-mode/asset coverage —
+  // see guide.md §4). Unlike the old free preamble it IS read downstream:
+  // prep.mjs copies it into group_spec.film_direction, and the orchestrator
+  // prepends it to every scene worker's shared packet header and the finalize
+  // dispatch. Scene prose carries only scene-specific deltas on top of it.
   if (heads.length > 0) {
-    const preamble = plan
-      .slice(0, heads[0].index)
-      .replace(/^﻿?[ \t]*#[ \t]+.*$/m, "") // allow one leading H1 title line
-      .replace(/\s+/g, " ")
-      .trim();
-    if (preamble.length > 200) {
+    const fdMatch = plan.slice(0, heads[0].index).match(/^## Film Direction[ \t]*$/m);
+    if (!fdMatch) {
       errors.push(
-        `project-level preamble detected before "## Scene 1" (${preamble.length} chars beyond an H1 title) — section_plan.md must contain only an H1 title and "## Scene N:" blocks. Global rules reach workers via per-scene prose + dedicated channels (voice_file / Captions flag / tokens.css / easings.js), never a preamble.`,
+        'missing "## Film Direction" block before "## Scene 1" — write the film-level invariants (palette system, motion defaults + budget, ambient system, film negative list, transition vocabulary, visual-mode/asset coverage table) ONCE in this header; scene prose then carries only scene-specific deltas. See guide.md §4.',
       );
+    } else {
+      const fdBody = plan.slice(fdMatch.index + fdMatch[0].length, heads[0].index);
+      const fdWords = fdBody.split(/\s+/).filter(Boolean).length;
+      if (fdWords > 700) {
+        errors.push(
+          `"## Film Direction" is ${fdWords} words — keep it a one-page header (≤700 words). If it is growing, per-scene choreography is leaking up; that detail belongs in the scene blocks.`,
+        );
+      }
+      const preamble = plan
+        .slice(0, fdMatch.index)
+        .replace(/^﻿?[ \t]*#[ \t]+.*$/m, "") // allow one leading H1 title line
+        .replace(/\s+/g, " ")
+        .trim();
+      if (preamble.length > 200) {
+        errors.push(
+          `project-level preamble detected before "## Film Direction" (${preamble.length} chars beyond an H1 title) — section_plan.md must contain only an H1 title, one "## Film Direction" block, and "## Scene N:" blocks.`,
+        );
+      }
     }
   }
 
@@ -423,6 +438,7 @@ async function runSection(argv) {
       const blockLines = body.split("\n");
       let firstProse = -1;
       let lastAnchor = -1;
+      let proseWords = 0;
       for (let li = 0; li < blockLines.length; li++) {
         const t = blockLines[li].trim();
         if (t === "") continue;
@@ -433,10 +449,21 @@ async function runSection(argv) {
         if (/^[-*]/.test(t)) continue; // SFX cue bullets
         if (/^[\d>#`]/.test(t)) continue; // timecode continuations / quotes / code / fences
         if (firstProse === -1) firstProse = li;
+        proseWords += t.split(/\s+/).filter(Boolean).length;
       }
       if (firstProse !== -1 && lastAnchor > firstProse) {
         errors.push(
           `${sceneId}: an **Anchor:** line appears after the prose began (prose at body line ${firstProse}, anchor at ${lastAnchor}) — put ALL anchors (incl. SFX/PrimarySubjectTimeline/Handoff) before the prose`,
+        );
+      }
+      // Lean-prose cap: the brief is deltas on top of "## Film Direction"
+      // (target ≤150 words; hard cap leaves room for genuinely complex scenes).
+      // Walls of prose here are almost always film-level invariants restated
+      // per scene — palette ratios, caption-band geometry, ambient layers,
+      // breathing defaults — which the worker already receives via the header.
+      if (proseWords > 320) {
+        errors.push(
+          `${sceneId}: prose is ${proseWords} words (target ≤150, hard cap 320) — keep only scene-specific deltas; film-level invariants (palette system / ambient layers / motion defaults / caption geometry) belong in "## Film Direction", not in every scene. See guide.md §4.`,
         );
       }
     }

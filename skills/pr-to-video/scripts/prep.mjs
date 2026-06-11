@@ -207,6 +207,19 @@ const sceneHeadRe = /^## Scene\s+(\d+)\s*:\s*(.+?)\s*$/gm;
 const heads = [...planText.matchAll(sceneHeadRe)];
 if (heads.length === 0) die("no '## Scene N: <name>' headings found in section_plan.md");
 
+// Film Direction: the film-level header (`## Film Direction` ... up to the first
+// `## Scene`). Written once by visual-design; the orchestrator prepends it to
+// every scene worker's shared packet header and to the finalize dispatch, so
+// per-scene creative_brief can stay deltas-only. validate.mjs section enforces
+// presence and size; prep just extracts what is there (tolerant when absent).
+let film_direction = "";
+{
+  const fdHead = planText.match(/^## Film Direction[ \t]*$/m);
+  if (fdHead && fdHead.index < heads[0].index) {
+    film_direction = planText.slice(fdHead.index + fdHead[0].length, heads[0].index).trim();
+  }
+}
+
 const ANCHORS = ["Effects", "Duration", "Continuity"];
 // Components/Surface anchors removed — the design system is a style REFERENCE,
 // not a plan-time contract (workers self-pick components from the forwarded
@@ -975,6 +988,7 @@ const spec = {
   width: CANVAS_W,
   height: CANVAS_H,
   captions_enabled,
+  film_direction,
   total_duration_s: Number(total_duration_s.toFixed(3)),
   bgm_path,
   font_face_css: fontFaceCss,
@@ -1002,6 +1016,9 @@ console.log(
 console.log(`  canvas: ${CANVAS_W}×${CANVAS_H} (${dimSource})`);
 console.log(
   `  captions: ${captions_enabled ? "enabled (scene keep-out + band reserved)" : "disabled (full-canvas scenes)"}`,
+);
+console.log(
+  `  film direction: ${film_direction ? `${film_direction.split(/\s+/).length} words (forward to worker shared header + finalize dispatch)` : "(none — legacy plan format)"}`,
 );
 console.log(`  bgm: ${bgm_path || "(none)"}`);
 console.log(

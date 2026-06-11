@@ -125,7 +125,7 @@ Static elements = dead video. Plan must name what keeps each element alive after
 
 Inter-scene transitions follow a limited vocabulary. Choose only 2-3 and repeat them - repetition creates professional cohesion. Cleanest archive reference: playground-launch uses **only cut-the-curve** across 8 distinct visual universes, which is what makes the film cohere.
 
-> **These 2-3 slots count only Tier-B transitions on `break` boundaries** (choose 2-3 from crossfade / blur-crossfade / push-slide / zoom-through / squeeze). `shared-element` (morph, Tier-A) is a shared-element bridge hand-written by the worker inside two scenes, **not part of this vocabulary and not counted** - it is driven by narrative `intent: morph`, which appears only on premium-transition runs (user opt-in); on a standard run every boundary is Tier-B.
+> Choose 2-3 from `crossfade` / `blur-crossfade` / `push-slide` / `zoom-through` / `squeeze` — all between-scene transitions injected by the harness onto clip wrappers.
 
 ### Cut-the-curve (archive signature; default for most cases)
 
@@ -139,18 +139,9 @@ One scene fades while pulling toward frame center; camera pushes forward into th
 
 Directional slide (matches narrative flow), optionally with parallax.
 
-### Morph (strongest narrative seam)
-
-Shared element transforms between scenes (phone cluster -> circular avatar = scale + borderRadius tween).
-
 ### Hard cut
 
 Instant opacity flip, used for high-energy moments (grid appears fully filled with no build-in). **Use sparingly** - cut-the-curve is default; hard cuts are reserved for type/tone shifts.
-
-**Plan must name a transition for every scene** - it determines Continuity for the next scene (see guide.md "Hard Contracts"):
-
-- `hard cut` / `jump cut` -> Continuity `break`
-- `cut-the-curve` / `morph` / `scale+fade` on the same material -> Continuity `continue`
 
 ## Plan Reference Example
 

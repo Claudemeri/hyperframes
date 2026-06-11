@@ -1,15 +1,13 @@
 #!/usr/bin/env node
-// transitions.mjs — merges three former Phase-4c scripts behind one subcommand dispatcher.
+// transitions.mjs — inter-scene transition injector behind one subcommand dispatcher.
 //
-//   inject       ← inject-transitions.mjs       (Tier-B/Tier-A wrapper overlap + GSAP stamp)
-//   verify       ← verify-transitions.mjs        (deterministic gate over injector output)
-//   check-bridge ← check-bridge-continuity.mjs   (Step-6 preflight gate for Tier-A bridges)
+//   inject  — wrapper overlap + GSAP stamp on the index.html clip wrappers
+//   verify  — deterministic gate over the injector's output
 //
 // Each subcommand reads its args from process.argv AFTER the subcommand token
-// (i.e. process.argv.slice(3)). Original per-subcommand usage:
-//   node transitions.mjs inject       --group-spec ./group_spec.json --hyperframes .
-//   node transitions.mjs verify       --group-spec ./group_spec.json --index ./index.html
-//   node transitions.mjs check-bridge --hyperframes . --group-spec ./group_spec.json
+// (i.e. process.argv.slice(3)):
+//   node transitions.mjs inject --group-spec ./group_spec.json --hyperframes .
+//   node transitions.mjs verify --group-spec ./group_spec.json --index ./index.html
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -49,13 +47,7 @@ async function runInject(argv) {
   const { width: CANVAS_W, height: CANVAS_H } = readDims(spec);
 
   const transitions = Array.isArray(spec.transitions) ? spec.transitions : [];
-  // Both tiers get the SAME wrapper overlap + ping-pong-track mechanics; only the
-  // stamped GSAP differs. Tier B: a registry transition on the wrappers. Tier A:
-  // a short plain wrapper crossfade — the morph itself is authored INSIDE the two
-  // scenes by the worker (the master timeline can't reach into a sub-comp), so here
-  // we only crossfade the wrappers so bg/title swap while the aligned bridge element
-  // reads as continuous. (Verified by render-prototype 2026-05-31.)
-  const injectable = transitions.filter((t) => t.tier === "b" || t.tier === "a");
+  const injectable = transitions.filter((t) => t && t.type);
 
   let html = readFileSync(indexPath, "utf8");
 
@@ -181,16 +173,11 @@ async function runInject(argv) {
   writeFileSync(indexPath, html);
 
   // ---------- summary ----------
-  const nB = applied.filter((a) => a.tier === "b").length;
-  const nA = applied.filter((a) => a.tier === "a").length;
-  console.log(
-    `✓ inject-transitions: ${applied.length} transition(s) stamped into index.html (tier-b ${nB}, tier-a ${nA})`,
-  );
+  console.log(`✓ inject-transitions: ${applied.length} transition(s) stamped into index.html`);
   for (const a of applied) {
     const dir = a.direction ? ` ${a.direction}` : "";
-    const tag = a.tier === "a" ? ` [Tier-A bridge:${a.bridge_id || "?"}]` : "";
     console.log(
-      `  ${a.from}→${a.to}: ${a.type}${dir} ${a.durApplied}s @ T=${a.T}s${tag} (from ext +${a.durApplied}s, to start→${a.T})`,
+      `  ${a.from}→${a.to}: ${a.type}${dir} ${a.durApplied}s @ T=${a.T}s (from ext +${a.durApplied}s, to start→${a.T})`,
     );
   }
   const trackSummary = [...clips.values()]
@@ -204,17 +191,6 @@ async function runInject(argv) {
   function buildGsap(t, dur, T) {
     const OLD = `"#el-${t.from}"`;
     const NEW = `"#el-${t.to}"`;
-
-    // Tier A: the worker authored the morph INSIDE the two scenes (outgoing tweens the
-    // bridge element to a handoff pose; incoming starts there, holds for the seam, then
-    // continues). The harness only crossfades the WRAPPERS so bg/title swap while the
-    // aligned bridge element reads as one continuous element. No registry template.
-    if (t.tier === "a") {
-      return [
-        `tl.to(${OLD}, { opacity: 0, duration: ${dur}, ease: "power1.inOut" }, ${T});`,
-        `tl.fromTo(${NEW}, { opacity: 0 }, { opacity: 1, duration: ${dur}, ease: "power1.inOut" }, ${T});`,
-      ];
-    }
 
     const rec = txByName.get(t.type);
     if (!rec) die(`transition ${t.from}→${t.to}: type "${t.type}" not in registry`);
@@ -284,9 +260,7 @@ async function runVerify(argv) {
     bail(`group_spec.json parse: ${e.message}`);
   }
   const transitions = Array.isArray(spec.transitions) ? spec.transitions : [];
-  // Both tiers get the same wrapper overlap + cross-track invariants (Tier-A's morph
-  // lives inside the scenes, but its seam wrapper-crossfade obeys the same mechanics).
-  const injectable = transitions.filter((t) => t.tier === "b" || t.tier === "a");
+  const injectable = transitions.filter((t) => t && t.type);
 
   // Authoritative SCENE id set (same as the injector) — captions/voice/bgm/sfx are
   // NOT scenes and are excluded from the scene track-overlap invariant. Captions
@@ -387,144 +361,6 @@ async function runVerify(argv) {
 }
 
 // ===========================================================================
-// check-bridge ← check-bridge-continuity.mjs
-async function runCheckBridge(argv) {
-  const flag = (name, def) => {
-    const i = argv.indexOf(`--${name}`);
-    return i >= 0 && i + 1 < argv.length ? argv[i + 1] : def;
-  };
-
-  const hyperframesDir = resolve(flag("hyperframes", "."));
-  const groupSpecPath = resolve(flag("group-spec", "./group_spec.json"));
-  const compositionsDir = join(hyperframesDir, "compositions");
-  const outPath = join(hyperframesDir, "bridge_check.json");
-
-  if (!existsSync(groupSpecPath)) {
-    console.error(`✗ check-bridge-continuity: group_spec.json not found at ${groupSpecPath}`);
-    process.exit(1);
-  }
-
-  let spec;
-  try {
-    spec = JSON.parse(readFileSync(groupSpecPath, "utf8"));
-  } catch (e) {
-    console.error(`✗ check-bridge-continuity: group_spec.json parse: ${e.message}`);
-    process.exit(1);
-  }
-
-  const bridges = (Array.isArray(spec.transitions) ? spec.transitions : []).filter(
-    (t) => t.tier === "a",
-  );
-
-  if (bridges.length === 0) {
-    console.log(`✓ check-bridge-continuity: 0 tier-a bridges — nothing to check`);
-    writeFileSync(outPath, JSON.stringify({ bridges: [], ok: true }, null, 2) + "\n");
-    process.exit(0);
-  }
-
-  const fatals = [];
-  const warnings = [];
-  const rows = [];
-
-  function readScene(sid) {
-    const p = join(compositionsDir, `${sid}.html`);
-    if (!existsSync(p)) {
-      fatals.push(`${sid}: compositions/${sid}.html missing — worker did not produce it`);
-      return null;
-    }
-    return readFileSync(p, "utf8");
-  }
-
-  // Find the element carrying data-bridge-id="<id>" and return its opening tag + class list.
-  function findBridgeEl(html, bridgeId) {
-    const re = new RegExp(`<[a-zA-Z][^>]*\\bdata-bridge-id=["']${bridgeId}["'][^>]*>`, "g");
-    const matches = html.match(re) || [];
-    return matches;
-  }
-
-  // Static-hidden check on the opening tag's inline style.
-  function inlineHidden(tag) {
-    const styleM = tag.match(/style=["']([^"']*)["']/i);
-    if (!styleM) return false;
-    const s = styleM[1].toLowerCase();
-    return (
-      /display\s*:\s*none/.test(s) ||
-      /visibility\s*:\s*hidden/.test(s) ||
-      /opacity\s*:\s*0(\.0+)?\s*(;|$)/.test(s)
-    );
-  }
-
-  for (const b of bridges) {
-    const id = b.bridge_id;
-    const row = { from: b.from, to: b.to, bridge_id: id, ok: true, notes: [] };
-    if (!id) {
-      fatals.push(
-        `${b.from}→${b.to}: tier-a transition has no bridge_id (prep should have caught this)`,
-      );
-      row.ok = false;
-      rows.push(row);
-      continue;
-    }
-
-    for (const [sid, role] of [
-      [b.from, "from"],
-      [b.to, "to"],
-    ]) {
-      const html = readScene(sid);
-      if (html == null) {
-        row.ok = false;
-        continue;
-      }
-      const tags = findBridgeEl(html, id);
-      if (tags.length === 0) {
-        fatals.push(
-          `${sid} (${role}): no element with data-bridge-id="${id}" — the shared bridge element is missing. ` +
-            `Both bridged scenes must contain <... data-bridge-id="${id}" ...>.`,
-        );
-        row.ok = false;
-        continue;
-      }
-      if (tags.length > 1) {
-        fatals.push(
-          `${sid} (${role}): ${tags.length} elements carry data-bridge-id="${id}" — must be exactly one`,
-        );
-        row.ok = false;
-        continue;
-      }
-      if (inlineHidden(tags[0])) {
-        fatals.push(
-          `${sid} (${role}): the bridge element data-bridge-id="${id}" has a static display:none/visibility:hidden/opacity:0 — it would be invisible at the seam. Make it visible (GSAP can still animate it in/out).`,
-        );
-        row.ok = false;
-      }
-      row.notes.push(`${role}=${sid}:found`);
-    }
-
-    rows.push(row);
-  }
-
-  writeFileSync(
-    outPath,
-    JSON.stringify({ bridges: rows, ok: fatals.length === 0, warnings }, null, 2) + "\n",
-  );
-
-  if (fatals.length) {
-    console.error(`✗ check-bridge-continuity: ${fatals.length} fatal(s):`);
-    for (const f of fatals) console.error(`  - ${f}`);
-    console.error(
-      `  → re-dispatch the worker(s) owning the affected scene(s); both bridged scenes must carry the same data-bridge-id.`,
-    );
-    process.exit(1);
-  }
-
-  console.log(
-    `✓ check-bridge-continuity: ${bridges.length} tier-a bridge(s) verified (element present + visible in both scenes)`,
-  );
-  for (const r of rows) console.log(`  ${r.from}→${r.to}: bridge="${r.bridge_id}" ✓`);
-  if (warnings.length) for (const w of warnings) console.log(`  ⚠ ${w}`);
-}
-
-// ===========================================================================
 // dispatcher
 const sub = process.argv[2];
 const rest = process.argv.slice(3);
@@ -535,10 +371,7 @@ switch (sub) {
   case "verify":
     await runVerify(rest);
     break;
-  case "check-bridge":
-    await runCheckBridge(rest);
-    break;
   default:
-    console.error("usage: node transitions.mjs <inject|verify|check-bridge> [args...]");
+    console.error("usage: node transitions.mjs <inject|verify> [args...]");
     process.exit(2);
 }

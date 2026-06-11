@@ -23,7 +23,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { transitionsByName, tierATypes } from "./lib/transition-registry.mjs";
+import { transitionsByName } from "./lib/transition-registry.mjs";
 
 async function runNarrator(argv) {
   const REQUIRED_TOP = ["project", "narrativeArchetype", "emotionalArc", "scenes"];
@@ -37,11 +37,10 @@ async function runNarrator(argv) {
     "estimatedDuration",
   ];
   const REQUIRED_INTENT = ["type", "narrativeRole", "keyMessage", "persuasion", "emotionalBeat"];
-  // Narrative bridge intents (transition.intent). `morph` is the only one that maps
-  // to a Tier-A shared-element bridge (→ continuity "continue", same worker); the
-  // rest are Tier-B between-scene transitions the harness injects across workers
-  // (→ continuity "break"). Enforced below.
-  const VALID_TX_INTENTS = new Set(["morph", "cut", "slide", "dissolve", "zoom"]);
+  // Narrative seam intents (transition.intent) — visual-design translates each
+  // into a concrete registry transition type. All transitions are between-scene,
+  // injected by the harness onto clip wrappers.
+  const VALID_TX_INTENTS = new Set(["cut", "slide", "dissolve", "zoom"]);
   const VALID_INTENT_TYPES = new Set([
     "hook",
     "pain_point",
@@ -154,44 +153,32 @@ async function runNarrator(argv) {
           }
         }
 
-        // transition: intent ⟺ continuity (A2). `continue` (→ same worker) exists
-        // ONLY for a Tier-A morph; every other intent is a between-scene Tier-B
-        // transition the harness injects across workers, so it must be `break`.
-        // Mirrors the section-plan validator's biconditional, one representation up.
+        // transition.intent — narrative seam vocabulary only; the morph intent and
+        // the continuity/sharedMotif fields were removed along with Tier-A bridges
+        // (every scene is its own worker; all transitions are harness-injected).
         const tx = scene.transition;
         if (tx && typeof tx === "object") {
           const intent = tx.intent;
-          const cont =
-            typeof tx.continuity === "string" ? tx.continuity.toLowerCase() : tx.continuity;
           if (intent != null && !VALID_TX_INTENTS.has(intent)) {
             errors.push(
-              `${ctx}.transition.intent: "${intent}" not in [${[...VALID_TX_INTENTS].join(", ")}]`,
+              `${ctx}.transition.intent: "${intent}" not in [${[...VALID_TX_INTENTS].join(", ")}]` +
+                (intent === "morph"
+                  ? ` (Tier-A morph was removed — pick the closest between-scene intent)`
+                  : ""),
             );
           }
-          if (cont != null && cont !== "break" && cont !== "continue") {
+          if ("continuity" in tx) {
             errors.push(
-              `${ctx}.transition.continuity: must be "break" or "continue" (got "${tx.continuity}")`,
+              `${ctx}.transition.continuity: field removed (no worker grouping — every scene is its own worker); delete it`,
             );
           }
-          if (i === 0 && cont != null && cont !== "break") {
-            errors.push(`${ctx}.transition.continuity: scene 1 must be "break"`);
-          }
-          if (intent === "morph") {
-            if (cont !== "continue") {
-              errors.push(
-                `${ctx}.transition: intent "morph" requires continuity "continue" (a shared-element morph is authored by one worker across both scenes)`,
-              );
-            }
-            if (typeof tx.sharedMotif !== "string" || !tx.sharedMotif.trim()) {
-              errors.push(`${ctx}.transition: intent "morph" requires a non-empty "sharedMotif"`);
-            }
-          } else if (VALID_TX_INTENTS.has(intent) && cont === "continue") {
+          if ("sharedMotif" in tx) {
             errors.push(
-              `${ctx}.transition: intent "${intent}" is a Tier-B between-scene transition and must use continuity "break" — only intent "morph" may be "continue"`,
+              `${ctx}.transition.sharedMotif: field removed (Tier-A morph no longer exists); delete it`,
             );
           }
         } else if ("transition" in scene) {
-          errors.push(`${ctx}.transition must be an object {continuity, intent, ...}`);
+          errors.push(`${ctx}.transition must be an object {intent, ...}`);
         }
 
         // captions field is no longer consumed (LV2 captions are agent-authored
@@ -293,21 +280,20 @@ async function runSection(argv) {
   // **Blueprint:** is an optional (soft) anchor; if present it must parse cleanly.
   const sceneHeadRe = /^## Scene\s+(\d+)\s*:\s*(.+?)\s*$/gm;
   const heads = [...plan.matchAll(sceneHeadRe)];
-  const ANCHORS = ["Effects", "Duration", "Continuity"];
+  const ANCHORS = ["Effects", "Duration"];
   // Components/Surface anchors removed — the design system is a style REFERENCE,
   // not a plan-time contract. Workers pick components by visual judgment from the
   // forwarded library; surface is no longer a scene-level commitment. The optional
-  // anchors (Blueprint/Transition/Bridge/SFX) are validated inline below when
-  // present, not enforced as a required set — so there's no OPTIONAL_ANCHORS list.
+  // anchors (Blueprint/Transition/SFX) are validated inline below when present,
+  // not enforced as a required set — so there's no OPTIONAL_ANCHORS list.
+  // Continuity/Bridge anchors were removed with Tier-A; presence is fatal below.
 
   // Transition vocabulary — loaded from the single source of truth so this
   // validator never drifts from prep/injector. Absence of the anchor is fine
   // (prep default-fills); when present, type/direction/duration are checked here.
   let TX_BY_NAME = new Map();
-  let TX_TIER_A = new Set();
   try {
     TX_BY_NAME = transitionsByName();
-    TX_TIER_A = tierATypes();
   } catch (e) {
     // Non-fatal: if the registry can't be read, skip Transition validation rather
     // than block the whole plan check. prep.mjs will surface a hard error later.
@@ -432,6 +418,9 @@ async function runSection(argv) {
     // of, or prose leaking into, the worker's brief). See guide.md section 2, "block order".
     // PST/Handoff continuation lines (timecode-led) and bullets are NOT prose.
     {
+      // Continuity/Bridge are REMOVED anchors — kept in this classifier so a legacy
+      // line still reads as an anchor (and trips the removed-anchor fatal below)
+      // instead of being misread as prose.
       const ANCHOR_LINE_RE =
         /^\*\*(Effects|Duration|Continuity|Blueprint|Transition|Bridge|SFX|PrimarySubjectTimeline|Handoff):\*\*/;
       const blockLines = body.split("\n");
@@ -466,18 +455,17 @@ async function runSection(argv) {
       }
     }
 
-    let continuityVal = null;
-    if (found.Continuity != null) {
-      const v = found.Continuity.toLowerCase();
-      if (v !== "break" && v !== "continue") {
-        errors.push(
-          `${sceneId}: **Continuity:** must be "break" or "continue" (got "${found.Continuity}")`,
-        );
-      } else if (i === 0 && v !== "break") {
-        errors.push(`${sceneId}: scene 1 must be **Continuity:** break`);
-      } else {
-        continuityVal = v;
-      }
+    // Removed anchors (Tier-A era): Continuity drove worker grouping, Bridge named
+    // the shared morph element. Both concepts are gone — presence is a plan bug.
+    if (hasAnchor(body, "Continuity")) {
+      errors.push(
+        `${sceneId}: **Continuity:** anchor removed (no worker grouping — every scene is its own worker); delete the line`,
+      );
+    }
+    if (hasAnchor(body, "Bridge")) {
+      errors.push(
+        `${sceneId}: **Bridge:** anchor removed (Tier-A shared-element morph no longer exists); delete the line`,
+      );
     }
 
     // Transition (OPTIONAL): how this scene is ENTERED. Shape:
@@ -486,11 +474,6 @@ async function runSection(argv) {
     // Absent → prep default-fills. Scene 1's is the open (ignored as a between-
     // scene transition) but still shape-checked if present. Only validated when
     // the registry loaded (TX_BY_NAME non-empty).
-    // continue ⟺ Tier-A: track whether this scene NAMED a Tier-A (shared-element)
-    // transition, so the converse check after this block can enforce that a
-    // `continue` scene IS a Tier-A morph (the only reason two scenes share a
-    // worker). Stays false when no Transition anchor / registry unreadable.
-    let namedTierA = false;
     const txMatch = body.match(/^\*\*Transition:\*\*\s*(.*)$/m);
     if (txMatch && TX_BY_NAME.size > 0) {
       const raw = txMatch[1].trim();
@@ -500,21 +483,15 @@ async function runSection(argv) {
         const tokens = raw.split(/\s+/);
         const type = tokens[0].toLowerCase();
         const rec = TX_BY_NAME.get(type);
-        const isTierA = TX_TIER_A.has(type);
-        namedTierA = isTierA;
-        if (!rec && !isTierA) {
+        if (!rec) {
           errors.push(
-            `${sceneId}: **Transition:** unknown type "${type}" (known: ${[...TX_BY_NAME.keys()].join(", ")})`,
+            `${sceneId}: **Transition:** unknown type "${type}" (known: ${[...TX_BY_NAME.keys()].join(", ")})` +
+              (type === "shared-element" || type === "morph"
+                ? " — Tier-A shared-element was removed; use a between-scene type"
+                : ""),
           );
         } else {
-          // break boundary must not name a Tier-A (shared-element) transition —
-          // those require the same worker to author both scenes (continue only).
-          if (continuityVal === "break" && isTierA) {
-            errors.push(
-              `${sceneId}: **Transition:** "${type}" is a shared-element (Tier-A) transition but **Continuity: break** — Tier-A needs **Continuity: continue** (same worker authors both scenes)`,
-            );
-          }
-          // direction / duration trailing tokens (Tier-A types take neither)
+          // direction / duration trailing tokens
           for (const tok of tokens.slice(1)) {
             const t = tok.toLowerCase();
             if (/^[\d.]+s$/.test(t)) {
@@ -535,45 +512,7 @@ async function runSection(argv) {
             }
           }
         }
-
-        // Bridge anchor (Tier-A only): `shared-element` REQUIRES a **Bridge:** anchor
-        // (single backtick-wrapped kebab-case id) AND **Continuity: continue** (both
-        // scenes must land in one worker). A non-Tier-A scene must NOT carry **Bridge:**.
-        const bridgeMatch = body.match(/^\*\*Bridge:\*\*\s*(.*)$/m);
-        const bridgeRaw = bridgeMatch ? bridgeMatch[1].trim() : null;
-        const bridgeId = bridgeRaw ? (bridgeRaw.match(/`([^`]+)`/)?.[1] ?? null) : null;
-        if (isTierA) {
-          if (!bridgeId) {
-            errors.push(
-              `${sceneId}: **Transition:** "${type}" (Tier-A) requires a **Bridge:** \`<kebab-id>\` anchor naming the shared element`,
-            );
-          } else if (!/^[a-z][a-z0-9-]*$/.test(bridgeId)) {
-            errors.push(
-              `${sceneId}: **Bridge:** "${bridgeId}" must be kebab-case (lowercase, digits, hyphens)`,
-            );
-          }
-          if (continuityVal === "continue" || continuityVal == null) {
-            // ok (null = Continuity already errored above)
-          }
-        } else if (bridgeId) {
-          errors.push(
-            `${sceneId}: **Bridge:** present but **Transition:** is not a shared-element (Tier-A) type — Bridge only applies to Tier-A morphs`,
-          );
-        }
       }
-    }
-
-    // Converse of the break-rule above (A1): `continue` exists ONLY to land two
-    // scenes in one worker for a Tier-A morph. A `continue` scene that did not name
-    // a Tier-A (shared-element) transition — including one that omitted
-    // **Transition:** to accept a Tier-B default — has no reason to share a worker.
-    // Gated on the registry loading (else we'd false-positive when Transition
-    // validation is skipped). scene 1 can't reach here (continue on scene 1 already
-    // errored, leaving continuityVal null).
-    if (TX_BY_NAME.size > 0 && continuityVal === "continue" && !namedTierA) {
-      errors.push(
-        `${sceneId}: **Continuity: continue** is reserved for shared-element (Tier-A) morphs — name **Transition: shared-element** + **Bridge:** \`<id>\`, or set **Continuity: break**`,
-      );
     }
 
     if (found.Duration != null) {
@@ -678,7 +617,6 @@ async function runSection(argv) {
         }
       }
     }
-
   }
 
   // Sanity: if no scenes had any known effect, complain at the top level (per-scene

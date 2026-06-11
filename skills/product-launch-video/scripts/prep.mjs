@@ -14,7 +14,6 @@
 // section_plan.md anchors recognised:
 //   **Effects:**     — required, 2-5 backtick-wrapped rule ids
 //   **Duration:**    — required, positive float seconds
-//   **Continuity:**  — required, "break" | "continue" (scene 1 must be break)
 //   **Blueprint:**   — optional (soft), "based-on <id>" | "extended <id>" |
 //                      "composed" | absent (→ "composed"). Passed through to
 //                      group_spec.json so Phase 4b workers can consult the
@@ -32,8 +31,7 @@
 // Usage:
 //   node prep.mjs --section-plan <path> --narrator-scripts <path> \
 //                 --rules-dir <abs> --capture <path> --hyperframes <path> \
-//                 --out <path> [--audio-meta <path>] [--design-system <path>] \
-//                 [--scenes-per-group <int>]
+//                 --out <path> [--audio-meta <path>] [--design-system <path>]
 //
 // Exit 0 = group_spec.json written + summary on stdout.
 // Exit 1 = structural failure (missing anchor / missing rule / bad value) on stderr.
@@ -49,11 +47,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
-import {
-  loadTransitionRegistry,
-  transitionsByName,
-  tierATypes,
-} from "./lib/transition-registry.mjs";
+import { loadTransitionRegistry, transitionsByName } from "./lib/transition-registry.mjs";
 import { resolveDimensions } from "./lib/dimensions.mjs";
 
 // ---------- argv ----------
@@ -81,14 +75,10 @@ const captureDir = resolve(flag("capture", flag("research", "./capture")));
 const designSystemDir = resolve(flag("design-system", "./design-system"));
 const hyperframesDir = resolve(flag("hyperframes", "."));
 const outPath = resolve(flag("out", "./group_spec.json"));
-const scenesPerGroupMax = parseInt(flag("scenes-per-group", "2"), 10);
 // Optional — orchestrator passes <SKILL_DIR>/assets/sfx absolute path.
 // If absent: SFX cues in section_plan are silently ignored.
 // (Captions are written by the Phase 4a.5 captions agent, not by prep.)
 const sfxLibDir = flag("sfx-lib") ? resolve(flag("sfx-lib")) : null;
-if (!isFinite(scenesPerGroupMax) || scenesPerGroupMax < 1) {
-  die(`--scenes-per-group must be a positive integer (got "${flag("scenes-per-group")}")`);
-}
 
 // ---------- Step 1: bootstrap HyperFrames project root ----------
 if (!existsSync(hyperframesDir)) {
@@ -206,17 +196,17 @@ const sceneHeadRe = /^## Scene\s+(\d+)\s*:\s*(.+?)\s*$/gm;
 const heads = [...planText.matchAll(sceneHeadRe)];
 if (heads.length === 0) die("no '## Scene N: <name>' headings found in section_plan.md");
 
-const ANCHORS = ["Effects", "Duration", "Continuity"];
+const ANCHORS = ["Effects", "Duration"];
 // Components/Surface anchors removed — the design system is a style REFERENCE,
 // not a plan-time contract (workers self-pick components from the forwarded
-// library; no scene-level surface commitment). Blueprint/Transition/Bridge stay.
-const OPTIONAL_ANCHORS = ["Blueprint", "Transition", "Bridge"];
+// library; no scene-level surface commitment). Blueprint/Transition stay.
+const OPTIONAL_ANCHORS = ["Blueprint", "Transition"];
 
 function anchorRe(name) {
   return new RegExp(`^\\*\\*${name}:\\*\\*\\s*(.*)$`, "m");
 }
 
-function parseSceneBlock(body, sceneId, isFirst) {
+function parseSceneBlock(body, sceneId) {
   const raw = {};
   let lastAnchorEnd = 0;
   for (const a of ANCHORS) {
@@ -248,12 +238,6 @@ function parseSceneBlock(body, sceneId, isFirst) {
   if (!isFinite(estimatedDuration_s) || estimatedDuration_s <= 0)
     die(`${sceneId}: **Duration:** ${estimatedDuration_s} is not a positive float`);
 
-  // Continuity: break | continue (scene 1 must be break)
-  const cont = raw.Continuity.toLowerCase();
-  if (cont !== "break" && cont !== "continue")
-    die(`${sceneId}: **Continuity:** must be "break" or "continue" (got "${raw.Continuity}")`);
-  if (isFirst && cont !== "break") die(`${sceneId}: scene 1 must be **Continuity:** break`);
-
   // Blueprint (soft): "based-on <id>" | "extended <id>" | "composed" | (absent → "composed")
   // Do not validate shape here: the validator can add that later; id references are
   // loosely bound and the build agent handles them.
@@ -274,10 +258,7 @@ function parseSceneBlock(body, sceneId, isFirst) {
       if (/^[\d.]+s$/i.test(tok)) durationOverride = parseFloat(tok);
       else direction = tok.toUpperCase();
     }
-    // Bridge (Tier-A only): backtick-wrapped kebab-case id naming the shared element.
-    // The destination scene carries it; both scenes' workers place data-bridge-id=<id>.
-    const bridgeId = raw.Bridge ? (raw.Bridge.match(/`([^`]+)`/)?.[1] ?? null) : null;
-    if (type) transition = { type, direction, duration_s: durationOverride, bridge_id: bridgeId };
+    if (type) transition = { type, direction, duration_s: durationOverride };
   }
 
   // SFX (optional / soft anchor; omitted entirely = no SFX for this scene):
@@ -338,7 +319,6 @@ function parseSceneBlock(body, sceneId, isFirst) {
   return {
     effects,
     estimatedDuration_s,
-    continuity: cont,
     blueprint,
     transition,
     sfxCues,
@@ -355,7 +335,7 @@ for (let i = 0; i < heads.length; i++) {
   const end = i + 1 < heads.length ? heads[i + 1].index : planText.length;
   const body = planText.slice(start, end);
   const sceneId = `scene_${sceneNumber}`;
-  const parsed = parseSceneBlock(body, sceneId, i === 0);
+  const parsed = parseSceneBlock(body, sceneId);
   scenes.push({ sceneNumber, sceneId, sceneName, ...parsed });
 }
 
@@ -497,10 +477,11 @@ const narratorByNumber = new Map((narratorScripts.scenes || []).map((s) => [s.sc
 // override for testing). The resolved size is stamped into group_spec.width/
 // height; every downstream script + scene worker reads it from there. See the
 // seam doc at scripts/lib/dimensions.mjs.
-const { width: CANVAS_W, height: CANVAS_H, source: dimSource } = resolveDimensions(
-  { width: flag("width"), height: flag("height") },
-  narratorScripts,
-);
+const {
+  width: CANVAS_W,
+  height: CANVAS_H,
+  source: dimSource,
+} = resolveDimensions({ width: flag("width"), height: flag("height") }, narratorScripts);
 
 let audioMeta = null;
 if (audioMetaPath) {
@@ -645,68 +626,54 @@ for (const s of scenes) {
   s.assetCandidates = candidates;
 }
 
-// ---------- Step 6: group by continuity, cap=N ----------
-const groups = [];
-let cur = null;
+// ---------- Step 6: one scene per worker ----------
+// Multi-scene grouping (by Continuity, cap=N) existed solely so one worker could
+// author a Tier-A cross-scene morph. Tier-A was removed, so every scene is its
+// own worker — simplest dispatch, no double-scene long-tail.
 // Precomputed cumulative scene start — finalize reads this verbatim instead of
 // accumulating in JS, dodging FP-precision overlaps that lint catches as
 // `overlapping_clips_same_track`.
+const groups = [];
 let runningStart = 0;
 for (const s of scenes) {
-  const startNew = s.continuity === "break" || !cur || cur.scene_ids.length >= scenesPerGroupMax;
-  if (startNew) {
-    if (cur) groups.push(cur);
-    cur = {
-      worker_id: `w${groups.length + 1}`,
-      scene_ids: [],
-      scenes: {},
-    };
-  }
   const start_s = Number(runningStart.toFixed(3));
-  cur.scene_ids.push(s.sceneId);
-  cur.scenes[s.sceneId] = {
-    start_s,
-    effects: s.effects,
-    rule_paths: s.rule_paths,
-    assetCandidates: s.assetCandidates,
-    estimatedDuration_s: s.estimatedDuration_s,
-    voicePath: s.voicePath,
-    wordsPath: s.wordsPath,
-    blueprint: s.blueprint,
-    design_chunks: s.design_chunks,
-    creative_brief: s.creative_brief,
-    // Tier-A shared-element bridge — back-filled in Step 6.6 after transitions[] is
-    // computed (a scene can be the `from` and/or `to` of a bridge). null = no bridge.
-    shared_element_bridge: null,
-  };
+  groups.push({
+    worker_id: `w${groups.length + 1}`,
+    scene_ids: [s.sceneId],
+    scenes: {
+      [s.sceneId]: {
+        start_s,
+        effects: s.effects,
+        rule_paths: s.rule_paths,
+        assetCandidates: s.assetCandidates,
+        estimatedDuration_s: s.estimatedDuration_s,
+        voicePath: s.voicePath,
+        wordsPath: s.wordsPath,
+        blueprint: s.blueprint,
+        design_chunks: s.design_chunks,
+        creative_brief: s.creative_brief,
+      },
+    },
+  });
   runningStart += s.estimatedDuration_s;
 }
-if (cur) groups.push(cur);
 
-// ---------- Step 6.6: scene-to-scene transitions (Tier B harness) ----------
-// One record per adjacent scene pair. `is_break` is derived from the GROUPING
-// (different worker_id) — NOT re-read from the plan's Continuity anchor — because
-// the cap=N grouping (Step 6) is the authority on which scenes a single worker
-// actually owns. transitions.mjs inject acts only on tier:"b" records in Phase 1.
+// ---------- Step 6.6: scene-to-scene transitions ----------
+// One record per adjacent scene pair, injected by transitions.mjs onto the
+// index.html clip wrappers.
 //
 // Determinism: the planner optionally names a transition per scene (the ENTERING
 // transition). When absent, we default-fill from the registry's rules. No agent.
 const transitions = [];
 let txRegistry = null;
 let txByName = new Map();
-let txTierA = new Set();
 try {
   txRegistry = loadTransitionRegistry();
   txByName = transitionsByName();
-  txTierA = tierATypes();
 } catch (e) {
   anomalies.push(`transition registry unreadable — scene transitions skipped (${e.message})`);
 }
 if (txRegistry) {
-  // scene_id -> worker_id (so we can tell break vs continue boundaries from grouping)
-  const sceneWorker = new Map();
-  for (const g of groups) for (const sid of g.scene_ids) sceneWorker.set(sid, g.worker_id);
-
   // Energy classification for the DEFAULT transition (only when the planner did
   // not name one). We scan the entering scene's TONE words — the mood the brief
   // actually describes — NOT layout jargon. Critically we do NOT match words like
@@ -730,14 +697,12 @@ if (txRegistry) {
     const toScene = scenes[i];
     const fromSid = fromScene.sceneId;
     const toSid = toScene.sceneId;
-    const is_break = sceneWorker.get(fromSid) !== sceneWorker.get(toSid);
 
     // The ENTERING transition is named on the destination scene.
-    const named = toScene.transition; // { type, direction, duration_s, bridge_id } | null
+    const named = toScene.transition; // { type, direction, duration_s } | null
     let type = named?.type || null;
     let direction = named?.direction || null;
     let durationOverride = named?.duration_s ?? null;
-    const bridgeId = named?.bridge_id || null;
 
     // Default-fill (no named transition): one calm universal — blur-crossfade,
     // which masks any background shift and reads intentional — unless the entering
@@ -754,25 +719,14 @@ if (txRegistry) {
     }
 
     const rec = txByName.get(type);
-    const isTierA = txTierA.has(type);
-    // Tier assignment: Tier-A only when same-worker (continue) AND a Tier-A type.
-    const tier = !is_break && isTierA ? "a" : "b";
 
     // Resolve direction default for directional types.
     if (rec && Array.isArray(rec.directions) && rec.directions.length > 0 && !direction) {
       direction = rec.default_direction || rec.directions[0];
     }
 
-    // Tier-A duration: the seam crossfade should be SHORT (prototype: 0.25s reads cleaner
-    // than 0.5s — shrinks the two-aligned-elements ghost window). Tier-B keeps registry default.
-    const TIER_A_SEAM_S = 0.25;
     const duration_s = Number(
-      (isTierA && tier === "a"
-        ? TIER_A_SEAM_S
-        : durationOverride != null
-          ? durationOverride
-          : (rec?.default_duration_s ?? 0.5)
-      ).toFixed(3),
+      (durationOverride != null ? durationOverride : (rec?.default_duration_s ?? 0.5)).toFixed(3),
     );
 
     transitions.push({
@@ -781,76 +735,8 @@ if (txRegistry) {
       type,
       direction: direction || null,
       duration_s,
-      tier,
-      is_break,
-      bridge_id: tier === "a" ? bridgeId : null,
-      from_worker: sceneWorker.get(fromSid),
-      to_worker: sceneWorker.get(toSid),
     });
   }
-
-  // ---------- Step 6.7: Tier-A cannot span workers ----------
-  // The cap=N grouping can split a "continue" pair across two workers. An anchor-
-  // level check (validator) can't catch that — it only sees Continuity, not the
-  // post-grouping worker assignment. A Tier-A transition needs ONE worker to author
-  // both scenes (shared element lives in both files), so a cross-worker Tier-A is
-  // unbuildable. Fail loudly with the three fixes.
-  for (const t of transitions) {
-    const namedTierA = toSceneTransitionIsTierA(t);
-    if (namedTierA && t.is_break) {
-      die(
-        `Transition ${t.from}→${t.to}: a shared-element (Tier-A) transition was requested but grouping ` +
-          `splits the scenes across workers (${t.from}=${t.from_worker}, ${t.to}=${t.to_worker}). ` +
-          `Fix one of: (a) use a Tier-B transition here (e.g. blur-crossfade), ` +
-          `(b) ensure both scenes are **Continuity: continue** so they share a worker, or ` +
-          `(c) raise --scenes-per-group so the cap doesn't split them.`,
-      );
-    }
-  }
-
-  // ---------- Step 6.8: back-fill shared_element_bridge onto worker dispatch ----------
-  // For each tier:"a" transition, tell BOTH scenes' worker(s) (here: the one shared worker)
-  // about the bridge so it places data-bridge-id=<id> in both files and authors the morph.
-  // from-scene role="from" (morphs TO the handoff pose at its end), to-scene role="to"
-  // (starts at the handoff pose, holds across the seam, then continues). bridge_id is required.
-  for (const t of transitions) {
-    if (t.tier !== "a") continue;
-    if (!t.bridge_id) {
-      die(
-        `Transition ${t.from}→${t.to}: Tier-A (${t.type}) requires a **Bridge:** \`<id>\` anchor on ${t.to} ` +
-          `naming the shared element — none found.`,
-      );
-    }
-    // locate the (single) worker group that owns both scenes
-    const g = groups.find((gr) => gr.scenes[t.from] && gr.scenes[t.to]);
-    if (!g) {
-      // should be unreachable (Step 6.7 already fataled cross-worker), but guard anyway
-      die(
-        `Transition ${t.from}→${t.to}: Tier-A scenes not co-located in one worker (internal error)`,
-      );
-    }
-    g.scenes[t.from].shared_element_bridge = {
-      bridge_id: t.bridge_id,
-      role: "from",
-      partner: t.to,
-      seam_duration_s: t.duration_s,
-    };
-    g.scenes[t.to].shared_element_bridge = {
-      bridge_id: t.bridge_id,
-      role: "to",
-      partner: t.from,
-      seam_duration_s: t.duration_s,
-    };
-  }
-}
-
-// True iff the destination scene explicitly NAMED a Tier-A transition type.
-// (We only hard-fail on an explicit Tier-A request that got split — never on a
-// defaulted Tier-B, which is always safe.)
-function toSceneTransitionIsTierA(t) {
-  const toScene = scenes.find((s) => s.sceneId === t.to);
-  const named = toScene?.transition?.type;
-  return named != null && tierATypes().has(named);
 }
 
 // ---------- Step 6.5: SFX library copy + cue → global timing ----------
@@ -964,7 +850,6 @@ if (audioMeta?.bgm_path) {
 const captions_enabled = scenes.some((s) => Boolean(s.wordsPath));
 
 const spec = {
-  scenes_per_group_max: scenesPerGroupMax,
   total_scenes: scenes.length,
   width: CANVAS_W,
   height: CANVAS_H,
@@ -999,14 +884,10 @@ console.log(
   `  sfx cues:      ${sfx.length}${sfxLibDir ? "" : " (--sfx-lib not passed; cues dropped)"}`,
 );
 if (transitions.length) {
-  const tb = transitions.filter((t) => t.tier === "b").length;
-  const ta = transitions.filter((t) => t.tier === "a").length;
-  console.log(`  transitions:   ${transitions.length} (tier-b ${tb}, tier-a ${ta})`);
+  console.log(`  transitions:   ${transitions.length}`);
   for (const t of transitions) {
     const dir = t.direction ? ` ${t.direction}` : "";
-    console.log(
-      `    ${t.from}→${t.to}: ${t.type}${dir} ${t.duration_s}s [tier ${t.tier}${t.is_break ? "" : ", continue"}]`,
-    );
+    console.log(`    ${t.from}→${t.to}: ${t.type}${dir} ${t.duration_s}s`);
   }
 } else {
   console.log(`  transitions:   0 (single scene or registry unavailable)`);

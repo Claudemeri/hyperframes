@@ -72,7 +72,7 @@ Real videos often _layer_ multiple archetypes. Reverse-engineered samples explic
 - **Outer archetype** = macro emotional arc (PAS / Future Pacing / BAB / Demo Loop)
 - **Inner rhythm** = tactical rhythm inside the showcase phase (Feature-Benefit Cascade is the most common inner rhythm; it alternates 6+ consecutive scenes between `feature_showcase` and `benefit_highlight`)
 
-Write `narrativeArchetype` as `"<outer> with <inner>"`. The downstream visual-design phase reads it for pacing; a Cascade inner rhythm means tighter `morph` / `slide` seams (mostly `continuity: continue`) and shorter scenes.
+Write `narrativeArchetype` as `"<outer> with <inner>"`. The downstream visual-design phase reads it for pacing; a Cascade inner rhythm means tighter `slide` / `dissolve` seams and shorter scenes.
 
 ## Narrative Architecture
 
@@ -131,49 +131,22 @@ Scenes with compound beats are often strongest, e.g. "Excitement _and_ foresight
 
 ### Transition Taxonomy
 
-Every scene's `transition` describes **how it arrives from the previous scene**, using two machine fields + prose + (for morph) a shared element name:
+Every scene's `transition` describes **how it arrives from the previous scene**, using one machine field (`intent`) + prose:
 
-#### `continuity` - `"break"` | `"continue"` (**drives downstream grouping; determined by `intent`**)
+#### `intent` - 4 narrative seam intentions (**not** visual implementation)
 
-The only machine consequence of `continuity` is grouping: `prep.mjs` puts adjacent `continue` scenes into the **same scene worker**. The only reason two scenes should land in the same worker is so that worker can **write a cross-scene seam the harness cannot inject** by hand - a Tier-A shared-element morph. Therefore:
+Choose one of these 4. This is "narrative-level" vocabulary - it expresses what kind of connection the seam is, **not** blur amount / direction / duration (visual-design translates those according to preset/palette). Every transition is a between-scene seam injected by the harness onto the clip wrappers after assembly — no scene ever writes transition code, and every scene is authored by its own worker:
 
-- **`continue` only pairs with `intent: morph`** - a shared element morphs across scenes, and the worker writes that morph inside both outgoing and incoming scenes, so they must share a worker.
-- **`break` pairs with every other intent** (`cut` / `slide` / `dissolve` / `zoom`) - these are **inter-scene** Tier-B transitions, injected by the harness onto clip wrappers after assembly; they can be injected whether scenes share a worker or not.
-- **Scene 1 is always `break`** (there is no previous scene to continue from).
-
-> Therefore `continuity` is not a free narrative field; it **follows `intent`**: `morph` => `continue`; everything else => `break`. `validate.mjs narrator` enforces this (violation -> fatal). This narrowing prevents a slide that merely "feels continuous" from consuming a cap=2 worker slot and pushing out a real morph pair that needs `continue` (a top downstream fatal).
->
-> **Tier-A morph is an opt-in premium feature — default to `break` everywhere.** Use `intent: morph` ONLY when the dispatch carries `Transitions: premium` (the user explicitly asked for seamless / morph / premium transitions). Without that line, give every scene a Tier-B intent (`cut` / `slide` / `dissolve` / `zoom`) — Tier-B seams are injected free by the harness and read clean; they also keep every scene a single-worker unit (no double-scene long-tail). **When premium IS requested**: whenever two scenes truly share a load-bearing throughline element (see `sharedMotif` criteria below), pair them with `morph` — it is the most polished seam in the film, and multiple pairs are fine (`morph(1,2) -> break -> morph(3,4) ...`). The hard mechanics are unchanged: **each pair is exactly 2 scenes, and pairs must be separated by a `break` (Tier-B)** — with cap=2, one continue chain can span **exactly 2 scenes**; writing `continue` into a third scene is the only violation, rejected by `prep.mjs` (a Tier-A morph split across workers cannot be built). Either split into "one morph pair + one Tier-B seam", or raise `--scenes-per-group`.
-
-#### `intent` - 5 narrative seam intentions (**not** visual implementation)
-
-Choose one of these 5. This is "narrative-level" vocabulary - it expresses what kind of connection the seam is, **not** blur amount / direction / duration (visual-design translates those according to preset/palette):
-
-| Intent     | Narrative meaning                                                                                                                         | **Required** continuity | Downstream translation direction (visual-design decides values)   |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------- |
-| `morph`    | **One shared element transforms across scenes** (the shared element is open-ended: card->avatar / waveform->search box are only examples) | **`continue`**          | Tier-A shared-element bridge (worker writes morph in both scenes) |
-| `cut`      | Clean switch; scenes are not continuous (type/tone shift, high-energy beat)                                                               | **`break`**             | hard cut / crossfade                                              |
-| `slide`    | Directional slide / push (matches narrative flow: forward, next point)                                                                    | **`break`**             | push-slide (direction set by visual-design)                       |
-| `dissolve` | Soft dissolve / focus shift (enter atmosphere, emotional transition)                                                                      | **`break`**             | crossfade / blur-crossfade (when colors clash)                    |
-| `zoom`     | Camera pushes / scales through to next focal point                                                                                        | **`break`**             | zoom-through                                                      |
-
-`continuity` **is not a free choice; it follows `intent`**: `morph` => `continue`, the other four => `break` (see the `continuity` section for why).
-
-#### `sharedMotif` - required only when `intent: "morph"`
-
-Name the **element / motif that carries through this seam** (what morphs at the narrative layer), <=8 words. Examples: `"the product card"` / `"the audio waveform"` / `"the avatar circle"`. **Only name what it is; do not describe geometry/implementation** - the downstream worker uses this to place the same element in both scenes and design the morph. Omit this field when `intent` is not morph.
-
-**What makes a good shared element (pass these three tests before choosing `morph`)**: do not invent a shared element just to have one; identify which element that already belongs in both scenes can connect them best.
-
-- **Load-bearing in both scenes:** it is the visual protagonist or key information carrier in both outgoing and incoming scenes (logo, product body, hero device, active card), **not** a decorative object inserted temporarily just to enable a morph.
-- **Naturally co-present:** first ask "Is there an object that would naturally appear in both scenes?" If yes, use morph to connect it; if no, use Tier-B.
-- **The transformation advances the story:** the element's morph must **carry** the narrative jump (same product moves from use A to use B, same logo lands from splash into UI, same data moves from chart into conclusion), rather than making the story pause for a flashy animation.
-
-Only set `intent: "morph"` when all three are true; if only one or two are true, use `dissolve` / `slide` (Tier-B) instead - the visual seam can still be clean, and it does not consume a cap=2 worker slot.
+| Intent     | Narrative meaning                                                           | Downstream translation direction (visual-design decides values) |
+| ---------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `cut`      | Clean switch; scenes are not continuous (type/tone shift, high-energy beat) | hard cut / crossfade                                            |
+| `slide`    | Directional slide / push (matches narrative flow: forward, next point)      | push-slide (direction set by visual-design)                     |
+| `dissolve` | Soft dissolve / focus shift (enter atmosphere, emotional transition)        | crossfade / blur-crossfade (when colors clash)                  |
+| `zoom`     | Camera pushes / scales through to next focal point                          | zoom-through                                                    |
 
 #### `description` - 10-30 word visual direction (existing, keep)
 
-Concrete direction for downstream: what morphs/slides/dissolves, where the eye lands, and what color/shape guides it. For `morph`, be especially clear about the handoff point (what shape is handed to the next scene).
+Concrete direction for downstream: what slides/dissolves/zooms, where the eye lands, and what color/shape guides it.
 
 ### Script Voice Quality Bar
 
@@ -207,7 +180,7 @@ If you set an empty script, `narrativeIntent` must be especially strong, because
 
 ## UI Demo Should Be a Sequence, Not a Single Scene
 
-The Phase 2 archive overwhelmingly treats UI demo as a **sequence of 3-15 consecutive scenes**, each focused on one feature area, continuously unfolding on the same product surface (for connection rules, see the hard constraint below: adjacent scenes are paired with morphs, with Tier-B breaks between pairs; **not one entire continue chain**):
+The Phase 2 archive overwhelmingly treats UI demo as a **sequence of 3-15 consecutive scenes**, each focused on one feature area, continuously unfolding on the same product surface:
 
 | Sample          | UI demo span | Runtime share      | Pattern                                                                                                                     |
 | --------------- | ------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
@@ -217,14 +190,14 @@ The Phase 2 archive overwhelmingly treats UI demo as a **sequence of 3-15 consec
 | JustCall        | scenes 4-13  | 60%                | Contact import -> 3 dialer modes -> analytics -> team perf -> AI insights -> outcomes                                       |
 | NFT Marketplace | scenes 13-27 | 38% (of 39 scenes) | 15-scene purchase + sell workflow walkthrough                                                                               |
 
-This means the requirement "at least one UI demo scene" should be reinterpreted as: **at least one UI demo sequence (3+ consecutive feature/benefit scenes on the same product surface).** A single isolated demo scene rarely persuades. But **the connection pattern has a hard constraint**: connect adjacent scenes in **pairs** with `intent: "morph"` (`continuity: "continue"`) - exactly two scenes per pair, assigned to the same worker so it can write the shared-element morph by hand; **between pairs, use Tier-B** (`cut` / `slide` / `dissolve` / `zoom`, all `continuity: "break"`). Never mark the entire sequence `continue` (>=3 consecutive scenes is rejected by `prep.mjs`), and never write `zoom + continue` (`zoom` forces `break`). Shape: `morph(s1,s2) -> break -> morph(s3,s4) -> break -> ...`. More pairs are better - `continue` only groups **paired** scenes into one worker, exactly supporting shared-element morphs.
+This means the requirement "at least one UI demo scene" should be reinterpreted as: **at least one UI demo sequence (3+ consecutive feature/benefit scenes on the same product surface).** A single isolated demo scene rarely persuades. Keep the sequence reading continuous by reusing the same product-surface assets across the scenes and by giving the seams a consistent intent (mostly `slide` / `dissolve` — the "same surface, next panel" feel).
 
 Planner identifies a UI demo sequence by:
 
 - Scene type is `feature_showcase` or `benefit_highlight`
 - `narrativeRole` contains words such as "Demonstrates", "Highlights", "Shows", "Illustrates", "Walks through"
 - `script` references dashboard, interface, modal, workflow, profile, or concrete UI element names
-- Adjacent paired Transition `intent` is `morph` (`continuity: continue`); between pairs is Tier-B (`cut` / `slide` / `dissolve` / `zoom`, `continuity: break`)
+- Adjacent seams use a consistent intent (`slide` / `dissolve`) so the sequence reads as one product surface
 - Previous scene is `product_intro`; later scenes continue showcase, or pivot to `social_proof` / `cta`
 
 ## Asset Candidates for Every Scene
@@ -264,12 +237,12 @@ Rules:
 ## Validation Checklist
 
 - Does every scene have complete Narrative Intent (all 5 fields)?
-- Does every scene have `transition`, including `continuity` (break/continue), `intent` (one of the 5 intents), and `description` (10-30 words)? **`intent: morph` <=> `continuity: continue` (and includes `sharedMotif`); `cut` / `slide` / `dissolve` / `zoom` are always `continuity: break`**? Is scene 1 `continuity: break`?
+- Does every scene have `transition`, including `intent` (one of the 4 intents: `cut` / `slide` / `dissolve` / `zoom`) and `description` (10-30 words)?
 - Does every scene have `assetCandidates` (array; text-only scenes may be empty)? For visual scenes, does each candidate `path` correspond to a real file under `capture/assets/`?
 - **Coverage:** are **most** content assets in Inventory (excluding fonts / favicon / icons / logo variants) included in some scene's `assetCandidates`? Are any valuable product screenshots / photos / charts missing and therefore discarded?
 - Does the emotional arc have meaningful variation (not monotone)? Does it match the archetype pattern (PAS = negative valley -> relief; Cascade = steady positive climb)?
 - Is the sequence driven by narrative rather than page order?
-- Is there at least one UI demo _sequence_ (3+ consecutive feature/benefit scenes; adjacent scenes paired with `intent: morph` + `continuity: continue`, pairs separated by Tier-B `break` - not one whole continue chain, and no `zoom + continue`)?
+- Is there at least one UI demo _sequence_ (3+ consecutive feature/benefit scenes on the same product surface, seams using a consistent intent)?
 - Are Persuasion fields named techniques from the catalog rather than vague benefits?
 - Are Emotional beats specific (word or short compound phrase), not generic "positive"?
 - Does the hook use a named strategy from the taxonomy?
@@ -290,10 +263,8 @@ Frontend (and downstream agents) expect these **exact** field names. Wrong names
       "sceneNumber": 1,
       "sceneName": "Scene name",
       "transition": {
-        "continuity": "break|continue",
-        "intent": "morph|cut|slide|dissolve|zoom",
-        "sharedMotif": "Only when intent=morph: name of the element carried across scenes (<=8 words, e.g. 'the product card'); omit this key for other intents",
-        "description": "10-30 word concrete visual direction explaining what morphs/slides/dissolves and where the eye should land"
+        "intent": "cut|slide|dissolve|zoom",
+        "description": "10-30 word concrete visual direction explaining what slides/dissolves/zooms and where the eye should land"
       },
       "narrativeIntent": {
         "type": "hook|pain_point|product_intro|feature_showcase|benefit_highlight|social_proof|branding|cta",
@@ -318,8 +289,7 @@ Frontend (and downstream agents) expect these **exact** field names. Wrong names
 Field rules:
 
 - Use `sceneNumber` (not `scene_id`), `sceneName` (not `scene_name`), `script` (not `narration`), and nest intent fields inside `narrativeIntent` (do not flatten them onto the scene object).
-- Every scene must have a `transition` field (`continuity` + `intent` + `description`; add `sharedMotif` for morph), including scene 1 (`continuity: "break"` + `intent: "cut"`). **Scene 1 has no previous scene, so its `transition` does not generate any transition downstream (downstream ignores it) - `intent: "cut"` is just a placeholder; fill it and do not design a real opening transition.**
-- **`intent: "morph"` <=> `continuity: "continue"`** (and non-empty `sharedMotif`); `cut` / `slide` / `dissolve` / `zoom` are always `continuity: "break"`. `validate.mjs narrator` enforces this (violation -> fatal).
+- Every scene must have a `transition` field (`intent` + `description`), including scene 1 (`intent: "cut"`). **Scene 1 has no previous scene, so its `transition` does not generate any transition downstream (downstream ignores it) - `intent: "cut"` is just a placeholder; fill it and do not design a real opening transition.** The legacy `continuity` / `sharedMotif` fields were removed (`validate.mjs narrator` rejects them).
 - `assetCandidates` is a **required** field and must be an array. Truly text-only scenes (title cards, pure typography) use `[]`. Any scene with a visual hero must include at least one `{path, description}` entry.
 - Every `assetCandidates[].path` must be `public/<basename>`, and basename must exist in `capture/assets/`. Phase 4a `prep.mjs` fails when a file is missing.
 

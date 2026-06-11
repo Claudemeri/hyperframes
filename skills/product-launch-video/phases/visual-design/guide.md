@@ -1,7 +1,7 @@
 ## Flow Overview
 
 1. **All inputs are already inlined in dispatch** (`## Effects catalog` / `## Blueprints index` / `## SFX library` / `## Design rules` [full text of 4 rules] / `## Design chunks` [`index.json` + actually present hints/voice/tokens/easings] / `## Narrator scripts` / `## Audio meta`) - **use them directly; do not Read from disk**
-2. For each scene: choose effects from `## Effects catalog` (timeline layering order; count rules in §2), decide Continuity, write anchor block + 8 prose requirements; in prose, describe desired visual components by **role** ("a stat block", "a framed quote"), while the worker chooses concrete components from the `## Design chunks` library
+2. For each scene: choose effects from `## Effects catalog` (timeline layering order; count rules in §2), write anchor block + 8 prose requirements; in prose, describe desired visual components by **role** ("a stat block", "a framed quote"), while the worker chooses concrete components from the `## Design chunks` library
 3. Run validator until exit 0
 
 ---
@@ -10,7 +10,7 @@
 
 ### `narrator_scripts.json`
 
-- Scene-level: `sceneNumber`, `sceneName`, `narrativeIntent.{type, narrativeRole, keyMessage, persuasion, emotionalBeat}`, `transition.{continuity, intent, sharedMotif?, description}` (`continuity` copies directly to `**Continuity:**`; `intent` translates to `**Transition:**` registry type using the "Transition: translation" table; when `intent: morph`, `sharedMotif` -> `**Bridge:**` anchor), `assetCandidates[]` (each has `path` + `description`), `estimatedDuration` (strip trailing `"s"` -> float)
+- Scene-level: `sceneNumber`, `sceneName`, `narrativeIntent.{type, narrativeRole, keyMessage, persuasion, emotionalBeat}`, `transition.{intent, description}` (`intent` translates to `**Transition:**` registry type using the "Transition: translation" table), `assetCandidates[]` (each has `path` + `description`), `estimatedDuration` (strip trailing `"s"` -> float)
 - Top-level: `narrativeArchetype` + `emotionalArc`, which influence whole-film pacing
 
 ### `## Design chunks` - Brand Input (inlined; do not read `design.html`)
@@ -66,10 +66,8 @@ Each scene in `section_plan.md` is one block, in the same order as `narrator_scr
 
 **Effects:** [`<rule-id>`, `<rule-id>`, ...]
 **Duration:** <X.XXs>
-**Continuity:** break | continue
 **Blueprint:** based-on `<id>` | extended `<id>` | composed <- optional (soft), see below
 **Transition:** <type> [DIRECTION] [<dur>s] <- optional (soft); how this scene is entered, see below
-**Bridge:** `<bridge-id>` <- only when **Transition:** shared-element (Tier-A morph); cross-scene element logical name, see below
 **SFX:** <- optional (soft); omit entire section when unused; multi-line bullet list below
 **PrimarySubjectTimeline:** <only for multi-act / dense multi-subject scenes>
 **Handoff:** <only for multi-act / dense multi-subject scenes>
@@ -83,13 +81,11 @@ Each scene in `section_plan.md` is one block, in the same order as `narrator_scr
 
 - **Effects:** 2-5 backtick-wrapped rule ids, comma-separated inside brackets; each id must be an existing rule under `hyperframes-animation/rules/` (the validator actually checks this). Normally cite only from dispatch `## Effects catalog`; order is timeline-layering order.
 - **Duration:** float seconds (source in §1)
-- **Continuity:** `break` or `continue`; **Scene 1 is always `break`**. Copy story-design `transition.continuity` (already fixed by `intent`: `morph` => `continue`, others => `break`). **`continue` <=> this scene has `**Transition:** shared-element`** (see Transition hard contract below)
 - Required anchors each stand alone on their own line, with no surrounding text; missing any required anchor -> downstream fatal -> rerun Phase 3
 - **PrimarySubjectTimeline + Handoff:** required for multi-act scenes or scenes where action/payoff + proof/supporting subject share the frame. Missing either -> validator fatal. **Position:** immediately after SFX block and before prose (machine reason in template note above - they must enter `creative_brief` for worker)
 - **Block order:** all `**Anchor:**` lines (including SFX bullets, PrimarySubjectTimeline, Handoff) must precede free prose; any `**Word:**` anchor line after prose begins -> validator fatal (interleaving makes worker brief unpredictable)
 - **File-level:** no project-level preface / commitments section before the first `## Scene` (only one H1 title allowed) -> validator fatal (see whole-file shape above)
-- **Transition** (soft / if present): type must be in TRANSITION-REGISTRY vocabulary; direction is only legal for directional type (`push-slide`); duration `0 < dur <= 2.0s`. **Continuity <=> Tier-A is enforced both ways:** `Continuity: break` cannot name Tier-A (`shared-element`); conversely `Continuity: continue` **must** name Tier-A `shared-element` (omitting `**Transition:**` and accepting Tier-B default also violates) -> both are validator fatal
-- **Bridge** (soft / Tier-A only): appears only when `**Transition:** shared-element`, value is one backtick-wrapped kebab-case logical name; `shared-element` must pair with `**Continuity:** continue` (otherwise downstream prep fatal - both scenes must share a worker to write the shared element). Bridge on a non-shared-element scene -> validator warning/ignore
+- **Transition** (soft / if present): type must be in TRANSITION-REGISTRY vocabulary; direction is only legal for directional type (`push-slide`); duration `0 < dur <= 2.0s`. The legacy `**Continuity:**` / `**Bridge:**` anchors were removed (Tier-A no longer exists) — writing either is a validator fatal
 
 **Blueprint anchor (soft - validator does not require, strongly recommended):**
 
@@ -104,31 +100,15 @@ Value of writing Blueprint anchor: (1) forces plan agent to explicitly commit to
 
 **Transition anchor (optional / soft - names "how this scene is entered"):**
 
-> **This subsection + "Bridge anchor" below is the authoritative writing guide for transitions / bridges (single source of truth).** The later "Transition: translation" table only maps `intent -> registry type`; it does not restate machine rules. The validator hard-contract list above only says what is checked. Change rules here only.
+> **This subsection is the authoritative writing guide for transitions (single source of truth).** The later "Transition: translation" table only maps `intent -> registry type`; it does not restate machine rules. The validator hard-contract list above only says what is checked. Change rules here only.
 
 - Shape: `**Transition:** <type> [DIRECTION] [<dur>s]`, e.g. `**Transition:** blur-crossfade` / `**Transition:** push-slide LEFT` / `**Transition:** zoom-through 0.3s`
-- Optional types (Tier-B, transition happens **between scenes**, injected by harness onto clip wrappers after assembly; **you do not write GSAP**): `crossfade` / `blur-crossfade` / `push-slide` (with LEFT/RIGHT/UP/DOWN) / `zoom-through` / `squeeze`. Full vocabulary + selection guidance in `<SKILL_DIR>/../hyperframes-animation/transitions/TRANSITION-REGISTRY.md`
-- **Use only 2-3 types across the film** (repetition = professional cohesion; see motion-language.md "transition vocabulary") - **this budget counts only Tier-B (inter-scene) choices among those 5; `shared-element` (morph) is worker-written bridge and does not count**, use it as the story needs. Scene 1's Transition is opening placeholder (no previous scene, ignored), and may be omitted
-- **Omitting the whole line = accept default:** harness derives from surface conflict / energy (clashing backgrounds -> `blur-crossfade`, high energy -> `zoom-through`, calm -> `blur-crossfade`, otherwise `crossfade`). So for Tier-B, **omit when uncertain**; default is usually good
-- **`shared-element` (Tier-A shared-element bridge) = translation of story-design `intent: morph`** - must pair with `**Continuity:** continue` (two scenes share worker) + `**Bridge:**` anchor (below). Tier-A bridge morph is written **inside the two scenes by the worker** (not harness injected); harness only applies seam-shell crossfade. **Tier-A is a premium opt-in**: `intent: morph` appears in `narrator_scripts` only when the user asked for premium/seamless transitions — on a standard run every boundary is Tier-B and this anchor never appears. You translate what story-design emitted; do not introduce `shared-element` on your own
-- harness handles everything for Tier-B: overlap, outgoing clip extension, track assignment, GSAP stamping, verification. You only name intent; **never write transition code, touch timing, or touch index.html**
+- Optional types (transition happens **between scenes**, injected by harness onto clip wrappers after assembly; **you do not write GSAP**): `crossfade` / `blur-crossfade` / `push-slide` (with LEFT/RIGHT/UP/DOWN) / `zoom-through` / `squeeze`. Full vocabulary + selection guidance in `<SKILL_DIR>/../hyperframes-animation/transitions/TRANSITION-REGISTRY.md`
+- **Use only 2-3 types across the film** (repetition = professional cohesion; see motion-language.md "transition vocabulary"). Scene 1's Transition is opening placeholder (no previous scene, ignored), and may be omitted
+- **Omitting the whole line = accept default:** harness derives from surface conflict / energy (clashing backgrounds -> `blur-crossfade`, high energy -> `zoom-through`, calm -> `blur-crossfade`, otherwise `crossfade`). So **omit when uncertain**; default is usually good
+- harness handles everything: overlap, outgoing clip extension, track assignment, GSAP stamping, verification. You only name intent; **never write transition code, touch timing, or touch index.html**
 
-**Bridge anchor (only for Tier-A `shared-element`):**
-
-- Shape: `**Bridge:** \`<bridge-id>\``, a single backtick-wrapped kebab-case logical name (e.g. `\`product-card\``/`\`avatar-circle\``)
-- Comes from story-design `transition.sharedMotif` (narrative-layer "what element crosses scenes") - you turn that phrase into a stable machine name
-- worker places an element with `data-bridge-id="<this name>"` in **both outgoing + incoming scenes** and designs the morph handoff between them. **You only name it; do not draw geometry** - concrete morph is worker work
-- **The `**Bridge:**` anchor is written on the morph target scene** (the scene being entered by the morph; prep uses `toScene.transition`), and it has `Continuity: continue`; the morph source scene has `Continuity: break` (see cap=2 alignment below). Both workers' scenes include `data-bridge-id`, but only target scene writes `**Transition:** shared-element` + `**Bridge:**`. The pair must land in the same cap window = same worker, otherwise downstream prep fatal
-
-**cap=2 grouping alignment (must be considered while writing the plan, or prep rejects and forces rerun):** when you write `shared-element`, you cannot see worker grouping yet - prep later computes grouping deterministically from `Continuity`: **`break` starts a new group, `continue` appends to the current group, and when a group reaches `cap` (default 2), a new group is forced**. A Tier-A pair must land in **the same group**, so a morph pair `(A -> B)` must be **exactly the first two scenes of a cap window**. Reliable pattern:
-
-- **Set morph source A to `Continuity: break`** (A starts a new group), **set morph target B to `Continuity: continue`** (B appends, filling cap=2). This is the safest pattern.
-- Counterexample (common fatal): A and B are both `continue`, but a prior `continue` scene already occupies slot 1 of the window -> A lands in slot 2 (group full), B is pushed to **next group** -> A/B split across workers -> prep fatal `Transition A→B: grouping splits the scenes across workers`.
-- **Morph chains longer than 2 scenes** (3-scene demo sequence bridge chain) inevitably cross workers under cap=2 -> split into "one morph pair (Tier-A) + one Tier-B transition", or increase `--scenes-per-group`.
-
-> One sentence: **morph pair = first two scenes of a cap window; safest is source `break`, target `continue`.** If you cannot reason it through, do not use Tier-A; use Tier-B (`blur-crossfade`) - the visual seam will still be clean.
-
-> This is the plan agent's explicit commitment about how scenes connect. It must align with prose item 8 (transition to next scene). Item 8 is human-readable creative direction; `**Transition:**` / `**Bridge:**` anchors are machine instructions for harness/worker.
+> This is the plan agent's explicit commitment about how scenes connect. It must align with prose item 8 (transition to next scene). Item 8 is human-readable creative direction; the `**Transition:**` anchor is the machine instruction for the harness.
 
 **SFX anchor (optional / soft - only write when using sound effects):**
 
@@ -179,30 +159,18 @@ Rules:
 - Before a new primary enters, previous primary must exit / hide / compact / demote; **camera pan / zoom / push does not count as exit**.
 - Action / payoff frame: primary headline / product / decision point owns the center safe zone; proof, labels, logos, stats, and card clusters, if retained, must be smaller, lower contrast, less animated, and outside primary bbox.
 
-**Continuity comes directly from story-design** (no inference): each scene `transition.continuity` in `narrator_scripts.json` (`break` | `continue`) is already the narrative-layer judgment - **copy it into the `**Continuity:**` anchor**. `continuity` is already fixed by `intent` (`morph` => `continue`, others => `break`), so just copy it. **Any `continue` scene is necessarily `intent: morph`, and downstream requires it to name `shared-element`** (see §2 bidirectional hard contract). Scene 1 is always `break`. Cross-scene consistency is covered in §5 "variety" soft guidance.
+**Transition: translating story-design narrative `intent` to concrete registry type** (this is visual-design's job - you have preset/palette/background/energy context; story-design does not). Each scene's `transition.intent` in `narrator_scripts.json` is one of 4 narrative intentions; translate it to a `**Transition:**` registry type using the table below (full vocabulary in `<SKILL_DIR>/../hyperframes-animation/transitions/TRANSITION-REGISTRY.md`):
 
-**Transition: translating story-design narrative `intent` to concrete registry type** (this is visual-design's job - you have preset/palette/background/energy context; story-design does not). Each scene's `transition.intent` in `narrator_scripts.json` is one of 5 narrative intentions; translate it to a `**Transition:**` registry type using the table below (full vocabulary in `<SKILL_DIR>/../hyperframes-animation/transitions/TRANSITION-REGISTRY.md`):
-
-| story-design `intent`              | -> `**Transition:**` registry type                              | Notes                                                                                                              |
-| ---------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `morph` (+ `continuity: continue`) | `shared-element` (Tier-A)                                       | **must be `continue`**; also write `**Bridge:**` anchor (below). Worker writes shared-element morph in both scenes |
-| `cut`                              | `crossfade`                                                     | clean cut; for high-energy moments you may omit Transition anchor and let default apply                            |
-| `slide`                            | `push-slide <direction>`                                        | direction matches narrative flow (forward=LEFT/RIGHT, expanding downward=DOWN)                                     |
-| `dissolve`                         | `blur-crossfade` when backgrounds clash / `crossfade` otherwise | inspect both scene `#root` backgrounds: large difference -> blur hides hard cut; similar -> normal crossfade       |
-| `zoom`                             | `zoom-through`                                                  | camera push / high energy                                                                                          |
+| story-design `intent` | -> `**Transition:**` registry type                              | Notes                                                                                                        |
+| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `cut`                 | `crossfade`                                                     | clean cut; for high-energy moments you may omit Transition anchor and let default apply                      |
+| `slide`               | `push-slide <direction>`                                        | direction matches narrative flow (forward=LEFT/RIGHT, expanding downward=DOWN)                               |
+| `dissolve`            | `blur-crossfade` when backgrounds clash / `crossfade` otherwise | inspect both scene `#root` backgrounds: large difference -> blur hides hard cut; similar -> normal crossfade |
+| `zoom`                | `zoom-through`                                                  | camera push / high energy                                                                                    |
 
 - **You have visual context, so you may override:** if a default translation is wrong for the preset (e.g. color clash should use blur where table says crossfade), use visual judgment - table is default, not law.
-- **Use only 2-3 transition types repeatedly across the film** (repetition = cohesion, see motion-language.md) - **count only Tier-B inter-scene types; `shared-element` morph does not count**. `intent` narrows the choice; you choose concrete values within it.
-- **When uncertain, omit the `**Transition:**` anchor** - downstream prep derives default from energy/color clash (see §2 Transition anchor). But for `intent: morph`, **you cannot omit** - must explicitly write `shared-element` + `**Bridge:**`.
-
-**`**Bridge:**`anchor (only when`intent: morph`):** turn story-design `transition.sharedMotif` (narrative-layer "what element crosses scenes", e.g. "the product card") into a machine-readable bridge id:
-
-```markdown
-**Transition:** shared-element
-**Bridge:** `product-card` <- logical name (kebab-case), downstream worker uses it as data-bridge-id
-```
-
-Machine rules (kebab-case, must pair with `Continuity: continue`, worker places `data-bridge-id` in both scenes, morph chain limited by cap=2) are detailed above in §2 Transition / Bridge anchor.
+- **Use only 2-3 transition types repeatedly across the film** (repetition = cohesion, see motion-language.md). `intent` narrows the choice; you choose concrete values within it.
+- **When uncertain, omit the `**Transition:**` anchor** - downstream prep derives default from energy/color clash (see §2 Transition anchor).
 
 > If the effect you need is not in catalog: first try combining existing effects. Still insufficient -> **do not invent a name**; mark in phase report `needed effect missing: <description>`.
 
@@ -234,7 +202,7 @@ Then write one free-prose paragraph in the following 8-item order. This prose is
 5. **Multi-phase choreography** - phase sequence `entry -> ambient drift -> major transition -> stillness -> emphasis -> exit` and rough duration ratio; explicitly name `stillness-before-climax`; name spring intent for each phase (`entry` / `gentle` / `snappy` / `heavy` / `slam`). If §3 selected a blueprint, follow the phase skeleton from that blueprint index description; this scene's emotional beat determines each phase's ratio and ease intent, **not the blueprint's exact timing values** (build work). Use **scene-local relative seconds / ratios** (e.g. "0-0.45s entry", "~0.5s setup hold"); **do not restate total scene duration / end timestamp in prose** (e.g. "exit until 2.82s") - total duration is in `**Duration:**`, and worker `data-duration` is pinned to `estimatedDuration_s`; prose approximations only conflict. Anchor order (PST/Handoff before prose) is in §2.
 6. **Continuous / ambient motion** - what keeps the scene alive after entry: multiplicative breathing on hero (±2-5% scale), inverse-phase card sine drift (±6-8px), icon orbit, halftone density deformation, CTA glow pulse.
 7. **One negative sentence** - what this scene must **not** do, in codex-plugin tone ("no halo behind the bell - Jake killed those", "no neon glow, this is a workspace").
-8. **Transition to next scene** - detail depends on Tier: **Tier-A (`shared-element`/morph) exit is load-bearing** - worker writes the morph inside outgoing+incoming scenes, so specify which element crosses scenes and what pose it hands off (this is worker construction guidance). **Pure Tier-B (crossfade/blur-crossfade/push-slide/zoom-through/squeeze) exit is injected by Step 7 harness onto clip wrappers, and worker writes no exit tween** - a short sentence about eye destination is enough; **do not elaborate veil/dissolve/curtain mechanics** (nobody follows it, wasted tokens). Machine instruction always lives in `**Transition:**` / `**Bridge:**` anchors.
+8. **Transition to next scene** - the transition (crossfade/blur-crossfade/push-slide/zoom-through/squeeze) is injected by the Step 7 harness onto clip wrappers, and **the worker writes no exit tween** - a short sentence about eye destination is enough; **do not elaborate veil/dissolve/curtain mechanics** (nobody follows it, wasted tokens). The machine instruction always lives in the `**Transition:**` anchor.
 
 **Do not** write pixel values, GSAP timeline code, composition HTML, concrete hex / font names / ease curves - that is build-agent work. But give enough constraints that the result clearly belongs to _this scene_, not a generic interpretation: concrete intent roles, duration by ratio, font references by purpose, palette distribution by role, specific phase order.
 
@@ -247,7 +215,6 @@ Then write one free-prose paragraph in the following 8-item order. This prose is
 
 **Effects:** [`discrete-text-sequence`, `cursor-click-ripple`, `context-sensitive-cursor`, `sine-wave-loop`]
 **Duration:** 6.20s
-**Continuity:** continue
 **Blueprint:** composed
 
 Beat 2b — the spiral (frustrated, slightly-off comma). Centered chat-app composition: ...

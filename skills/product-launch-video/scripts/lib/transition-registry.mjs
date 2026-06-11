@@ -49,10 +49,3 @@ export function transitionsByName(registryPath = DEFAULT_REGISTRY_PATH) {
   for (const t of data.transitions) map.set(t.name, t);
   return map;
 }
-
-// The set of Tier-A type names (morph / shared-element) — not injectable in
-// Phase 1; a `break` boundary must never name one of these.
-export function tierATypes(registryPath = DEFAULT_REGISTRY_PATH) {
-  const data = loadTransitionRegistry(registryPath);
-  return new Set(data.tier_a_types || []);
-}

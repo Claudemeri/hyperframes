@@ -1,6 +1,6 @@
 # Subagent Prompt: hyperframes-finalize (Step 7 — gate → one look → fix what pixels show → render)
 
-**INPUT:** `<PROJECT_DIR>/index.html` (assembled by `assemble-index.mjs`, transitions injected, videos hoisted, passed `sfx-verify`) · `<PROJECT_DIR>/compositions/*.html` (worker output = scene source files) · `<PROJECT_DIR>/group_spec.json` (scene timings + `transitions[]`) · Dispatch context: `Render quality` / `Captions` / `BGM` (one-line verdict) / `Scenes:` list (`scene_id` / `start_s` / `estimatedDuration_s` / `effects` / `creative_brief` per scene)
+**INPUT:** `<PROJECT_DIR>/index.html` (assembled by `assemble-index.mjs`, transitions injected, videos hoisted, passed `sfx-verify`) · `<PROJECT_DIR>/compositions/*.html` (worker output = scene source files) · `<PROJECT_DIR>/group_spec.json` (consumed by the scoped keepout / verify commands) · Dispatch context: `Render quality` / `Captions` / `BGM` (one-line verdict) / `Scenes:` list (`scene_id` / `start_s` / `estimatedDuration_s` / `effects` / `creative_brief` per scene)
 **OUTPUT:** `<PROJECT_DIR>/renders/video.mp4` (passes `verify-output.mjs render`) · in-place fixed `compositions/scene_*.html` · `<PROJECT_DIR>/snapshots/contact-sheet.jpg`
 **TOOLS:** Bash (`(cd "$PROJECT_DIR" && npx hyperframes lint|validate|snapshot|render)`, `node verify-output.mjs render`) · `Edit` (fix scene files in place) · Read (`hyperframes-core` / effect rules only when a fix needs the contract)
 **DONE:** mp4 passes `verify-render` → report + append to `<PROJECT_DIR>/context.log`
@@ -39,13 +39,13 @@ Both clean → Step 2. On errors, fix in place (one `Edit` per finding, then re-
 
 The machine never sees layout — this is the only visual QA in the pipeline. It is still a quick sanity look, not a per-frame audit.
 
-1. **Compute the probe list** (mental math or a node one-liner): one probe per scene at its midpoint (`start_s + estimatedDuration_s / 2`, from the dispatch `Scenes:` list) + for every `tier: "a"` entry in `group_spec.json` `transitions[]`, one probe at the incoming (`to`) scene's `start_s` (the seam moment). Sort ascending, comma-join, then:
+1. **Compute the probe list** (mental math): one probe per scene at its midpoint (`start_s + estimatedDuration_s / 2`, from the dispatch `Scenes:` list). Sort ascending, comma-join, then:
 
    ```bash
    (cd "$PROJECT_DIR" && npx hyperframes snapshot --at "<t1,t2,...>")
    ```
 
-2. **Read `snapshots/contact-sheet.jpg` ONCE** and scan every tile for, in order: (a) blank / black / white panel where content should be (worst class — media or mount failure); (b) primary text cut by the canvas or a container, or unreadable against its background (especially SVG wordmarks on dark cards); (c) two foreground boxes colliding / a card interior crushed against its border; (d) captions enabled and the bottom caption pill covering a chip / CTA / stat; (e) a Tier-A seam showing two misaligned ghosts. **Do not open individual frames unless a tile looks wrong.**
+2. **Read `snapshots/contact-sheet.jpg` ONCE** and scan every tile for, in order: (a) blank / black / white panel where content should be (worst class — media or mount failure); (b) primary text cut by the canvas or a container, or unreadable against its background (especially SVG wordmarks on dark cards); (c) two foreground boxes colliding / a card interior crushed against its border; (d) captions enabled and the bottom caption pill covering a chip / CTA / stat. **Do not open individual frames unless a tile looks wrong.**
 3. **Only for a suspicious tile:** re-snapshot that single timestamp full-size, diagnose with the symptom table, `Edit` the scene file in place, re-snapshot only that frame. If the edit touched the canvas-bottom area with captions enabled, also run `(cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/captions.mjs keepout --group-spec ./group_spec.json --hyperframes . --scene <scene_id>)`.
 4. **One fix round total.** Clean tiles are not re-checked; a finding that survives its re-snapshot → STOP and report.
 

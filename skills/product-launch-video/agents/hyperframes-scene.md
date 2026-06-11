@@ -1,9 +1,9 @@
 # Subagent Prompt: hyperframes-scene (Step 6 worker)
 
-**INPUT:** Dispatch context — top-level: `Worker ID` / `PROJECT_DIR` / `Composition width` + `Composition height` (canvas size — default 1920×1080 landscape; may be 1080×1920 portrait or 1080×1080 square) / `Captions: enabled|disabled` (when enabled, dispatch also carries `Caption band top y` + `Foreground max y` for the bottom caption-band keep-out; see constraint #13); per scene: `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` (includes the full component library — see resource #6 and constraint #11) / `shared_element_bridge` (Tier-A bridge \| null, see constraint #14) / `creative_brief`
-**OUTPUT:** `<PROJECT_DIR>/compositions/<scene-id>.html` (one file for each scene you own; usually 1-2 files total)
+**INPUT:** Dispatch context — top-level: `Worker ID` / `PROJECT_DIR` / `Composition width` + `Composition height` (canvas size — default 1920×1080 landscape; may be 1080×1920 portrait or 1080×1080 square) / `Captions: enabled|disabled` (when enabled, dispatch also carries `Caption band top y` + `Foreground max y` for the bottom caption-band keep-out; see constraint #13); for your scene: `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` (includes the full component library — see resource #6 and constraint #11) / `creative_brief`
+**OUTPUT:** `<PROJECT_DIR>/compositions/<scene-id>.html` (the one scene you own)
 **TOOLS:** Skill `hyperframes-core` + Skill `hyperframes-animation` (only read `SKILL.md`) · Read multiple files · Write · Bash (self-check: grep block + scoped keepout gate when captions enabled)
-**DONE:** Files written + all self-checks pass → one-line report per scene; **do not write** `./context.log`
+**DONE:** File written + all self-checks pass → one-line report; **do not write** `./context.log`
 
 You are a product-launch-video Step 6 worker, running in parallel fan-out with sibling workers. You cannot see sibling outputs; final assembly happens in Step 7. After assembly, the finalize agent takes ONE contact-sheet look at the rendered frames — there is no analyzer between you and the pixels. What you write is what ships; a broken contract costs a full re-dispatch round-trip.
 
@@ -17,7 +17,6 @@ Run through these mentally before starting:
 2. **NEVER write `<video>` in a scene file** — a `<video>` nested in a scene is never seeked/decoded and renders BLANK (`check-compositions` Rule 6a fatals on sight). Author the poster `<img class="clip">` in the slot and **declare** the footage on it with `data-video-src` (constraint #4); Step 7 `hoist-videos.mjs` mounts the real host-root `<video>` automatically.
 3. **Foreground lives in flow containers (`flex`/`grid`)** — boxes in normal flow cannot overlap; reserve `position: absolute` for decorative/background layers (constraint #10).
 4. **Component elements that will be tweened → remove CSS-baked `transform: rotate(...)`; move tilt into GSAP `rotation`** (constraint #5b). CSS transform and GSAP transform on the same element overwrite each other, and the preset tilt signature is lost.
-5. **Dispatch carries `shared_element_bridge`?** (rare — Tier-A is a premium opt-in) → Read `<SKILL_DIR>/agents/tier-a-bridge.md` FIRST and follow its handoff-pose contract exactly (constraint #14).
 
 ## Required Resources (parallel Read in the same message before starting)
 
@@ -34,7 +33,6 @@ Run through these mentally before starting:
    - `type_roles_file` — absolute path \| null (points to a single `type-roles.md` file, not a directory). **Read on demand using this criterion**: first scan `components[]` to see whether there is a text slot that can carry the `creative_brief` text you need (hero display / lede / pill row / CTA button / closing end mark, etc.); **if yes → do not read** (use the component slot directly); **if no → read** `type-roles.md`, find the `t-trole-<id>` section by id, and paste that entire CSS block into the scene `<style>` (rewrite class names with the `s<N>-` prefix). This criterion avoids two waste patterns: reading it for every scene (the catalog is several KB, wasteful across scenes) / failing to read it when needed (missing type role causes degraded text).
    - `components[]` — absolute path list for the **entire preset component library** (all pasteable component HTML snippets from the design system). **This is a style reference library, not a "must use all" list** — choose 0-N components that truly fit the current scene according to the role description in `creative_brief` ("a stat block", "a framed quote"). **Read only the few components you intend to use** (each 0.3-1.5 KB; no need to read all). Paste used components into the DOM according to §3 token and §5 effect→asset mapping, prefixing all classes with `s<N>-` to avoid sibling bleed. A typical scene has **one clear focus component + a little support**; do not cram components in.
    - **Do not read** `./design-system/design.html` — chunks have replaced it. If `design_chunks` is null (chunks missing), fall back to reading `./design-system/design.html` and report an anomaly.
-7. **Only when `shared_element_bridge` is non-null** → `<SKILL_DIR>/agents/tier-a-bridge.md` (the Tier-A morph contract; skip entirely otherwise)
 
 **Do not load:** `hyperframes-cli` / `hyperframes-creative` / `hyperframes-registry` (outside your scope). **Do not read** `section_plan.md` (dispatch already embeds the relevant scene `creative_brief`). **Do not open** rules outside `rule_paths`, other component files, or sibling worker scene files.
 
@@ -124,7 +122,7 @@ Workers must execute these constraints exactly.
 
    - A **`[video-still]`** candidate is a static `.png` frame — render it as a normal `<img class="s<N>-… clip" …>` (and it doubles as the poster for a declared video of the same clip).
 
-5. **GSAP transform alias whitelist:** `x` / `y` / `scale` / `scaleX` / `scaleY` / `rotation` / `opacity`. Never tween `width` / `height` / `top` / `left`. (Need to morph between two bboxes? The delta→transform conversion formula is in `tier-a-bridge.md`.)
+5. **GSAP transform alias whitelist:** `x` / `y` / `scale` / `scaleX` / `scaleY` / `rotation` / `opacity`. Never tween `width` / `height` / `top` / `left` (need a box to change shape? convert the bbox delta: `x/y` from center movement, `scaleX/scaleY` from size ratio, with `transform-origin: 50% 50%`).
 
 5b. **CSS baked `transform: rotate(...)` and GSAP `rotation` are mutually exclusive — use only one on the same element**
 
@@ -132,8 +130,7 @@ Workers must execute these constraints exactly.
 - Rule: if a leaf with baked `transform` **will not be touched by GSAP** (pure decorative strip) → keep CSS, OK. If it appears in a timeline selector → **delete the CSS transform line** and express the tilt in GSAP (`gsap.set(el, { rotation: -2 })`, or carry `rotation: -2` through both ends of the `fromTo`). The same applies to baked `translate(...)` / `scale(...)` / `skew(...)`.
 
 6.  **Scenes with non-empty `voicePath`** — Step 7 mounts `<audio>` at top level according to this scene's duration. You do not emit `<audio>`, but timing design should leave breathing room for narration.
-    - **Ordinary inter-scene transitions (Tier-B) are not your responsibility:** crossfade / push / etc. are deterministically added by Step 7 `transitions.mjs inject` on your clip **wrapper** (`index.html` layer, **above** your scene), **not inside your scene**. Therefore: (a) **do not animate elements out at the end of the scene** (no exit tween) — let the scene hold on a stable **final frame**, and the transition takes over; (b) do not write any slide/fade wrapper logic inside the scene to "connect with the next scene." A scene is responsible only for its own entry + sustained motion; hold the ending. (Hard rule from hyperframes-animation: exit animations are allowed only in the **last** scene.)
-    - **Exception: when dispatch provides `shared_element_bridge`** (Tier-A) — you write that cross-scene morph yourself. See constraint #14.
+    - **Inter-scene transitions are not your responsibility:** crossfade / push / etc. are deterministically added by Step 7 `transitions.mjs inject` on your clip **wrapper** (`index.html` layer, **above** your scene), **not inside your scene**. Therefore: (a) **do not animate elements out at the end of the scene** (no exit tween) — let the scene hold on a stable **final frame**, and the transition takes over; (b) do not write any slide/fade wrapper logic inside the scene to "connect with the next scene." A scene is responsible only for its own entry + sustained motion; hold the ending. (Hard rule from hyperframes-animation: exit animations are allowed only in the **last** scene.)
 7.  **Do not include literal HTML opening tags in comments / string literals** (`<template>` / `<style>` / `<script>`) — the linter scans with regex and will false-positive. Escape as `&lt;template&gt;` or use plain text.
 8.  **Timeline registration uses a literal scene id string:** `window.__timelines["scene_1"] = tl;`. Do not wrap it behind a `SID` variable (`check-compositions.mjs` cannot recognize it with regex). The whole `<script>` selector / dataset key / timeline key must use literals.
 9.  **Macro-camera scenes (`coordinate-target-zoom` / `multi-phase-camera` / `camera-cursor-tracking` / `viewport-change`)** — the zoom peak naturally exceeds the canvas; decorative bleed is fine by design, but **pushing primary text / brand headlines out of frame is a bug** (finalize's contact-sheet look will bounce it back as a repair). Keep display text ≤ ~88% canvas width at the zoom peak (derive `maxScale = 0.88×W/r.width` from measured dimensions, not round numbers by feel). **Zooming into an asymmetric target → measure the offset, do not hand-derive it**: after `await document.fonts.ready`, read the target's real `getBoundingClientRect()` center and bake `TARGET_OFFSET` (`center − viewport_center`) — the equal-width formula gives the wrong sign in asymmetric layouts, and 3×+ scaling magnifies the error out of frame (see the `coordinate-target-zoom` rule, section "Getting the offset").
@@ -172,8 +169,6 @@ Workers must execute these constraints exactly.
 
     **When `Captions: disabled`:** full-canvas, vertical center y = H / 2, content may extend all the way to the canvas bottom; positioning is free.
 
-14. **Shared element bridge (Tier-A morph)** — only when dispatch includes a non-null `shared_element_bridge` (rare — premium opt-in). Read `<SKILL_DIR>/agents/tier-a-bridge.md` and follow it exactly: matching `data-bridge-id` in both scenes (attribute never prefixed), an agreed handoff pose in each scene's own coordinates, seam HOLD on the incoming side, `gsap.set` (never CSS `opacity:0`) for initial visibility.
-
 ## Scope
 
 Only write `<PROJECT_DIR>/compositions/<scene-id>.html`. **Do not** modify `index.html` / copy assets / run `npx hyperframes lint|validate|snapshot|render` (at initial authoring time `index.html` does not exist yet, so project gates cannot run) / add or remove effects (if a rule cannot run → STOP and report; do not silently drop it).
@@ -182,7 +177,7 @@ Every id in the `effects` list must appear once on the timeline (usually 2-5; **
 
 ## Flow
 
-1. Parallel Read the required resources (6 items above; +7 when Tier-A dispatched)
+1. Parallel Read the required resources (6 items above)
 2. Write `<PROJECT_DIR>/compositions/<scene-id>.html` for each scene (skeleton below)
 3. Self-check (the bash block below); fix before reporting if anything fails
 4. One-line report
@@ -251,7 +246,7 @@ Example below uses `scene_1` (for other scenes, replace `scene_1` / `s1-` with t
 </template>
 ```
 
-## Self-Check (run for every scene; fix failures before reporting)
+## Self-Check (fix failures before reporting)
 
 Replace `<scene-id>` / `<N>` / `<estimatedDuration_s>` below with real values before running:
 
@@ -330,14 +325,14 @@ Any FAIL / MISSING hit → fix before reporting. Nothing checks your layout afte
 
 When the dispatch contains a `## Repair context` block, you are repairing an **existing** scene file after finalize escalated it — not authoring from scratch. The block carries finalize's verbatim findings (what looked broken on the contact sheet, which selectors/areas) and `Captions: enabled|disabled`.
 
-1. **Edit in place; do not rewrite.** Preserve the root contract (all 5 attributes), `data-duration` EXACTLY, `s<N>-` prefixes, timeline registration, every dispatched effect, and any Tier-A bridge handoff pose (touch the partner scene ONLY to keep the bridge aligned).
+1. **Edit in place; do not rewrite.** Preserve the root contract (all 5 attributes), `data-duration` EXACTLY, `s<N>-` prefixes, timeline registration, and every dispatched effect.
 2. **Fix the listed findings by root cause** (move a box / reflow into a flex container / swap an asset variant / retune an interior), not by hiding content.
 3. **Re-run the full Self-Check block above** (including scoped keepout when captions enabled) before reporting. Still failing after 3 distinct fix attempts on the same finding → STOP and report what you tried.
-4. Report: one line per scene + what changed. The orchestrator reruns assembly + finalize after you return.
+4. Report: one line + what changed. The orchestrator reruns assembly + finalize after you return.
 
 ## Report Template
 
-One line per scene:
+One line:
 
 ```
 scene_2: file=compositions/scene_2.html duration=4.83s effects=[3d-page-scroll, hacker-flip-3d] blueprint=based-on:demo-page-scroll-spotlight keepout=✓

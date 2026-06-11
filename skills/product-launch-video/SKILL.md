@@ -204,7 +204,6 @@ The Step 1 Bash phase has already deterministically produced `design-system/infe
   Voice-over mode: <verbatim | restructure>   # From Step 1.0; pair it with the Provided script line. Omit when there is no user script.
   Script style: Keep each scene's script concise - 1-2 sentences, no more than 20 words   # Applies in restructure / no-user-script mode ONLY. In verbatim mode this budget is suspended — preserve the user's wording and let total length follow the script (see story-design guide "Provided-Script Modes").
   Orientation: <landscape | portrait | square>   # From the user's requested aspect / `/hyperframes-read-first` (16:9→landscape, 9:16→portrait, 1:1→square; default landscape when unspecified). Emit VERBATIM as the top-level `orientation` field — dictated, not a choice; it sets the canvas (portrait→1080×1920) for the whole pipeline.
-  Transitions: <standard | premium>   # premium ONLY when the user explicitly asked for seamless / morph / premium transitions; standard (default) = Tier-B everywhere, no `intent: morph`. Premium unlocks Tier-A shared-element morph pairs (strictly pairwise).
   ```
 
   > Fill `Orientation:` from the user's requested aspect (default `landscape`); story-design echoes it into `narrator_scripts.orientation`, which Step 5 prep maps to `group_spec.width/height`. Without it the launch video stays 16:9.
@@ -281,12 +280,12 @@ After Phase 3 visual-design exits and `section_plan.md` exists, run `prep.mjs` t
   --out ./group_spec.json)
 ```
 
-This merges all upstream artifacts (parse `section_plan` anchors, validate effect/component ids, group by `Continuity` with cap=2, compute `transitions[]`, copy assets/fonts/SFX) into `group_spec.json`. Internal logic is described in the header comments of `prep.mjs`; you (master) only need to inspect the exit code:
+This merges all upstream artifacts (parse `section_plan` anchors, validate effect/component ids, assign one scene per worker, compute `transitions[]`, copy assets/fonts/SFX) into `group_spec.json`. Internal logic is described in the header comments of `prep.mjs`; you (master) only need to inspect the exit code:
 
 Exit codes:
 
-- 0 -> read stdout (scenes / groups / total duration / per-group breakdown) and append it to `$PROJECT_DIR/context.log`.
-- 1 -> stderr names the failing scene + anchor; go back to Step 4 and re-dispatch visual-design. **Most common fatal**: a pair of adjacent scenes requested a Tier-A (shared-element bridge) transition, but the cap=2 grouping split them across two workers, so the worker cannot touch both DOMs. Pass one of these fixes through to visual-design: (a) change that boundary to Tier-B (for example blur-crossfade); (b) set both scenes to `Continuity: continue` so they share a worker; (c) raise `--scenes-per-group`.
+- 0 -> read stdout (scenes / workers / total duration / per-scene breakdown) and append it to `$PROJECT_DIR/context.log`.
+- 1 -> stderr names the failing scene + anchor (missing anchor / unknown effect id / bad value); go back to Step 4 and re-dispatch visual-design with the error passed through.
 
 ### Step 5.5 + Step 6 - Captions (deterministic) + scene worker parallel fan-out (Phase 4a.5 + 4b)
 
@@ -324,7 +323,7 @@ mkdir -p /tmp/scene-dispatch
 
 - N `Agent` calls (`subagent_type: "general-purpose"`, each `run_in_background: true`). prompt = the full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, passed through verbatim. Top-level dispatch context fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height` — the worker authors + self-checks the root at these dims; landscape 1920×1080 unless portrait/square was requested upstream) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus `## Tokens/easings/voice` (the shared header body) + a two-part `Scenes:` list (the packet contents). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580) — constraint #13 keep-out is computed from these, not hardcoded.
 
-  Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (only that worker's 1-2 scenes): `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `shared_element_bridge` (Tier-A, usually null) / `design_chunks` (contains absolute paths to the whole component library - the worker chooses by visual judgment) / `creative_brief` (the Phase 3 prose for that scene). Field semantics are in `agents/hyperframes-scene.md`.
+  Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (that worker's single scene): `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` (contains absolute paths to the whole component library - the worker chooses by visual judgment) / `creative_brief` (the Phase 3 prose for that scene). Field semantics are in `agents/hyperframes-scene.md`.
 
   **`design_chunks: null`** (emit-chunks did not run / index.json missing) = prep already reported an anomaly; the worker should fall back to reading `./design-system/design.html` fully (adds ~30-90s per worker). This should not happen in the normal path.
 
@@ -334,18 +333,12 @@ After all scene workers return, run the static composition gate. Note that `chec
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/check-compositions.mjs \
   --hyperframes . \
   --group-spec ./group_spec.json)
-# Tier-A bridge validation (only when group_spec.transitions[] contains tier:"a"; otherwise no-op exits 0):
-(cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/transitions.mjs check-bridge \
-  --hyperframes . \
-  --group-spec ./group_spec.json)
 ```
 
-`transitions.mjs check-bridge` deterministically validates that every Tier-A bridge has matching `data-bridge-id` elements in both the outgoing and incoming scenes (writes `bridge_check.json`). Visual alignment of the handoff pose cannot be statically checked and is left to Step 7 finalize seam snapshots.
-
-Exit codes (same meaning for both scripts):
+Exit codes:
 
 - 0 -> all compositions pass (blueprint anomalies do not block), continue to Step 7.
-- 1 -> stderr names the violating scene + rule category (`check-compositions`) or missing/misaligned bridge elements (`check-bridge-continuity`); **go back to Step 6 and re-dispatch the affected worker** (do not Edit in the master agent - fix upstream).
+- 1 -> stderr names the violating scene + rule category; **go back to Step 6 and re-dispatch the affected worker** (do not Edit in the master agent - fix upstream).
 
 ### Step 7 - Assembly prelude + finalize (Phase 4c)
 
@@ -388,12 +381,12 @@ These steps are all deterministic. **No agent hand-writes `index.html` or manual
         <Phase 3 prose for this scene> }
   ```
 
-  `index.html` is already assembled (transitions injected, videos hoisted). Finalize's flow: **run `npx hyperframes lint` + `npx hyperframes validate`** (fix small contract breaks in place, re-run only the failed gate), then **ONE snapshot call at scene midpoints + Tier-A seam mids, one read of the contact sheet** (looking for blank/black panels, cut or unreadable text, poster-frozen footage, crushed interiors, caption-band collisions — escalate single frames only on suspicion), **fix what looks broken (one fix round)**, then **render + verify-render**. No per-frame QA walkthrough, no rule-analyzer pass. **When finalize repairs scene visual issues in place, it must never change the scene root `data-duration`** (= group_spec `estimatedDuration`, fixed upstream; changing it makes assemble cross-check fatal). Timing errors can only be fixed by returning to Step 6 and re-dispatching the worker.
+  `index.html` is already assembled (transitions injected, videos hoisted). Finalize's flow: **run `npx hyperframes lint` + `npx hyperframes validate`** (fix small contract breaks in place, re-run only the failed gate), then **ONE snapshot call at scene midpoints, one read of the contact sheet** (looking for blank/black panels, cut or unreadable text, poster-frozen footage, crushed interiors, caption-band collisions — escalate single frames only on suspicion), **fix what looks broken (one fix round)**, then **render + verify-render**. No per-frame QA walkthrough, no rule-analyzer pass. **When finalize repairs scene visual issues in place, it must never change the scene root `data-duration`** (= group_spec `estimatedDuration`, fixed upstream; changing it makes assemble cross-check fatal). Timing errors can only be fixed by returning to Step 6 and re-dispatching the worker.
 
 Exit codes / behavior:
 
 - finalize reports the mp4 (verify-render passed) + gate/contact-sheet status + scene files repaired in place -> complete.
-- finalize STOP (**only when** a scene needs "recomposition" - the entire scene content is wrong / multiple primary items require real relayout / animation logic is too broken for one or two edits) -> orchestrator goes back to Step 6 and re-dispatches that worker with the full `agents/hyperframes-scene.md` + normal dispatch context + a `## Repair context` block carrying finalize's verbatim findings and `Captions: enabled|disabled` (bridge-pair workers own both scenes and must keep the handoff pose aligned) -> **rerun (1)** -> re-dispatch finalize. This is an exception path, not the default. If the same finding survives two rounds, STOP and surface it to the user.
+- finalize STOP (**only when** a scene needs "recomposition" - the entire scene content is wrong / multiple primary items require real relayout / animation logic is too broken for one or two edits) -> orchestrator goes back to Step 6 and re-dispatches that worker with the full `agents/hyperframes-scene.md` + normal dispatch context + a `## Repair context` block carrying finalize's verbatim findings and `Captions: enabled|disabled` -> **rerun (1)** -> re-dispatch finalize. This is an exception path, not the default. If the same finding survives two rounds, STOP and surface it to the user.
 
 ### Completion report
 
@@ -469,7 +462,7 @@ Complete per-phase fields you may report after finishing (pick as needed):
 - design-system: build-design.mjs stdout (palette / fonts / preset / component count)
 - story-design / visual-design: archetype (story only) / scene count / total duration / one line per scene
 - audio: TTS provider / voice id / BGM enabled, pending, provider, mode, log / total_duration_s
-- prep: scenes / groups / total_duration_s / per-group scene_ids / transitions(type, direction, duration, tier) / copied asset count / anomalies
+- prep: scenes / workers / total_duration_s / transitions(type, direction, duration) / copied asset count / anomalies
 - captions: caption_groups.json.stats (groups/words/split) / selected skin / whether captions.html was generated / self-check result; or skipped reason
 - scene workers: worker count / each worker's scene_ids, effects, blueprint, scoped keepout self-check status / check-compositions passed, violations, anomaly count
 - finalize: wait-bgm summary / assemble summary (clips, voice, bgm, captions, sfx counts) / inject-transitions summary (per boundary + track rearrangement) / lint + validate status / hoisted videos (count + tracks) / contact-sheet pass (tiles scanned, escalations, fixes in place) / verify-render mp4 path, bytes, ffprobe duration / quality / any re-dispatched worker

@@ -20,36 +20,35 @@ metadata:
 
 > **Confirm the route before Step 0.** This skill makes a video for a **product being marketed / launched / promoted**. If it's really a **general (non-launch) site → video** (site tour / showcase, not selling a product) → `/website-to-video`; a **topic / concept with no product** → `/faceless-explainer`; a **GitHub PR** → `/pr-to-video`; an **existing video to caption / package** → `/embedded-captions` · `/graphic-overlays`. **Out of scope** (decline, don't fake): live / at-render-time data (every value is baked in at author time), or footage / screenshots / an avatar that doesn't exist yet (HyperFrames can't record or capture). Routed here on a vague "make a video", or unsure product-vs-topic / launch-vs-general-site? **Read `/hyperframes-read-first` first.**
 
-All artifacts are written to `PROJECT_DIR = videos/<project-name>/` (created in Step 0). All paths in the table below are relative to `PROJECT_DIR`.
+All artifacts are written to `PROJECT_DIR = videos/<project-name>/` (created in Step 0). Paths below are relative to `PROJECT_DIR`. You (the orchestrator) run the Bash steps and dispatch the subagents; per-phase details live in the linked guides/agents/scripts — do not expand them here.
 
-| Phase                    | Execution                                                                                                                                                                           | Primary artifact                                     | Detailed flow                                              |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------- |
-| init                     | Run Bash directly                                                                                                                                                                   | `hyperframes.json`                                   | Step 0 (this file)                                         |
-| capture                  | Run `hyperframes capture` directly in Bash                                                                                                                                          | `capture/extracted/tokens.json`                      | `phases/capture/guide.md`                                  |
-| design-system            | subagent (`general-purpose`)                                                                                                                                                        | `design-system/design.html` + `chunks/`              | `agents/design-system.md`                                  |
-| story-design             | subagent (`general-purpose`)                                                                                                                                                        | `narrator_scripts.json`                              | `agents/story-design.md`                                   |
-| audio                    | Run `audio.mjs` directly in Bash                                                                                                                                                    | `audio_meta.json`                                    | `phases/audio/guide.md` (the script is the flow)           |
-| visual-design            | subagent (`general-purpose`)                                                                                                                                                        | `section_plan.md`                                    | `agents/visual-design.md`                                  |
-| prep                     | Run `prep.mjs` directly in Bash                                                                                                                                                     | `group_spec.json`                                    | `scripts/prep.mjs` (the script is the flow)                |
-| captions (deterministic) | Run `captions.mjs group` -> `captions.mjs html` directly in Bash (no subagent)                                                                                                      | `caption_groups.json` + `compositions/captions.html` | `scripts/captions.mjs group` / `scripts/captions.mjs html` |
-| scenes                   | N x subagent (`general-purpose`, parallel in the same message)                                                                                                                      | `compositions/scene_*.html`                          | `agents/hyperframes-scene.md`                              |
-| finalize (Phase 4c)      | Bash prelude (wait-bgm + assemble-index + transitions + hoist-videos + sfx-verify) -> finalize subagent (lint+validate -> one contact-sheet look -> fix what pixels show -> render) | `renders/video.mp4`                                  | SKILL.md Step 7 / `agents/hyperframes-finalize.md`         |
+| Phase         | Execution                                                                                  | Primary artifact                                     | Detailed flow                             |
+| ------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- | ----------------------------------------- |
+| init          | Bash directly                                                                              | `hyperframes.json`                                   | Step 0 (this file)                        |
+| capture       | Bash directly (`hyperframes capture`)                                                      | `capture/extracted/tokens.json`                      | `phases/capture/guide.md`                 |
+| design-system | subagent (`general-purpose`)                                                               | `design-system/design.html` + `chunks/`              | `agents/design-system.md`                 |
+| story-design  | subagent (`general-purpose`)                                                               | `narrator_scripts.json`                              | `agents/story-design.md`                  |
+| audio         | Bash directly (`audio.mjs`)                                                                | `audio_meta.json`                                    | `phases/audio/guide.md`                   |
+| visual-design | subagent (`general-purpose`)                                                               | `section_plan.md`                                    | `agents/visual-design.md`                 |
+| prep          | Bash directly (`prep.mjs`)                                                                 | `group_spec.json`                                    | `scripts/prep.mjs` header                 |
+| captions      | Bash directly (`captions.mjs group` -> `html`)                                             | `caption_groups.json` + `compositions/captions.html` | `scripts/captions.mjs` header             |
+| scenes        | N x subagent (parallel, one scene each)                                                    | `compositions/scene_*.html`                          | `agents/hyperframes-scene.md`             |
+| finalize      | Bash prelude (wait-bgm + assemble + transitions + hoist + sfx-verify) -> finalize subagent | `renders/video.mp4`                                  | Step 7 / `agents/hyperframes-finalize.md` |
 
 ## Prerequisites (install before first run)
 
-macOS Apple Silicon or Linux x64. System tools:
+macOS Apple Silicon or Linux x64:
 
 ```bash
 brew install python@3.11 node ffmpeg                   # On Linux, use the apt/dnf equivalent
 npx hyperframes doctor                                  # One-time check that Chrome / dependencies are ready
 ```
 
-- `python@3.11` (**use Homebrew Python, not system `/usr/bin/python3`**, or `pip install` will be blocked by PEP 668; used by the MusicGen fallback in the audio phase)
-- `node >= 18` - used by `npx hyperframes`
-- `ffmpeg` - `audio.mjs` uses `ffprobe` to read voice duration
-- `hyperframes` CLI - Phase 1 capture and design-system share the same capture; on first `npx hyperframes capture`, the browser manager downloads Chrome automatically. `scripts/hoist-videos.mjs` (Step 7, runs only when a scene declares footage) reuses that same cached Chrome — it never downloads a browser; its only dep is the `puppeteer-core` npm module (`node hoist-videos.mjs --ensure-deps` installs it on demand, ~5s, no full `puppeteer` install)
+- `python@3.11` — **Homebrew Python, not system `/usr/bin/python3`** (PEP 668 blocks `pip install` otherwise); used by the MusicGen fallback
+- `node >= 18` + `ffmpeg` (`audio.mjs` uses `ffprobe`)
+- Chrome downloads automatically on first `npx hyperframes capture`. `hoist-videos.mjs` (Step 7, runs only when a scene declares footage) reuses that cached Chrome; if it reports deps missing, run `node <SKILL_DIR>/scripts/hoist-videos.mjs --ensure-deps` once (~5s)
 
-Optional API keys (if unset, the workflow uses local fallbacks). Injection is described in Step 0.5. `GEMINI_API_KEY` and `GOOGLE_API_KEY` are equivalent aliases.
+Optional API keys (unset -> local fallbacks; injection in Step 0.5; `GEMINI_API_KEY` ≡ `GOOGLE_API_KEY`):
 
 | Key                                            | Used for                                       | Default voice / fallback                                                                      |
 | ---------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -62,17 +61,13 @@ Optional API keys (if unset, the workflow uses local fallbacks). Injection is de
 
 ### Step 0.0 - Confirm the brief (one round, then build)
 
-Before Step 0, in **one** message confirm only what materially shapes the launch video and you can't infer — lead with a recommended default, skip anything the user already gave: the **angle / focus** (what the launch centers on — the product overall, a headline feature, an offer / CTA), **length** (default ~30-90s; up to ~3 min), and — if `/hyperframes-read-first` did not already set them — **aspect** (default 16:9; 9:16 for vertical / social) and **language**. The preset is derived from brand capture, not asked. For a fully specified request, skip this and build.
+Before Step 0, in **one** message confirm only what materially shapes the launch video and you can't infer — lead with a recommended default, skip anything the user already gave: the **angle / focus** (the product overall, a headline feature, an offer / CTA), **length** (default ~30-90s; up to ~3 min), and — if `/hyperframes-read-first` did not already set them — **aspect** (default 16:9; 9:16 for vertical / social) and **language**. The preset is derived from brand capture, not asked. For a fully specified request, skip this and build.
 
 ### Step 0 - Initialize the video project
 
-cwd is the agent workspace root (for example `/tmp/launch-video-202347`) and should only contain harness state such as `.claude/skills/` and `node_modules/`. All video artifacts are written to the subdirectory `PROJECT_DIR = videos/<project-name>/`.
+cwd is the agent workspace root; all video artifacts go in `PROJECT_DIR = videos/<project-name>/`.
 
-**Naming `<project-name>`**:
-
-- If the user prompt explicitly gives a directory (for example `Use ./videos/acme-launch`), use it directly.
-- Otherwise the orchestrator chooses a short, clear kebab-case name, such as `<brand>-promo` / `<product>-launch`. **Do not** use the workspace basename or timestamp (`launch-video-204613` is wrong).
-- If only a URL is available, derive the name from the domain/page title first; it may be renamed before `capture/` is written, and becomes fixed after that.
+**Naming `<project-name>`**: an explicit user-given directory wins; otherwise choose a short kebab-case name like `<brand>-promo` (**never** the workspace basename or a timestamp). From a URL, derive it from the domain/page title; the name is fixed once `capture/` is written.
 
 **Initialization** (only when `$PROJECT_DIR/hyperframes.json` does not exist):
 
@@ -82,51 +77,39 @@ mkdir -p "$(dirname "$PROJECT_DIR")"
 npx hyperframes init "$PROJECT_DIR" --non-interactive --skip-skills --example=blank
 ```
 
-> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`; **leave them in place** — they are agent scaffolding for whoever opens the finished project later. This skill (not those files) is the source of truth for the workflow, so do not treat their generic guidance as run-time constraints.
+> `hyperframes init` drops a generic `AGENTS.md` / `CLAUDE.md` into `$PROJECT_DIR`; leave them in place but do not treat their generic guidance as run-time constraints — this skill is the source of truth.
 
-**Constraints** (violating any one of these makes later phases unable to find artifacts or triggers lint errors):
+**Constraints** (each violation breaks later phases):
 
-- Do not run `hyperframes init` or generate `AGENTS.md` / `CLAUDE.md` in the workspace root.
-- Do not create another `hyperframes/` subproject inside `PROJECT_DIR`.
-- Every subagent dispatch context contains a line `PROJECT_DIR: <path>`; the subagent treats it as the project root, and Bash commands use `(cd "$PROJECT_DIR" && ...)` subshells.
-- **cwd discipline (the master follows this too)**: every Bash command in this skill must be copied as a `(cd "$PROJECT_DIR" && ...)` subshell. **Do not improvise it into bare `cd "$PROJECT_DIR" && ...`**. Bare `cd` changes the shell's persistent cwd, so the next command's relative paths drift and you must `pwd`/`cd` back, which is wasted work. Subshell form gives every command its own cwd, keeps commands independent, and makes them safe to copy out of order.
-
-The complete directory shape is in "Design notes / Directory shape" at the end. Artifact paths for each phase are already shown in that step's commands.
+- Do not run `hyperframes init` (or generate `AGENTS.md` / `CLAUDE.md`) in the workspace root; do not create a `hyperframes/` subproject inside `PROJECT_DIR`.
+- Every subagent dispatch context contains a `PROJECT_DIR: <path>` line; the subagent treats it as the project root.
+- **cwd discipline (master too)**: every Bash command runs as a `(cd "$PROJECT_DIR" && ...)` subshell — never bare `cd "$PROJECT_DIR" && ...` (persistent cwd drift makes later relative paths wrong).
 
 ### Step 0.5 - API key guidance
 
-**Skip condition**: `$PROJECT_DIR/.env` already exists, or `context.log` is non-empty (= not the first run). Otherwise **first detect what's already available**, then **always pause and present the menu below — wait for the user; do not proceed on your own, even when a workable config is detected** (the user may want to add a key, e.g. Gemini for Lyria BGM + vision captions):
-
-- HeyGen TTS is on if `$HEYGEN_API_KEY` / `$HYPERFRAMES_API_KEY` is set, **or** `~/.heygen/credentials` exists (from `hyperframes auth login`, shared with heygen-cli).
-- ElevenLabs / Gemini are on only if their env keys are set.
-
-State what was detected (and what each missing key would add), then ask:
+**Skip when** `$PROJECT_DIR/.env` exists or `context.log` is non-empty. Otherwise detect what's configured (HeyGen TTS = `$HEYGEN_API_KEY` / `$HYPERFRAMES_API_KEY` / `~/.heygen/credentials`; ElevenLabs / Gemini = their env keys), then **always pause and ask — do not proceed on your own, even when a workable config is detected**:
 
 > Detected: <summary>. Cloud keys are optional — without them, unconfigured providers fall back locally (TTS -> Kokoro unless HeyGen is configured; BGM -> MusicGen). Reply with:
 >
 > - paste keys -> I will write them to `$PROJECT_DIR/.env`
-> - "go" -> proceed with what is configured now (shell `export`, `.env`, or `hyperframes auth login`)
+> - "go" -> proceed with what is configured now
 > - "skip" -> proceed with local fallbacks for anything unconfigured
 
-**Response handling**:
-
-- Pasted keys -> Write/Edit `$PROJECT_DIR/.env`, one `KEY=value` per line; overwrite same-name keys. Do not judge or change paths.
-- "go" / "skip" / "already set" -> proceed directly to Step 1.
+Pasted keys -> Write/Edit `$PROJECT_DIR/.env`, one `KEY=value` per line (overwrite same-name keys, do not judge values). "go" / "skip" -> Step 1.
 
 ### Step 1 - Capture (Phase 1)
 
-1. Resolve `SKILL_DIR` and any explicit `TARGET_URL` from the prompt.
-2. Resolve Step 0 and ensure `PROJECT_DIR` exists.
-3. Read `$PROJECT_DIR/context.log` if it exists, and use the Resume table below to skip completed phases.
-4. **Classify the input first** (Step 1.0 below) to fix two flags — `CAPTURE` (crawl a site or not) and `VO_MODE` (how story-design treats a user-supplied script) — then **run Bash directly**. Whichever path you take, **both share the `derive-context-pack` + `build-design --no-emit` steps** (design-system consumes capture artifacts directly):
+1. Resolve `SKILL_DIR` and any explicit `TARGET_URL` from the prompt; ensure Step 0 ran.
+2. Read `$PROJECT_DIR/context.log` if it exists and use the Resume table below to skip completed phases.
+3. **Classify the input** (Step 1.0) to set `CAPTURE` and `VO_MODE`, then run the matching path. Both paths share the same downstream commands.
 
 #### Step 1.0 - Classify the input (set CAPTURE + VO_MODE)
 
 | Input shape                                          | What to do                                                                                                                                                                                                |
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Explicit URL in the prompt**                       | `TARGET_URL` = that URL; `CAPTURE=yes`; no user script → narration is generated from the captured site (skip the voice-over question). Take the capture path (A).                                         |
+| **Explicit URL in the prompt**                       | `TARGET_URL` = that URL; `CAPTURE=yes`; no voice-over question (narration comes from the captured site). Path (A).                                                                                        |
 | **User pasted / pointed at a script or brief**       | (1) Save the verbatim text to `$PROJECT_DIR/user_script.txt`. (2) **Ask the voice-over question once** (below) → set `VO_MODE`. (3) **Resolve a capture target from the script** (below) → set `CAPTURE`. |
-| **A topic / brief with no script prose, no product** | `CAPTURE=no`; no voice-over question (there is no user wording to preserve — story-design writes from the brief). Take the no-capture path (B).                                                           |
+| **A topic / brief with no script prose, no product** | `CAPTURE=no`; no voice-over question. Path (B).                                                                                                                                                           |
 
 **Voice-over question** (only when the user supplied actual script prose) — ask one short line and wait:
 
@@ -135,23 +118,19 @@ State what was detected (and what each missing key would add), then ask:
 > - Verbatim — keep the original wording; I only split scenes and pair visuals. Duration follows the script.
 > - Restructure — treat it as a brief and rewrite tighter narration, 1-2 sentences per scene.
 
-Set `VO_MODE = verbatim | restructure` (default `restructure` if the user is indifferent). It is threaded to story-design in Step 2.
+`VO_MODE = verbatim | restructure` (default `restructure`); threaded to story-design in Step 2.
 
-**Resolve a capture target from the script** — by default look for a site and crawl it (real brand colors / fonts / assets beat a preset fallback). **Skip to `CAPTURE=no` only when the user opted out** ("do not search / no web / text-only / no capture / don't search"). Otherwise, in order:
+**Resolve a capture target from the script** — default to finding and crawling a site (real brand tokens beat preset fallbacks); skip only when the user opted out ("no web / text-only / no capture"). In order: (1) explicit `http(s)://` URL in the script → use it, announce, `CAPTURE=yes`; (2) clear brand/product name → `WebSearch` for the official site, **confirm the resolved URL with the user in one line** before crawling (decline / nothing credible → `CAPTURE=no`); (3) nothing derivable → `CAPTURE=no`.
 
-1. **An explicit `http(s)://…` URL in the script** → `TARGET_URL` = it; `CAPTURE=yes`. Announce it; no need to ask.
-2. **A clear brand / product name but no URL** → run `WebSearch` to resolve the official site, then **confirm the single resolved URL with the user in one line** before crawling (search can land on the wrong domain). On confirm → `TARGET_URL` + `CAPTURE=yes`; if the user declines or nothing credible turns up → `CAPTURE=no`.
-3. **No site derivable** → `CAPTURE=no`.
+> **Capture + user script coexist**: the crawl supplies only brand tokens + assets + visual register; the narration spine stays `user_script.txt` (honored via `VO_MODE`), never the site's own copy.
 
-> **Capture + user script coexist.** When `CAPTURE=yes` **and** `user_script.txt` exists, the crawl supplies **only** brand tokens + assets + visual register — the **narration spine stays `user_script.txt`** (Step 2 honors it via `VO_MODE`, never the site's own copy). When `CAPTURE=no`, take path (B) (synthesize the minimal capture package) and `user_script.txt` is the brief.
-
-**(A) Capture path (`CAPTURE=yes`)** - hyperframes capture:
+**(A) Capture path (`CAPTURE=yes`)**:
 
 ```bash
 (cd "$PROJECT_DIR" && npx hyperframes capture "<TARGET_URL>" -o ./capture)
 ```
 
-**(B) No-capture path (`CAPTURE=no` — pure text video, or a user script with no derivable site)** - do not capture; synthesize a minimal capture package and feed it into the same downstream path. **The preset is chosen by you (master)** because no site can be inferred; choose from the 19 presets according to the user's intent, or ask one short question. The full user script/brief goes into `visible-text.txt`; `colors:[]` makes build-design use the **R2 preset-palette fallback** (a complete readable palette exists even without brand colors; if the user specified brand colors, fill `colors`, which overrides the preset defaults):
+**(B) No-capture path (`CAPTURE=no`)** — synthesize a minimal capture package; downstream is identical. **You (master) choose the preset** (no site to infer from; pick from the 19 presets per user intent, or ask one short question). The full script/brief goes into `visible-text.txt`; `colors:[]` triggers the preset-palette fallback (fill `colors` only if the user named brand colors):
 
 ```bash
 (cd "$PROJECT_DIR" && mkdir -p capture/extracted capture/assets)
@@ -163,19 +142,16 @@ JSON
 (cd "$PROJECT_DIR" && printf '%s\n' "<full user script / brief>" > capture/extracted/visible-text.txt)
 ```
 
-> Path B satisfies both "user-provided script" and "no asset capture" at once: `narrator_scripts` is still generated by Step 2 story-design from `user_script.txt` (honoring `VO_MODE`; all scenes use `assetCandidates: []`, so the video is text/typography only). If the user **already has a final `narrator_scripts.json`**, place it in `$PROJECT_DIR/`; the Resume table will skip story-design.
+> If the user already has a final `narrator_scripts.json`, place it in `$PROJECT_DIR/`; the Resume table skips story-design.
 
-**Shared downstream for both paths** (Path B build-design **must include `--style <chosen-preset>`** to force the preset; Path A omits it and uses auto-inference):
+**Shared downstream for both paths** (Path B appends `--style <chosen-preset>` to build-design; Path A omits it for auto-inference):
 
 ```bash
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/derive-context-pack.mjs --capture ./capture)
-# Deterministically outputs design-system/inference.json (site_dna + preset scoring / forced preset). Step 1b and Step 2 both read it and fork in parallel.
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/phases/design-system/scripts/build-design.mjs ./design-system --no-emit)   # Path B: append --style <chosen-preset>
 ```
 
-Capture artifacts: `capture/extracted/{tokens,design-styles,animations,fonts-manifest,asset-descriptions,video-manifest,visible-text}.{json,md,txt}` + `capture/assets/` + `capture/screenshots/` + `capture/context_pack.md` (the LLM brief synthesized by derive-context-pack, read directly by Phase 2 / Phase 3) + `design-system/inference.json` (the deterministic output of `build-design.mjs --no-emit`: `site_dna` + preset candidate scoring; it does not output `design.html` / chunks - those belong to Step 1b).
-
-Validation:
+Validation (stop and report if anything is missing; if `capture/BLOCKED.md` exists, the site blocked the crawl — follow the instructions inside it):
 
 ```bash
 [ -s "$PROJECT_DIR/capture/extracted/tokens.json" ] && \
@@ -185,32 +161,27 @@ Validation:
 [ -d "$PROJECT_DIR/capture/assets" ] && echo ok || echo missing
 ```
 
-If any are missing, report the error and stop. If `capture/BLOCKED.md` exists, the site hit anti-scraping / timeout; follow the instructions inside it.
+### Step 1b + Step 2 - design-system ∥ story-design (parallel fork)
 
-### Step 1b + Step 2 - Visual system in parallel with story design (Phase 1b and Phase 2 parallel fork)
+Both subagents depend only on Step 1 artifacts and do not read each other's output — after capture validates, start them **in parallel in the same message** (each `run_in_background: true`); do not serialize:
 
-The Step 1 Bash phase has already deterministically produced `design-system/inference.json` and `capture/context_pack.md`. These two subagents **depend only on capture-phase artifacts and do not read each other's output**, so after capture exits 0, start them **in parallel in the same message** (each with `run_in_background: true`) - do not serialize them:
-
-- **design-system** (Phase 1b): dispatch a subagent. `## Dispatch context` contains `SKILL_DIR` / `PROJECT_DIR` / `Target URL`, and includes the full Step 1 `inference.json` by `cat` (`(cd "$PROJECT_DIR" && cat design-system/inference.json)`, ~2-4 KB, saving the subagent one Read). The four-step flow of preset selection / brand color trimming / build-design / emit-chunks belongs to `agents/design-system.md`; the master does not need to expand it.
-
-- **story-design** (Phase 2): dispatch a subagent. `## Dispatch context`:
+- **design-system**: prompt = full `agents/design-system.md` + `## Dispatch context` with `SKILL_DIR` / `PROJECT_DIR` / `Target URL` + the full text of `design-system/inference.json` inlined via `cat` (~2-4 KB, saves the subagent one Read).
+- **story-design**: prompt = full `agents/story-design.md` + `## Dispatch context`:
 
   ```
   SKILL_DIR: <absolute path>
   PROJECT_DIR: <video project root>
   Schema validator: <SKILL_DIR>/scripts/validate.mjs narrator
-  Design DNA: ./design-system/inference.json   # Read site_dna once at the start to set the narrative register (deterministic Step 1 artifact, independent of the design-system subagent)
-  Provided script: ./user_script.txt   # ONLY when the user supplied a script (Step 1.0). This file is the narration spine; omit the whole line when there is no user script.
-  Voice-over mode: <verbatim | restructure>   # From Step 1.0; pair it with the Provided script line. Omit when there is no user script.
-  Script style: Keep each scene's script concise - 1-2 sentences, no more than 20 words   # Applies in restructure / no-user-script mode ONLY. In verbatim mode this budget is suspended — preserve the user's wording and let total length follow the script (see story-design guide "Provided-Script Modes").
-  Orientation: <landscape | portrait | square>   # From the user's requested aspect / `/hyperframes-read-first` (16:9→landscape, 9:16→portrait, 1:1→square; default landscape when unspecified). Emit VERBATIM as the top-level `orientation` field — dictated, not a choice; it sets the canvas (portrait→1080×1920) for the whole pipeline.
+  Design DNA: ./design-system/inference.json   # read site_dna once to set the narrative register
+  Provided script: ./user_script.txt   # ONLY when the user supplied a script; omit the line otherwise
+  Voice-over mode: <verbatim | restructure>   # pair with Provided script; omit otherwise
+  Script style: Keep each scene's script concise - 1-2 sentences, no more than 20 words   # suspended in verbatim mode (length follows the script)
+  Orientation: <landscape | portrait | square>   # from the user's aspect (16:9→landscape, 9:16→portrait, 1:1→square; default landscape). Echoed verbatim into narrator_scripts.orientation → sets the canvas for the whole pipeline
   ```
-
-  > Fill `Orientation:` from the user's requested aspect (default `landscape`); story-design echoes it into `narrator_scripts.orientation`, which Step 5 prep maps to `group_spec.width/height`. Without it the launch video stays 16:9.
 
 ### Step 3 - Audio (Phase 2.5)
 
-After story-design returns and `narrator_scripts.json` exists, start audio (**it depends only on story-design**; design-system may still be running in parallel, and audio does not wait for it):
+After story-design returns (`narrator_scripts.json` exists) — audio does not wait for design-system:
 
 ```bash
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/audio.mjs \
@@ -220,21 +191,20 @@ After story-design returns and `narrator_scripts.json` exists, start audio (**it
   --lyria-recipe <SKILL_DIR>/phases/audio/lyria-recipe.py)
 ```
 
-**BGM preconditions** (if either is satisfied, detached BGM generation runs in the background; otherwise it is silently skipped and voice proceeds normally): `$GOOGLE_API_KEY` + existing `--lyria-recipe` -> Lyria cloud; otherwise installed `transformers torch soundfile numpy` -> local MusicGen (first run downloads ~300 MB; the script may pip-install in the background while TTS runs). BGM synthesis mechanics (seed clip / loop) and all optional flags (`--voice` / `--provider` / `--no-bgm` / `--bgm-prompt` / ...) are documented at the top of `audio.mjs`.
+BGM runs detached in the background when available (`$GOOGLE_API_KEY` → Lyria cloud; else installed `transformers torch soundfile numpy` → local MusicGen, first run ~300 MB) and is silently skipped otherwise; all flags (`--voice` / `--provider` / `--no-bgm` / ...) are documented at the top of `audio.mjs`.
 
-- exit 0 -> voice + transcribe complete (BGM may still be running in the background; `audio_meta.json` records `bgm_log` / `bgm_pid`), continue.
-- exit 1 -> zero scenes produced voice; report the error and stop.
+- exit 0 -> voice + transcribe complete (BGM may still be running; `audio_meta.json` records `bgm_log` / `bgm_pid`), continue.
+- exit 1 -> zero scenes produced voice; report and stop.
 
 ### Step 4 - Visual design (Phase 3)
 
-**Join point**: after design-system and story-design have both returned (`design-system/chunks/index.json` + `narrator_scripts.json` exist) and audio has completed (`audio_meta.json` exists), concatenate **all inputs** for visual-design into one dispatch packet `/tmp/vd-dispatch.txt`. The subagent Step 0 reads it **once** and gets everything (catalog / rules / chunks / story), with zero additional Reads before writing the plan:
+**Join point**: `design-system/chunks/index.json` + `narrator_scripts.json` + `audio_meta.json` all exist. Build one dispatch packet (the subagent reads it once, zero extra Reads):
 
 ```bash
 DP=/tmp/vd-dispatch.txt
 {
-  # Intentional section order: contract first, static references in the middle, work items last (see explanation below)
+  # Section order is deliberate: contracts first, static references middle, work items last
   echo "## Design chunks"
-  # Project-level contracts (all on disk now; only non-empty chunks exist, and cat skips missing files automatically, avoiding two hops through index.json to check *_file)
   (cd "$PROJECT_DIR" && cat design-system/chunks/index.json \
     design-system/chunks/composition-hints.md design-system/chunks/voice.md \
     design-system/chunks/tokens.css design-system/chunks/easings.js 2>/dev/null)
@@ -243,29 +213,29 @@ DP=/tmp/vd-dispatch.txt
   echo "## Design rules";     cat <SKILL_DIR>/phases/visual-design/rules/{typography,color-system,composition,motion-language}.md
   echo "## SFX library";      cat <SKILL_DIR>/assets/sfx/manifest.json
   echo "## Narrator scripts"; (cd "$PROJECT_DIR" && cat narrator_scripts.json)
-  echo "## Audio meta";       (cd "$PROJECT_DIR" && cat audio_meta.json 2>/dev/null)   # Optional; used to override Duration if drift is >10%
+  echo "## Audio meta";       (cd "$PROJECT_DIR" && cat audio_meta.json 2>/dev/null)   # optional; overrides Duration on >10% drift
 } > "$DP"
 
-# Captions planning hint (computed separately, not included in the packet; put it directly in the Captions: line of the dispatch below)
+# Captions planning hint for the Captions: dispatch line below
 (cd "$PROJECT_DIR" && node -e 'try{const m=require("./audio_meta.json");process.stdout.write(Object.values(m.scenes||{}).some(s=>s.wordsPath)?"enabled":"disabled")}catch{process.stdout.write("enabled")}')
 ```
 
-Then start the visual-design subagent. **Its prompt = the full contents of `agents/visual-design.md` + the `## Dispatch context` below, passed through verbatim**. You (master) do not need to pre-read or digest the agent prompt; copy it as-is (the flow details are read from the guide by the subagent itself):
+Dispatch the subagent: prompt = full `agents/visual-design.md` + `## Dispatch context` (copy verbatim, do not digest):
 
 ```
 SKILL_DIR: <absolute path>
 PROJECT_DIR: <video project root>
 Schema validator: <SKILL_DIR>/scripts/validate.mjs section
-Canvas: <width>×<height>   # default 1920×1080 (16:9 landscape); 1080×1920 (9:16 portrait) or 1080×1080 (1:1 square) if the orientation source requested it (narrator_scripts.orientation/dimensions). Plan layouts for THIS aspect ratio — see composition.md "Portrait & Square".
-Captions: <enabled | disabled>   # Planning hint computed by the node -e above: enabled => leave key content in the upper ~83% and the bottom ~17% of canvas height as caption territory in prose (see guide Section 4, rule 2)
-Dispatch packet: /tmp/vd-dispatch.txt   # Step 0 reads it once to get all inputs; section order described below. Reading it is enough; normally no further disk Reads are needed
+Canvas: <width>×<height>   # 1920×1080 default; 1080×1920 portrait / 1080×1080 square when narrator_scripts.orientation says so
+Captions: <enabled | disabled>   # the node -e hint above; enabled => plan keeps key content in the upper ~83%
+Dispatch packet: /tmp/vd-dispatch.txt
 ```
 
-The here-doc section order is intentional: contracts (`## Design chunks`) are first so they get attention (violating composition-hints means render failure, and voice must be honored in prose), static references (catalog/blueprints/rules/SFX) are in the middle, and work items (`## Narrator scripts` + `## Audio meta`) are last. `type-roles.md` and component HTML bodies **are not included in the packet and are not read** (they are worker responsibilities). The `Captions:` line is only an optimistic planning hint; the authoritative gate is produced by Step 5 prep (see "Design notes / Captions gate").
+The `Captions:` line is an optimistic hint; the authoritative gate is `group_spec.captions_enabled` from Step 5 prep (mismatch is safe — Step 6/7 keep-out always follows group_spec).
 
-### Step 5 - Phase 4a prep (deterministic script, NO subagent)
+### Step 5 - prep (deterministic, NO subagent)
 
-After Phase 3 visual-design exits and `section_plan.md` exists, run `prep.mjs` to merge all upstream artifacts into `group_spec.json`, consumed by Phase 4b/4c:
+After `section_plan.md` exists:
 
 ```bash
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/prep.mjs \
@@ -280,24 +250,18 @@ After Phase 3 visual-design exits and `section_plan.md` exists, run `prep.mjs` t
   --out ./group_spec.json)
 ```
 
-This merges all upstream artifacts (parse `section_plan` anchors, validate effect/component ids, assign one scene per worker, compute `transitions[]`, copy assets/fonts/SFX) into `group_spec.json`. Internal logic is described in the header comments of `prep.mjs`; you (master) only need to inspect the exit code:
+- exit 0 -> append the stdout summary to `$PROJECT_DIR/context.log`.
+- exit 1 -> stderr names the failing scene + anchor; re-dispatch visual-design (Step 4) with the error passed through.
 
-Exit codes:
+### Step 5.5 + Step 6 - Captions (deterministic) + scene worker fan-out
 
-- 0 -> read stdout (scenes / workers / total duration / per-scene breakdown) and append it to `$PROJECT_DIR/context.log`.
-- 1 -> stderr names the failing scene + anchor (missing anchor / unknown effect id / bad value); go back to Step 4 and re-dispatch visual-design with the error passed through.
-
-### Step 5.5 + Step 6 - Captions (deterministic) + scene worker parallel fan-out (Phase 4a.5 + 4b)
-
-**Captions use no subagent at all - two deterministic scripts run in sequence** (after prep exits 0 and before scene fan-out, run directly in Bash; typically tens of milliseconds):
+**Captions are two Bash scripts, no subagent** (run after prep, before fan-out):
 
 ```bash
-# (1) Word engine: whisper word stream -> caption_groups.json (clean/group/classify/global timing/scene+surface)
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/captions.mjs group \
   --group-spec ./group_spec.json --hyperframes . \
   --tokens design-system/chunks/tokens.css --out ./caption_groups.json)
 
-# (2) HTML engine: caption_groups.json + registry skin -> compositions/captions.html (replaces the old captions agent)
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/captions.mjs html \
   --hyperframes . --groups ./caption_groups.json \
   --tokens design-system/chunks/tokens.css \
@@ -305,29 +269,21 @@ Exit codes:
   --out compositions/captions.html)
 ```
 
-Both scripts are normal when they exit 0. If either prints `captions: skipped (<reason>)` (missing group_spec / whisper words / tokens.css / caption groups), skip the entire caption chain: no `captions.html` is generated, and assemble will not mount track 12. Skin selection, word annotation, tokenization, and node self-check (failure -> exit 1 without writing output) are all documented at the top of `captions.mjs html`; for offline usage, pass `--skin-file`. **Do not** run `npx hyperframes lint <file>` on `captions.html` (the lint argument is a project directory; passing a file exits 1). Whole-project lint is covered in Step 7.
+exit 0 = normal. `captions: skipped (<reason>)` = legal skip — no `captions.html`, assemble will not mount track 12; continue. **Do not** run `npx hyperframes lint <file>` on `captions.html` (lint takes a project directory; a file path exits 1).
 
-Then read `group_spec.json.groups[]` to get worker count N. Start **N scene worker subagents in parallel in the same message** (captions have already been produced by the scripts above and are **no longer a subagent**). Before fan-out, read `group_spec.json.captions_enabled` (the single gate computed by `prep.mjs`): when `true`, every scene worker dispatch includes `Captions: enabled` (enables a bottom ~17% keep-out); when `false`, dispatch includes `Captions: disabled` (full frame). Each worker's self-check ends with one scoped machine gate — `captions.mjs keepout --scene` (only when captions enabled) — plus the static grep block in its contract, so contract breaks are fixed at the source.
-
-**Two-part dispatch packet** (same idea as Step 4, but per scene worker): `tokens` / `easings` / `voice` are **project-level globals and identical for every worker**. First `cat` them into a shared header `/tmp/scene-shared.txt` once; then for **each** worker, build `/tmp/scene-dispatch/w<N>.txt` = shared header + that worker's per-scene YAML. Worker Step 0 reads its own `wN.txt` once to get everything, saving each worker three separate Reads for tokens/easings/voice:
+**Scene worker fan-out**: read `group_spec.json.groups[]` for worker count N and `group_spec.captions_enabled` for the `Captions:` flag, then build the per-worker dispatch packets and start **N workers in parallel in the same message** (`subagent_type: "general-purpose"`, `run_in_background: true`):
 
 ```bash
 mkdir -p /tmp/scene-dispatch
-# Shared header: three global chunks (needed by every worker, identical content), computed once
+# Shared header (identical for every worker), computed once:
 (cd "$PROJECT_DIR" && cat design-system/chunks/tokens.css design-system/chunks/easings.js design-system/chunks/voice.md 2>/dev/null) \
   > /tmp/scene-shared.txt
-# Then per-worker: shared header + that worker's Scenes YAML (template below), written to /tmp/scene-dispatch/w<N>.txt
+# Per-worker packet: shared header + that worker's Scenes YAML -> /tmp/scene-dispatch/w<N>.txt
 ```
 
-**Scene workers** (each writes `compositions/scene_<N>.html`):
+Each worker's prompt = full `agents/hyperframes-scene.md` + `## Dispatch context` with: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width`/`height`) / `Captions: <enabled|disabled>` / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus the shared header body and the worker's `Scenes:` list **copied verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (`scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` / `creative_brief`). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580). `design_chunks: null` (anomaly already reported by prep) -> the worker falls back to reading `design-system/design.html`.
 
-- N `Agent` calls (`subagent_type: "general-purpose"`, each `run_in_background: true`). prompt = the full contents of `agents/hyperframes-scene.md` + `## Dispatch context`, passed through verbatim. Top-level dispatch context fields: `SKILL_DIR` / `PROJECT_DIR` / `Worker ID` / `Composition width` + `Composition height` (= `group_spec.width` / `group_spec.height` — the worker authors + self-checks the root at these dims; landscape 1920×1080 unless portrait/square was requested upstream) / `Captions: <enabled|disabled>` (= `group_spec.captions_enabled`) / `Dispatch packet: /tmp/scene-dispatch/w<N>.txt`, plus `## Tokens/easings/voice` (the shared header body) + a two-part `Scenes:` list (the packet contents). **When `Captions: enabled`, also pass `Caption band top y` = `height − round(height × 0.1667)` and `Foreground max y` = `Caption band top y − 20`** (landscape → 900 / 880; portrait → 1600 / 1580) — constraint #13 keep-out is computed from these, not hardcoded.
-
-  Copy every field in the **`Scenes:` list verbatim from `group_spec.json.groups[i].scenes[<sid>]`** (that worker's single scene): `scene_id` / `effects` / `rule_paths` / `assetCandidates` / `estimatedDuration_s` / `voicePath` / `blueprint` / `design_chunks` (contains absolute paths to the whole component library - the worker chooses by visual judgment) / `creative_brief` (the Phase 3 prose for that scene). Field semantics are in `agents/hyperframes-scene.md`.
-
-  **`design_chunks: null`** (emit-chunks did not run / index.json missing) = prep already reported an anomaly; the worker should fall back to reading `./design-system/design.html` fully (adds ~30-90s per worker). This should not happen in the normal path.
-
-After all scene workers return, run the static composition gate. Note that `check-compositions.mjs` **only scans `compositions/scene_*.html` according to `scene_ids` in `group_spec.json`** (scene-specific rules: root div contract / selector scoping / etc.). It **does not check `captions.html`** (`captions.html` uses the caption engine's own self-lint + Step 7 finalize whole-project lint):
+After all workers return, run the static composition gate (scans `compositions/scene_*.html` per `group_spec.scene_ids`; `captions.html` is covered by its own self-lint + Step 7 whole-project lint):
 
 ```bash
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/check-compositions.mjs \
@@ -335,16 +291,12 @@ After all scene workers return, run the static composition gate. Note that `chec
   --group-spec ./group_spec.json)
 ```
 
-Exit codes:
-
-- 0 -> all compositions pass (blueprint anomalies do not block), continue to Step 7.
-- 1 -> stderr names the violating scene + rule category; **go back to Step 6 and re-dispatch the affected worker** (do not Edit in the master agent - fix upstream).
+- 0 -> continue to Step 7.
+- 1 -> stderr names the violating scene + rule; **re-dispatch that worker** (do not Edit in the master).
 
 ### Step 7 - Assembly prelude + finalize (Phase 4c)
 
-After Step 6 (`check-compositions.mjs`) exits 0, the orchestrator performs a **deterministic Bash prelude** (wait-bgm + assemble + inject/verify-transitions + **hoist-videos** + sfx-verify), then dispatches one **finalize subagent** that runs the two CLI gates (lint + validate), takes ONE contact-sheet look, fixes what the pixels show, and renders. Principle: deterministic steps are all Bash; visual judgment belongs to finalize's eyes (one pass), not to rule analyzers; worker re-dispatch is reserved for recomposition. `compositions/scene_N.html` is the worker source file; editing it means editing the source.
-
-**(1) BGM wait + assembly prelude (deterministic, run directly in Bash):**
+**(1) Deterministic Bash prelude** (each script documents its internals in its own header; you only branch on exit codes):
 
 ```bash
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/wait-bgm.mjs \
@@ -359,110 +311,59 @@ After Step 6 (`check-compositions.mjs`) exits 0, the orchestrator performs a **d
 (cd "$PROJECT_DIR" && node <SKILL_DIR>/scripts/verify-output.mjs sfx --group-spec ./group_spec.json --index ./index.html)
 ```
 
-These steps are all deterministic. **No agent hand-writes `index.html` or manually runs `ls bgm.wav`**. See the header comments in each script for internal logic (`wait-bgm` is the single BGM on-disk check; `assemble-index` turns group_spec into the `index.html` track layout; when `inject-transitions` injects Tier-B transitions, it **only changes the `index.html` shell `data-start`/`data-duration`/`data-track-index` and never touches scene file roots**; **`hoist-videos` reads each scene's poster `data-video-src` declarations, measures the poster's rendered rect headless, and mounts the real `<video class="clip">` at the index.html host root with global timing clamped clear of transitions** — the ONLY legal way footage plays, since the runtime never decodes a `<video>` nested in a scene; `verify`/`sfx-verify` deterministically re-check). You only run the commands and branch by the exit codes below. `check-compositions` already ran in Step 6 and is not rerun here.
+No agent hand-writes `index.html` or manually checks BGM. Exit-code branches:
 
-- assemble exit 1 -> it names a scene (root `data-duration` != group_spec, or scene file missing). This is a worker contract break (timing was fixed upstream and finalize cannot repair it) -> **go back to Step 6 and re-dispatch that worker**, then rerun this step.
-- inject-transitions / verify-transitions exit 1 -> injector bug (normally impossible; prep already validated `transitions[]`) -> report for investigation, do not roll back workers.
-- hoist-videos exit 1 -> a `data-video-src` declaration is invalid (missing file / bad numbers / window too small after transition clamping / poster not measurable) — stderr names the scene + declaration; `Edit` the scene file (or re-dispatch its worker for a real relayout), then rerun this step. exit 2 -> browser unavailable; run `node <SKILL_DIR>/scripts/hoist-videos.mjs --ensure-deps` from the workspace root, then rerun. exit 0 prints one line per hoisted video (src, global window, track, rect).
-- sfx-verify exit 1 -> assembler bug (normally impossible) -> report for investigation.
+- assemble exit 1 -> names a scene (root `data-duration` ≠ group_spec, or file missing) = worker contract break -> **re-dispatch that worker (Step 6)**, then rerun this step.
+- transitions inject/verify exit 1 -> injector bug (prep already validated `transitions[]`) -> report for investigation; do not roll back workers.
+- hoist-videos exit 1 -> an invalid `data-video-src` declaration (stderr names scene + reason); `Edit` the scene file (or re-dispatch for a real relayout), rerun this step. exit 2 -> run `node <SKILL_DIR>/scripts/hoist-videos.mjs --ensure-deps` from the workspace root, rerun.
+- sfx-verify exit 1 -> assembler bug -> report for investigation.
 
-**(2) Dispatch finalize subagent (gate -> ONE contact-sheet look -> fix what pixels show -> render):**
+**(2) Dispatch the finalize subagent**: prompt = full `agents/hyperframes-finalize.md` + `## Dispatch context`:
 
-- `Agent` (`subagent_type: "general-purpose"`), prompt = full contents of `agents/hyperframes-finalize.md` + `## Dispatch context`:
+```
+SKILL_DIR: <absolute path>
+PROJECT_DIR: <video project root>
+Render quality: high     # or draft / standard
+Captions: <enabled | disabled>   # = group_spec.captions_enabled
+BGM: <one-line wait-bgm verdict, e.g. "ready (lyria)" / "skipped (no key)" / "timeout">
+Scenes:                  # one line per scene, copied verbatim from group_spec.json
+  - { scene_id, start_s, estimatedDuration_s, effects: [...], creative_brief: |
+      <Phase 3 prose for this scene> }
+```
 
-  ```
-  SKILL_DIR: <absolute path>
-  PROJECT_DIR: <video project root>
-  Render quality: high     # Or draft / standard, decided by the orchestrator
-  Captions: <enabled | disabled>   # = group_spec.captions_enabled
-  BGM: <one-line wait-bgm verdict, e.g. "ready (lyria)" / "skipped (no key)" / "timeout">
-  Scenes:                  # One line per scene, copied verbatim from group_spec.json (for locating scene files to repair)
-    - { scene_id, start_s, estimatedDuration_s, effects: [...], creative_brief: |
-        <Phase 3 prose for this scene> }
-  ```
+Finalize runs lint+validate, takes one contact-sheet look, fixes what the pixels show, renders, and verifies — its prompt owns that flow. Outcomes:
 
-  `index.html` is already assembled (transitions injected, videos hoisted). Finalize's flow: **run `npx hyperframes lint` + `npx hyperframes validate`** (fix small contract breaks in place, re-run only the failed gate), then **ONE snapshot call at scene midpoints, one read of the contact sheet** (looking for blank/black panels, cut or unreadable text, poster-frozen footage, crushed interiors, caption-band collisions — escalate single frames only on suspicion), **fix what looks broken (one fix round)**, then **render + verify-render**. No per-frame QA walkthrough, no rule-analyzer pass. **When finalize repairs scene visual issues in place, it must never change the scene root `data-duration`** (= group_spec `estimatedDuration`, fixed upstream; changing it makes assemble cross-check fatal). Timing errors can only be fixed by returning to Step 6 and re-dispatching the worker.
-
-Exit codes / behavior:
-
-- finalize reports the mp4 (verify-render passed) + gate/contact-sheet status + scene files repaired in place -> complete.
-- finalize STOP (**only when** a scene needs "recomposition" - the entire scene content is wrong / multiple primary items require real relayout / animation logic is too broken for one or two edits) -> orchestrator goes back to Step 6 and re-dispatches that worker with the full `agents/hyperframes-scene.md` + normal dispatch context + a `## Repair context` block carrying finalize's verbatim findings and `Captions: enabled|disabled` -> **rerun (1)** -> re-dispatch finalize. This is an exception path, not the default. If the same finding survives two rounds, STOP and surface it to the user.
+- Reports the verified mp4 + fixes in place -> complete.
+- **STOP** (a scene needs real recomposition — exception, not default) -> re-dispatch that worker (Step 6) with normal dispatch context + a `## Repair context` block carrying finalize's verbatim findings and the `Captions:` flag -> rerun (1) -> re-dispatch finalize. Same finding survives two rounds -> stop and surface to the user.
 
 ### Completion report
 
-After completion, summarize for the user: key outputs for every phase (capture URL/section/asset counts, preset, archetype, scene count/total duration, worker grouping, transitions, gate status, scene files repaired in place, final mp4 path + bytes + duration). The complete per-phase field list is in "Design notes / Completion report fields" below.
+Summarize per phase from `context.log` + each step's stdout: capture URL / asset counts, preset, archetype, scene count + total duration, transitions, gate status, fixes in place, final mp4 path + bytes + duration.
 
-**Offer a live preview — never auto-open one.** The deliverable is the mp4 above. A browser preview is optional and **must not be started until the user asks for it**. Do NOT run `hyperframes preview` / `play` during any earlier phase: a preview opened mid-run shows half-edited compositions and dies when that phase's own snapshot/render server is torn down. When the user asks, start a long-lived dev server **after** the render (it serves the final on-disk files and stays up until stopped), then report the actual URL with the real port + project name:
+**Offer a live preview — never auto-open one.** The deliverable is the mp4. Do NOT run `hyperframes preview` / `play` during any earlier phase (a mid-run preview shows half-edited compositions and dies with that phase's server). Only when the user asks, after the render:
 
 ```bash
 (cd "$PROJECT_DIR" && npx hyperframes preview)   # Studio UI, e.g. http://localhost:3002/#project/<project-name>
-# or a lightweight shareable player link instead:
-(cd "$PROJECT_DIR" && npx hyperframes play)       # plain http://localhost:<port>
+(cd "$PROJECT_DIR" && npx hyperframes play)       # or a plain shareable player at http://localhost:<port>
 ```
 
-Flags (custom port, external browser) live in the `hyperframes-cli` skill (`references/preview-render.md`).
+Report the actual URL with the real port. Flags live in the `hyperframes-cli` skill.
 
 ---
 
 ## Resume table
 
-Read `$PROJECT_DIR/context.log` and decide where to resume from using these states:
+Read `$PROJECT_DIR/context.log` and resume from the first missing artifact:
 
-| State                                                                                                                             | Continue from                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| log missing or empty                                                                                                              | Full pipeline                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `capture/extracted/tokens.json` missing                                                                                           | Rerun Step 1 (capture + derive-context-pack + `build-design.mjs --no-emit`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `tokens.json` exists, `design-system/inference.json` missing                                                                      | Rerun only the final `build-design.mjs --no-emit` step of Step 1 (deterministic, a few seconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `inference.json` exists, but `design.html` missing **or** `narrator_scripts.json` missing                                         | Step 1b/2 parallel fill-in: if `design.html` is missing, dispatch design-system; if `narrator_scripts.json` is missing, dispatch story-design; if both are missing, dispatch both together in the same message                                                                                                                                                                                                                                                                                                                                                                                   |
-| `narrator_scripts.json` exists, `audio_meta.json` missing                                                                         | Step 3 (audio)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `audio_meta.json` exists, `section_plan.md` missing                                                                               | Step 4 (visual-design)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `section_plan.md` exists, `group_spec.json` missing                                                                               | Step 5 (prep)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `group_spec.json` exists, `compositions/scene_*.html` missing **or** captions chain has not run (`caption_groups.json` missing)   | Step 5.5+6 (first run `captions.mjs group` -> `captions.mjs html` in Bash to produce `caption_groups.json` + `captions.html`; then in the same message, dispatch workers in parallel for whichever scenes are missing). **Criterion for captions having run = `caption_groups.json` exists** (whether it produced `captions.html` or legally skipped). Do not use missing `captions.html` as the criterion: a legal skip (all words cleaned out / missing `tokens.css` / no words) naturally produces no `captions.html`, and using it as the criterion would rerun and re-skip on every resume. |
-| All `compositions/scene_*.html` exist + captions state is decided (file exists or skipped confirmed), `renders/video.mp4` missing | Step 7: first deterministically rerun the full Bash prelude (wait-bgm + assemble-index + transitions + hoist-videos + sfx-verify; overwrite `index.html` even if it already exists, because upstream scenes may have changed), then dispatch the finalize subagent                                                                                                                                                                                                                                                                                                                               |
-| `renders/video.mp4` exists                                                                                                        | Report completed and stop                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-
----
-
-## Design notes (for maintainers - master execution does not need to read this)
-
-The following sections explain the "why" behind steps after those details were pushed down from the main flow. They are for skill maintenance; running the pipeline does not depend on this section.
-
-### Directory shape
-
-```text
-./                            # workspace root
-├── .claude/skills/
-├── node_modules/  package.json
-└── videos/<project-name>/    # PROJECT_DIR - HyperFrames project root
-    ├── hyperframes.json  context.log
-    ├── capture/              # hyperframes capture artifacts
-    │   ├── extracted/        # tokens / design-styles / animations / fonts-manifest / asset-descriptions / video-manifest / visible-text
-    │   ├── assets/           # media + svgs/ + fonts/ + videos/previews/ + contact sheets
-    │   ├── screenshots/      # scroll-*.png + contact-sheet-*.jpg
-    │   └── meta.json
-    ├── design-system/        # build-design outputs (fed by capture): inference.json / design.html / chunks/ / fonts/
-    ├── narrator_scripts.json  audio_meta.json  section_plan.md  group_spec.json
-    ├── public/  assets/  compositions/  snapshots/
-    └── renders/video.mp4
-```
-
-### sibling producer (Step 1b/2)
-
-design-system and story-design both fork from capture and **do not read each other's output**, so start them in parallel in the same message. The `inference.json.site_dna` read by story-design is a stable value written by the Step 1 Bash phase; the later design-system rewrite of inference.json with `--style` does not affect it. Do not serialize story-design after design-system (the older artificial serial dependency has been removed).
-
-### Captions gate (Step 4 vs Step 5)
-
-The `Captions:` value passed to visual-design in Phase 3 is only an optimistic estimate computed from audio_meta (>=1 scene has wordsPath => enabled, biased toward reserving a bottom subtitle band in the plan). The authoritative gate is `group_spec.captions_enabled`, produced by Step 5 `prep.mjs`; mismatch is safe, because Step 6/7 keep-out always follows group_spec. Caption skin source: preset-provided `caption-skin.html` first, otherwise select by inference scoring (see the header of `captions.mjs html`).
-
-### Completion report fields
-
-Complete per-phase fields you may report after finishing (pick as needed):
-
-- capture: Final URL / title / section count / asset count / fonts / animation, shader, Lottie, video manifest
-- design-system: build-design.mjs stdout (palette / fonts / preset / component count)
-- story-design / visual-design: archetype (story only) / scene count / total duration / one line per scene
-- audio: TTS provider / voice id / BGM enabled, pending, provider, mode, log / total_duration_s
-- prep: scenes / workers / total_duration_s / transitions(type, direction, duration) / copied asset count / anomalies
-- captions: caption_groups.json.stats (groups/words/split) / selected skin / whether captions.html was generated / self-check result; or skipped reason
-- scene workers: worker count / each worker's scene_ids, effects, blueprint, scoped keepout self-check status / check-compositions passed, violations, anomaly count
-- finalize: wait-bgm summary / assemble summary (clips, voice, bgm, captions, sfx counts) / inject-transitions summary (per boundary + track rearrangement) / lint + validate status / hoisted videos (count + tracks) / contact-sheet pass (tiles scanned, escalations, fixes in place) / verify-render mp4 path, bytes, ffprobe duration / quality / any re-dispatched worker
+| State                                                                                              | Continue from                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| log missing or empty                                                                               | Full pipeline                                                                                                                                                                                                                                                                |
+| `capture/extracted/tokens.json` missing                                                            | Rerun Step 1 (capture + derive-context-pack + `build-design.mjs --no-emit`)                                                                                                                                                                                                  |
+| `tokens.json` exists, `design-system/inference.json` missing                                       | Rerun only `build-design.mjs --no-emit` (deterministic, seconds)                                                                                                                                                                                                             |
+| `inference.json` exists, but `design.html` **or** `narrator_scripts.json` missing                  | Step 1b/2 fill-in: dispatch whichever subagent's artifact is missing (both missing -> both in one message)                                                                                                                                                                   |
+| `narrator_scripts.json` exists, `audio_meta.json` missing                                          | Step 3 (audio)                                                                                                                                                                                                                                                               |
+| `audio_meta.json` exists, `section_plan.md` missing                                                | Step 4 (visual-design)                                                                                                                                                                                                                                                       |
+| `section_plan.md` exists, `group_spec.json` missing                                                | Step 5 (prep)                                                                                                                                                                                                                                                                |
+| `group_spec.json` exists, `compositions/scene_*.html` missing **or** `caption_groups.json` missing | Step 5.5+6: run the captions scripts first, then dispatch workers for whichever scenes are missing, in the same message. **Captions-ran criterion = `caption_groups.json` exists** (a legal skip writes no `captions.html`; keying on `captions.html` would re-skip forever) |
+| All `compositions/scene_*.html` exist + captions state decided, `renders/video.mp4` missing        | Step 7: rerun the full Bash prelude (overwrite `index.html` — upstream scenes may have changed), then dispatch finalize                                                                                                                                                      |
+| `renders/video.mp4` exists                                                                         | Report completed and stop                                                                                                                                                                                                                                                    |
